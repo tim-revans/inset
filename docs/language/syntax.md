@@ -243,7 +243,30 @@ enum ShipError {
 }
 ```
 
-JSON bodies and headers are settled in later stages. See [open question 1](open-questions.md).
+**JSON, query parameters and headers.** *(Draft: no example uses them yet. Stage 9 confirms them against the typed API contract.)* They take the forms of Rust web frameworks.
+
+```rust
+#[put("/products/{sku}?{dry_run}", via = http, body = product, header("If-Match") = version)]
+async fn update(
+    &self,
+    sku: String,
+    dry_run: Option<bool>,
+    version: String,
+    product: Json<Product>,
+) -> Result<Json<Product>, UpdateError> {
+    let Json(product) = product;
+    ...
+}
+```
+
+- `Json<T>` is axum's and actix-web's type of the same name, a tuple struct around the value. A body parameter of type `Json<T>` reads the request body as JSON. A request whose body is not valid JSON for `T` gets `400 Bad Request` without reaching the handler.
+- A reply of type `Json<T>` is `200 OK` with `T` as an `application/json` body. `Option<Json<T>>` and `Result<Json<T>, E>` reply as `Option<String>` and `Result<String, E>` do.
+- `T` must derive serde's `Serialize` to be replied, and `Deserialize` to be read, as it would in Rust. Serde's attributes, such as `#[serde(rename_all = "camelCase")]`, mean what they mean in Rust, and the API contract shows their effect.
+- A query parameter is written after `?` in the path template, in `{` `}` like a path parameter, and binds to the function parameter of the same name. Several are separated by `&`: `"/items?{limit}&{after}"`. A parameter of type `Option<T>` may be left out of the request. Any other must be present, or the request gets `400 Bad Request`.
+- `header("Name") = param` binds a request header to a parameter, converted as a path segment is. As for query parameters, an `Option` header may be missing and any other must be present.
+- Headers in the reply, other than `Content-Type`, are not yet supported.
+
+*Why query parameters go in the path template:* every input of a route is then visible in one string, which is what the diagram labels the route with and what the API contract describes. Rocket writes them the same way, with `<` `>` where Inset uses `{` `}` for its path parameters.
 
 *Why `via` is required:* the capability is the source of the diagram arrow, so it is always written down. It also lets a component hold two servers, such as a public one and an admin one.
 
@@ -407,7 +430,7 @@ use warehouse::Warehouse;
 
 **Status:** Used.
 
-Inset uses Rust's names for the types it supports: `bool`, the integer types, `String`, tuples, `Option`, `Result`, `Vec`, `struct` and `enum`. It adds `Decimal`, an exact decimal number for money and quantities, written with the `dec!` macro as in the `rust_decimal` crate: `dec!(1.20)`. Its methods are those of `rust_decimal`, such as `scale` and `round_dp`.
+Inset uses Rust's types: `bool`, the integer types, `String`, tuples, `Option`, `Result`, the standard collections, `struct` and `enum`. It adds `Decimal`, an exact decimal number for money and quantities, written with the `dec!` macro as in the `rust_decimal` crate: `dec!(1.20)`. Its methods are those of `rust_decimal`, such as `scale` and `round_dp`.
 
 ```rust
 /// A stocked item, stored under its SKU.
@@ -420,9 +443,9 @@ struct Item {
 ```
 
 - `struct` and `enum` are declared at the top level, as in Rust.
-- `#[derive(...)]` may list `Clone`, `Copy`, `Debug`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash` and `Default`. These are the only traits a type can have.
+- `#[derive(...)]` may list `Clone`, `Copy`, `Debug`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash` and `Default`, and serde's `Serialize` and `Deserialize` for JSON bodies *(Draft)*. Other standard traits are implemented by hand (see [What Inset keeps from Rust](#what-inset-keeps-from-rust)).
 - A type compared in a requirement step must derive `PartialEq` and `Debug`, so that a failed test can show both values.
-- The compiler decides how a stored type is written to a `Table`. No derive is needed for it.
+- The compiler decides how a stored type is written to a `Table`. No derive is needed for it, because the stored form is never seen outside the program. A JSON body is seen outside, so its form is stated with serde, as in Rust.
 
 ### Algorithms
 
@@ -481,7 +504,7 @@ extern component CsvReader {
 - `extern component` declares a component with no Inset body. As in a Rust `extern` block, its functions are signatures ending in `;`.
 - Its fields are the capabilities it holds, as in any component. `CsvReader` has none. *(Draft: an external component with capabilities.)*
 - `#[rust(path = ..., crates = [...])]` names the Rust file that implements it, relative to the file declaring it, and the crates that file may use, as `name@version`.
-- The Rust file defines a type with the component's name and the declared functions. It may use the Inset types of the program by their module paths, such as `crate::Row`. The compiler checks it against the declaration. *(Draft: stage 13 fixes the exact Rust interface. See [open question 2](open-questions.md).)*
+- The Rust file defines a type with the component's name and the declared functions. It may use the Inset types of the program by their module paths, such as `crate::Row`. The compiler checks it against the declaration. *(Draft: stage 13 fixes the exact Rust interface. See [open question 1](open-questions.md).)*
 - An external component is started and sent messages like any component. Like any component, requirements reach it only through the app, as CSV import's "A field in quotes may contain commas" does.
 
 *Why `extern`:* in Rust, `extern` declares something whose body is written elsewhere, which is what this is. `component` after it says what kind of thing is declared.
@@ -553,6 +576,8 @@ Values in facts are written as Rust literals and constructors: `40`, `"M6 bolt"`
 
 - A value takes the type the program expects in that place. `"M6 bolt"` is a `String` in a `String` field, and `0.10` is a `Decimal` in a `Decimal` field.
 - An HTTP body is text. It is written as a string literal, or as a text block.
+- *(Draft)* A JSON body is written as a value of the route's type, such as `with Product { sku: "bolt-m6", net: dec!(0.10) }`. The test converts it to JSON with the type's serde form, and a reply is compared as a value after it is read back, so the order of keys and spacing do not matter. A string literal or text block is still sent as written, for when the exact JSON is the requirement.
+- *(Draft)* A query parameter is part of the path, as in an address bar: `when StockTracker receives GET /items?limit=10`. A request header is a line of its own after the `when` step: `and header If-Match is "3"`.
 
 **Text blocks.** A body that spans lines is written as a text block, after `with` at the end of the step's line. The block starts and ends with `"""` on lines of their own, indented under the step. Each line between them is one line of the text, ending in a newline, with the block's indentation removed. Text blocks come from Gherkin's doc strings.
 
