@@ -1,0 +1,66 @@
+/// Every construct the compiler emits so far, in one program.
+app Routes {
+    /// The port to serve on.
+    setting port: u16 = 8_080;
+    /// The port for operators.
+    setting admin_port: u16 = 0x1F91;
+    setting greeting: String = "Hello";
+    setting verbose: bool = false;
+    setting offset: i32 = -3;
+    grant http: HttpServer { port };
+    grant ops: HttpServer { port: admin_port };
+    start Front { web: move http, admin: move ops };
+}
+
+/// Answers on two servers.
+pub component Front {
+    /// Public requests.
+    web: HttpServer,
+    admin: HttpServer,
+
+    /// Adds two numbers from the path.
+    #[get("/add/{a}/{b}", via = web)]
+    fn add(a: u32, b: u32) -> String {
+        format!("{}", sum(a, b))
+    }
+
+    /// Echoes the body, read as a number.
+    #[post("/double/{label}", via = web, body = n)]
+    fn double(label: String, n: u64) -> String {
+        let doubled: u64 = n * 2;
+        format!("{label}: {doubled}")
+    }
+
+    #[get("/find/{path}", via = web)]
+    fn find(path: i32) -> Option<String> {
+        if path > 0 {
+            Some(path.to_string())
+        } else if path == 0 {
+            Some(String::from("zero"))
+        } else {
+            None
+        }
+    }
+
+    #[get("/words/{request}", via = web)]
+    fn words(request: String) -> String {
+        let mut count = 0;
+        let lengths: Vec<usize> = request
+            .split(',')
+            .map(|w| {
+                count += 1;
+                w.len()
+            })
+            .collect();
+        format!("{count} {lengths:?} {}", (lengths.len(), true).1)
+    }
+
+    #[get("/status", via = admin)]
+    fn status(&self) -> String {
+        String::from("up")
+    }
+}
+
+fn sum(a: u32, b: u32) -> u32 {
+    a + b
+}

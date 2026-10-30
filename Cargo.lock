@@ -649,13 +649,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 
 [[package]]
-name = "fixture-hello-http"
-version = "0.0.0"
-dependencies = [
- "inset-runtime",
-]
-
-[[package]]
 name = "fixture-sandbox"
 version = "0.0.0"
 dependencies = [
@@ -1100,10 +1093,26 @@ name = "inset-cli"
 version = "0.0.0"
 dependencies = [
  "inset-check",
+ "inset-codegen",
+ "inset-host",
  "inset-lsp",
  "inset-syntax",
  "insta",
  "serde_json",
+]
+
+[[package]]
+name = "inset-codegen"
+version = "0.0.0"
+dependencies = [
+ "inset-check",
+ "inset-syntax",
+ "insta",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "serde_json",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -1123,6 +1132,8 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "inset-check",
+ "inset-codegen",
  "rand",
  "tokio",
  "wasmtime",

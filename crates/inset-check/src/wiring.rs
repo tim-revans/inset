@@ -1030,7 +1030,13 @@ fn int_fits(text: &str, negative: bool, name: &str, span: Span) -> Result<(), Di
         ));
     }
     let digits = suffix.map_or(digits.as_str(), |s| &digits[..digits.len() - s.len()]);
-    let value = digits.parse::<u128>().ok().map(|v| {
+    let (radix, digits) = match digits.get(..2) {
+        Some("0x") => (16, &digits[2..]),
+        Some("0o") => (8, &digits[2..]),
+        Some("0b") => (2, &digits[2..]),
+        _ => (10, digits),
+    };
+    let value = u128::from_str_radix(digits, radix).ok().map(|v| {
         if negative {
             -(v.min(i128::MAX as u128) as i128)
         } else {

@@ -2,7 +2,7 @@
 
 How a built Inset program runs: the Rust the compiler emits, the runtime library linked into it, and the WebAssembly host that runs it with only the capabilities it is granted.
 
-The compiler does not exist yet, so the emitted Rust is written by hand. [`crates/inset-host/tests/fixtures/hello-http/`](../../crates/inset-host/tests/fixtures/hello-http/) is what the compiler must emit for Hello HTTP. It sits with the host's tests rather than in the example, because nobody reviewing a program reads its Rust; once the compiler exists, a snapshot test of its output replaces it. [`crates/inset-host/tests/fixtures/spike/`](../../crates/inset-host/tests/fixtures/spike/) is a larger program in the same shape, with messages, a table and every kind of rollback. The decisions below come from building and measuring both. `cargo xtask e2e hello-spike` builds Hello HTTP, serves it with `inset-host run`, and asks it for a greeting over a real socket.
+`inset build` compiles a program's Inset source to Rust with [`crates/inset-codegen/`](../../crates/inset-codegen/), and builds that Rust to a WebAssembly component. `inset run` builds it and runs it in the host. Hello HTTP's generated Rust is pinned by a snapshot test, [`crates/inset-codegen/tests/snapshots/hello__hello_http_rust.snap`](../../crates/inset-codegen/tests/snapshots/hello__hello_http_rust.snap), rather than kept with the example, because nobody reviewing a program reads its Rust. The compiler covers only what Hello HTTP uses so far, so [`crates/inset-host/tests/fixtures/spike/`](../../crates/inset-host/tests/fixtures/spike/) is written by hand, in the shape the compiler will emit, with messages, a table and every kind of rollback. The decisions below come from building and measuring both. `cargo xtask e2e hello` builds Hello HTTP from its source, serves it with `inset run`, and asks it for a greeting over a real socket.
 
 ## Pieces
 
@@ -22,16 +22,22 @@ The host starts one instance of the program and keeps it for as long as the prog
 
 ## The emitted Rust
 
-Each Inset item becomes one Rust item, in source order, with its doc comment. Each Inset statement that is not plain Rust is written above what it became, as a comment.
+Each Inset item becomes Rust items in source order, each with its doc comment.
 
 - **The app** becomes a type implementing `App`: its settings and grants as constants, which `describe` returns, and its `start` statements as `start`.
 - **A component** becomes a struct of its fields, implementing `Component`. The trait carries what the runtime needs to know: `save` and `restore` for the fields that hold state, `respond` for the `failure` block, `label` to name capability fields, and `servers` and `route` for route handlers. Handlers and algorithms stay as they were written, in an `impl` block of their own.
 - **A child** is started with `scope.start_as("name", |scope| Child { ... })`, which returns its `Handle`. The closure gets the child's scope, for the child's own children.
 - **Messages** become one method each on a trait implemented for `Handle<C>`. A method returns a `Message`, which `.await` sends and waits for, and `send(...)` sends without waiting. A lent parameter is cloned in that method, so the receiver's handler gets `&T` to a copy (see [Lending](#lending)).
-- **Routes** become `route`, which matches the request against each route attribute in order, converts the path parameters, and returns the handler to call. A parameter that does not convert means the route does not match, so the request gets `404 Not Found`, as `syntax.md` says.
+- **Routes** become `route`, which matches the request against each route attribute in order, converts the path parameters, and returns the handler to call. A parameter that does not convert means the route does not match, so the request gets `404 Not Found`, as `syntax.md` says. A body that does not convert gets `400 Bad Request`.
 - `inset_runtime::export!(App)` exports the program.
 
-Release builds keep Rust's overflow checks, because Inset checks arithmetic in every build. The workspace's release profile sets `overflow-checks = true`, and so will the Cargo project the compiler generates.
+The compiler emits the app, components with `HttpServer` fields, routes and algorithms so far. Children, messages, state and `failure` blocks are shown by the spike fixture, and the compiler reports each as not compiled yet.
+
+The emitted Rust names everything from the runtime by its full path, such as `::inset_runtime::Route`, rather than importing a prelude, so a component may have any name, `Route` included, without clashing with the runtime. It is printed by `prettyplease`, which drops comments, so unlike the hand-written fixture it does not repeat each Inset statement above what it became. Each piece is still recognisable from its source: a setting's name, type and default, a grant's fields, and `scope.start(...)` for each `start`.
+
+`inset build <dir>` writes the generated Cargo project to `<dir>/target/inset/` and copies the component there as `<package>.wasm`, where the package name comes from the app's: `HelloHttp` is `hello-http`. The project depends on `inset-runtime` by path, at the copy the `inset` command was built from, until the runtime is published. It starts from Inset's own `Cargo.lock` and `rust-toolchain.toml`, so every program builds with the dependency versions and the toolchain that Inset's tests use. Rust's errors and warnings in generated code are compiler bugs, so `inset build` shows them only when the build fails, and the tests require every compiled example to build without either.
+
+Release builds keep Rust's overflow checks, because Inset checks arithmetic in every build. The workspace's release profile sets `overflow-checks = true`, and so does the Cargo project the compiler generates.
 
 ## The executor
 
@@ -89,7 +95,7 @@ Rust's standard library on `wasm32-wasip2` imports WASI's files, sockets, clocks
 
 The host reads the manifest, applies each `--set name=value`, and rejects a setting the app does not declare or a value that does not fit its type, such as `--set port=65536` for a `u16`. It then resolves each grant's fields: a literal, or the value of a setting.
 
-A relative file path in a grant is resolved against the directory the host was started in, as any command-line tool resolves the paths it is given. So `inset run --set catalogue=prices.db` writes `prices.db` where the command was run, and the Stock tracker's `stock.db`, which is fixed in its source, lands in the directory it is run from. Requirement tests put a fake behind every grant, so they never touch a file.
+A relative file path in a grant is resolved against the directory `inset run` was run from, as any command-line tool resolves the paths it is given. So `inset run --set catalogue=prices.db` writes `prices.db` where the command was run, and the Stock tracker's `stock.db`, which is fixed in its source, lands in the directory it is run from. Requirement tests put a fake behind every grant, so they never touch a file.
 
 ## Failures and rollback
 

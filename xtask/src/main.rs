@@ -15,7 +15,7 @@ const USAGE: &str = "usage: cargo xtask <task>
 tasks:
   ci                format check, clippy, tests, editor grammar tests
   editor            package the VS Code extension as a .vsix
-  e2e hello-spike   run Hello HTTP's hand-written Rust in the host and request a greeting";
+  e2e hello         build Hello HTTP from its source, serve it and request a greeting";
 
 fn main() -> ExitCode {
     let task = std::env::args().nth(1);
@@ -23,7 +23,7 @@ fn main() -> ExitCode {
         Some("ci") => ci(),
         Some("editor") => editor(),
         Some("e2e") => match std::env::args().nth(2).as_deref() {
-            Some("hello-spike") => hello_spike(),
+            Some("hello") => hello(),
             _ => {
                 eprintln!("{USAGE}");
                 return ExitCode::FAILURE;
@@ -83,45 +83,38 @@ fn editor() -> Result<(), String> {
     Ok(())
 }
 
-/// Builds Hello HTTP's hand-written target Rust to a WebAssembly component,
-/// serves it with `inset-host run` on a free port, and checks the greeting
-/// that comes back over a real socket.
-fn hello_spike() -> Result<(), String> {
-    cargo(&[
-        "build",
-        "--release",
-        "--target",
-        "wasm32-wasip2",
-        "-p",
-        "fixture-hello-http",
-    ])?;
-    cargo(&["build", "-p", "inset-host"])?;
-    let target = target_dir();
-    let component = target.join("wasm32-wasip2/release/fixture_hello_http.wasm");
+/// Builds Hello HTTP from its Inset source with `inset build`, serves it
+/// with `inset run` on a free port, and checks the greeting that comes back
+/// over a real socket.
+fn hello() -> Result<(), String> {
+    cargo(&["build", "-p", "inset-cli"])?;
+    let inset = target_dir().join("debug/inset");
+    let example = repo_dir().join("examples/hello-http");
+    run(
+        Command::new(&inset).arg("build").arg(&example),
+        "inset build examples/hello-http".into(),
+    )?;
     let port = TcpListener::bind("127.0.0.1:0")
         .and_then(|l| l.local_addr())
         .map_err(|e| format!("find a free port ({e})"))?
         .port();
-    eprintln!(
-        "xtask: inset-host run {} --set port={port}",
-        component.display()
-    );
-    let mut host = Command::new(target.join("debug/inset-host"))
+    eprintln!("xtask: inset run examples/hello-http --set port={port}");
+    let mut server = Command::new(&inset)
         .arg("run")
-        .arg(&component)
+        .arg(&example)
         .args(["--set", &format!("port={port}")])
         .spawn()
-        .map_err(|e| format!("start inset-host ({e})"))?;
+        .map_err(|e| format!("start inset run ({e})"))?;
     let reply = get(port, "/hello/Ada");
-    let _ = host.kill();
-    let _ = host.wait();
+    let _ = server.kill();
+    let _ = server.wait();
     let reply = reply?;
     eprintln!("xtask: GET /hello/Ada replied:\n{reply}");
     let ok = reply.starts_with("HTTP/1.1 200 OK\r\n") && reply.ends_with("\r\n\r\nHello, Ada!");
     if ok {
         Ok(())
     } else {
-        Err("e2e hello-spike: unexpected reply".into())
+        Err("e2e hello: unexpected reply".into())
     }
 }
 

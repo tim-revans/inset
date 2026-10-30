@@ -16,5 +16,9 @@ tokio = { version = "1.54.1", features = ["rt", "net", "macros", "sync"] }
 wasmtime = { version = "49.0.5", default-features = false, features = ["cranelift", "component-model", "cache", "parallel-compilation", "std", "runtime", "addr2line", "demangle"] }
 wasmtime-wasi = { version = "49.0.5", default-features = false, features = ["p2"] }
 
+[dev-dependencies]
+inset-check = { path = "../inset-check" }
+inset-codegen = { path = "../inset-codegen" }
+
 [lints]
 workspace = true

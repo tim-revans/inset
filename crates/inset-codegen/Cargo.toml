@@ -1,0 +1,23 @@
+[package]
+name = "inset-codegen"
+version = "0.0.0"
+description = "Turns a checked Inset program into Rust, and builds that Rust to a WebAssembly component"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+inset-check = { path = "../inset-check" }
+inset-syntax = { path = "../inset-syntax" }
+prettyplease = "0.3.0"
+proc-macro2 = { version = "1.0.107", default-features = false }
+quote = { version = "1.0.47", default-features = false }
+serde_json = "1"
+syn = { version = "3.0.9", default-features = false, features = ["full", "parsing", "printing"] }
+
+[dev-dependencies]
+insta = "1.49"
+
+[lints]
+workspace = true

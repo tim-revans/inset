@@ -1,0 +1,85 @@
+---
+source: crates/inset-codegen/tests/hello.rs
+expression: generated.source
+---
+//! The Rust that `inset build` generated for the app `HelloHttp`.
+//! It is written again on every build, so a change to it would be lost.
+
+/// Hello HTTP: the smallest Inset program that serves the web.
+struct HelloHttp;
+
+impl ::inset_runtime::App for HelloHttp {
+    const NAME: &'static str = "HelloHttp";
+
+    const SETTINGS: &'static [::inset_runtime::Setting] = &[
+        ::inset_runtime::Setting {
+            name: "port",
+            ty: ::inset_runtime::SettingType::U16,
+            default: "8080",
+        },
+    ];
+
+    const GRANTS: &'static [::inset_runtime::Grant] = &[
+        ::inset_runtime::Grant {
+            name: "http",
+            capability: "HttpServer",
+            fields: &[("port", ::inset_runtime::GrantValue::Setting("port"))],
+        },
+    ];
+
+    fn start(
+        scope: &::inset_runtime::Scope,
+        grants: &mut ::inset_runtime::Grants,
+    ) -> Result<(), ::inset_runtime::Stopped> {
+        let http = grants.http_server("http");
+        scope.start(|_| Greeter { http });
+        Ok(())
+    }
+}
+
+::inset_runtime::export!(HelloHttp);
+
+/// Greets visitors by name.
+struct Greeter {
+    http: ::inset_runtime::HttpServer,
+}
+
+impl Greeter {
+    /// Replies with a greeting for the name in the path.
+    fn hello(name: String) -> String {
+        format!("Hello, {name}!")
+    }
+}
+
+impl ::inset_runtime::Component for Greeter {
+    const NAME: &'static str = "Greeter";
+
+    type Saved = ();
+
+    fn save(&self) {}
+
+    fn restore(&mut self, (): ()) {}
+
+    fn servers(&self) -> Vec<(&'static str, &::inset_runtime::HttpServer)> {
+        Vec::from([("http", &self.http)])
+    }
+
+    fn route(
+        field: &str,
+        request: &::inset_runtime::Request,
+    ) -> ::inset_runtime::Route<Self> {
+        if field == "http" {
+            if let Some(path) = request
+                .route(::inset_runtime::Method::Get, "/hello/{name}")
+            {
+                let Some(name) = path.get("name") else {
+                    return ::inset_runtime::Route::NotFound;
+                };
+                return ::inset_runtime::Route::to(move |_: &mut Self| {
+                    Box::pin(async move { Self::hello(name) })
+                });
+            }
+        }
+        ::inset_runtime::Route::NotFound
+    }
+}

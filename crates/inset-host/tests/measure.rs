@@ -9,7 +9,7 @@ mod common;
 
 use std::time::{Duration, Instant};
 
-use common::{build, fake, load, text};
+use common::{compiled, fake, load, text};
 use inset_host::Program;
 
 fn timed<T>(f: impl FnOnce() -> T) -> (T, Duration) {
@@ -21,7 +21,7 @@ fn timed<T>(f: impl FnOnce() -> T) -> (T, Duration) {
 #[test]
 #[ignore]
 fn starting_a_built_program() {
-    let path = build("fixture-hello-http");
+    let path = compiled("examples/hello-http");
     let (_, uncached) = timed(|| Program::load_uncached(&path).unwrap());
     let (_, warm) = timed(|| Program::load(&path).unwrap());
     let (program, cached) = timed(|| Program::load(&path).unwrap());

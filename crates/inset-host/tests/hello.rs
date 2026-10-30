@@ -1,14 +1,14 @@
-//! Hello HTTP's hand-written target Rust, run in the host with fakes. Its
+//! Hello HTTP, compiled from its source and run in the host with fakes. Its
 //! tests are the example's requirement, and how the host reads its settings.
 
 mod common;
 
-use common::{fake, load, text};
+use common::{compile, fake, text};
 use inset_host::{GrantValue, Granted, SettingType, resolve_settings};
 
 #[test]
 fn visitors_are_greeted_by_the_name_in_the_web_address() {
-    let program = load("fixture-hello-http");
+    let program = compile("examples/hello-http");
     let mut running = program.start(&fake()).unwrap();
     assert_eq!(
         text(&mut running, "GET", "/hello/Ada"),
@@ -27,7 +27,7 @@ fn visitors_are_greeted_by_the_name_in_the_web_address() {
 
 #[test]
 fn a_reply_is_utf8_text() {
-    let program = load("fixture-hello-http");
+    let program = compile("examples/hello-http");
     let mut running = program.start(&fake()).unwrap();
     let response = common::request(&mut running, "GET", "/hello/Ada").unwrap();
     assert_eq!(
@@ -38,7 +38,7 @@ fn a_reply_is_utf8_text() {
 
 #[test]
 fn the_manifest_lists_settings_and_grants() {
-    let program = load("fixture-hello-http");
+    let program = compile("examples/hello-http");
     let manifest = program.manifest();
     assert_eq!(manifest.app, "HelloHttp");
     let [port] = &manifest.settings[..] else {
@@ -55,7 +55,7 @@ fn the_manifest_lists_settings_and_grants() {
 
 #[test]
 fn a_setting_changes_its_grant() {
-    let program = load("fixture-hello-http");
+    let program = compile("examples/hello-http");
     let running = program.start(&fake()).unwrap();
     assert_eq!(running.grants()["http"], Granted::HttpServer { port: 8080 });
     let mut options = fake();
@@ -66,7 +66,7 @@ fn a_setting_changes_its_grant() {
 
 #[test]
 fn a_setting_must_exist_and_fit_its_type() {
-    let program = load("fixture-hello-http");
+    let program = compile("examples/hello-http");
     let set = |name: &str, value: &str| {
         resolve_settings(program.manifest(), &[(name.into(), value.into())])
             .map(|_| ())

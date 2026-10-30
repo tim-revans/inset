@@ -1,0 +1,112 @@
+---
+source: crates/inset-codegen/tests/unsupported.rs
+expression: errors(COUNTING)
+---
+Error: `start` in a component cannot be compiled yet
+    ╭─[ src/main.inset:10:5 ]
+    │
+ 10 │     start tally: Tally { total: 0 };
+    │     ────────────────┬───────────────  
+    │                     ╰───────────────── starts a child
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
+Error: `start` in a component cannot be compiled yet
+    ╭─[ src/main.inset:11:5 ]
+    │
+ 11 │     start log: Log { entries: Vec::new(), counted: send tally.add };
+    │     ────────────────────────────────┬───────────────────────────────  
+    │                                     ╰───────────────────────────────── starts a child
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
+Error: an `async fn` cannot be compiled yet
+    ╭─[ src/main.inset:14:14 ]
+    │
+ 14 │     async fn count(&self, n: u32) -> String {
+    │              ──┬──  
+    │                ╰──── this function
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
+Error: `send` cannot be compiled yet
+    ╭─[ src/main.inset:15:9 ]
+    │
+ 15 │         send self.log.record(n);
+    │         ───────────┬───────────  
+    │                    ╰───────────── sent here
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
+Error: `.await` cannot be compiled yet
+    ╭─[ src/main.inset:16:21 ]
+    │
+ 16 │         let total = self.tally.total().await;
+    │                     ────────────┬───────────  
+    │                                 ╰───────────── awaited here
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
+Error: a field that is not an `HttpServer` cannot be compiled yet
+    ╭─[ src/main.inset:22:12 ]
+    │
+ 22 │     total: u32,
+    │            ─┬─  
+    │             ╰─── this field's type
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
+Error: a message handler cannot be compiled yet
+    ╭─[ src/main.inset:24:5 ]
+    │
+ 24 │     #[message]
+    │     ─────┬────  
+    │          ╰────── this attribute
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
+Error: a message handler cannot be compiled yet
+    ╭─[ src/main.inset:29:5 ]
+    │
+ 29 │     #[message]
+    │     ─────┬────  
+    │          ╰────── this attribute
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
+Error: a field that is not an `HttpServer` cannot be compiled yet
+    ╭─[ src/main.inset:36:14 ]
+    │
+ 36 │     entries: Vec<u32>,
+    │              ────┬───  
+    │                  ╰───── this field's type
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
+Error: a field that is not an `HttpServer` cannot be compiled yet
+    ╭─[ src/main.inset:37:14 ]
+    │
+ 37 │     counted: Outlet<u32>,
+    │              ─────┬─────  
+    │                   ╰─────── this field's type
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
+Error: a message handler cannot be compiled yet
+    ╭─[ src/main.inset:39:5 ]
+    │
+ 39 │     #[message]
+    │     ─────┬────  
+    │          ╰────── this attribute
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
+Error: `send` cannot be compiled yet
+    ╭─[ src/main.inset:42:9 ]
+    │
+ 42 │         send self.counted.emit(n);
+    │         ────────────┬────────────  
+    │                     ╰────────────── sent here
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯

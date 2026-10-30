@@ -13,6 +13,8 @@ path = "src/main.rs"
 
 [dependencies]
 inset-check = { path = "../inset-check" }
+inset-codegen = { path = "../inset-codegen" }
+inset-host = { path = "../inset-host" }
 inset-lsp = { path = "../inset-lsp" }
 inset-syntax = { path = "../inset-syntax" }
 

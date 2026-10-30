@@ -1,0 +1,49 @@
+---
+source: crates/inset-codegen/tests/unsupported.rs
+expression: errors(STORED)
+---
+Error: a `Table` grant cannot be compiled yet
+   ╭─[ src/main.inset:4:18 ]
+   │
+ 4 │     grant names: Table<String, String> { file: "names.db", name: "names" };
+   │                  ──────────┬──────────  
+   │                            ╰──────────── granted here
+   │ 
+   │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+───╯
+Error: a field that is not an `HttpServer` cannot be compiled yet
+    ╭─[ src/main.inset:10:12 ]
+    │
+ 10 │     names: Table<String, String>,
+    │            ──────────┬──────────  
+    │                      ╰──────────── this field's type
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
+Error: a `failure` block cannot be compiled yet
+    ╭─[ src/main.inset:12:5 ]
+    │
+ 12 │     failure {
+    │     ───┬───  
+    │        ╰───── this block
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
+Error: an `async fn` cannot be compiled yet
+    ╭─[ src/main.inset:18:14 ]
+    │
+ 18 │     async fn get(&self, key: String) -> Option<String> {
+    │              ─┬─  
+    │               ╰─── this function
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
+Error: `.await` cannot be compiled yet
+    ╭─[ src/main.inset:19:9 ]
+    │
+ 19 │         self.names.get(&key).await
+    │         ─────────────┬────────────  
+    │                      ╰────────────── awaited here
+    │ 
+    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+────╯
