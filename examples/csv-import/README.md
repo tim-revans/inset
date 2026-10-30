@@ -29,6 +29,7 @@ nut-m6,M6 nut,0.05
 | Top-level algorithms | `parse_price_list`, `parse_row`, `parse_price` and `add_vat`, which take no `self` |
 | Property tests | "Any net price ... is stored exactly" and "The gross price is never below the net price", which generate prices and post them in a price list |
 | Examples table | The refused net prices, filled into a text block |
+| Branch coverage of loops | "A price list with no products is accepted and stores nothing" runs the `fork` and the `for` with nothing to loop over, so the case of an empty list is a stated requirement, not an accident |
 | Checks | `and products["bolt-m6"].gross >= <net>`, for a result a property cannot state exactly |
 | External code tested from outside | "A field in quotes may contain commas" tests the `csv` crate's behaviour through the app |
 | Text blocks in tests | The `"""` blocks holding a CSV body and a multi-line reply |

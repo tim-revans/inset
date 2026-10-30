@@ -667,7 +667,7 @@ requirement "The gross price is never below the net price"
 
 ## Requirements and coverage
 
-**Status:** The layout is Used. `#[defensive]` is Draft.
+**Status:** The layout and coverage rules are Used. `#[defensive]` is Draft.
 
 A program's directory holds its code in `src/` and its requirements in `requirements/`. Together they are one program. The compiler rejects a `*.req.inset` file in `src/` and a `*.inset` code file in `requirements/`.
 
@@ -675,7 +675,17 @@ A program's directory holds its code in `src/` and its requirements in `requirem
 
 **Coverage.** Every branch of the code should be reached by some requirement. Code that no requirement reaches is either a missing requirement or behaviour nobody asked for, and the coverage overlay marks it on the diagram.
 
-Some code cannot be reached from outside by design, such as a check for a state that the rest of the program rules out. It is marked with `#[defensive("reason")]` on the statement or `match` arm. *(Draft.)*
+- Coverage counts branches, not statements. A branch is each way out of an `if`, `else`, `match` arm or `let ... else`, the error path of each `?`, and running a loop's body or not.
+- Each arm of a `failure` block is a branch too. A requirement reaches it by making the failure happen, as the Stock tracker's `and items fails` reaches both of its arms.
+- The branches are the edges of the flowcharts, and the overlay colours those edges, so what counts as covered is exactly what the reviewer sees.
+
+*Why branches:* an `if` with no `else` can have every statement run without the case where its condition is false ever being tested. Statement coverage would call it covered, and the missing requirement would go unseen.
+
+**Defensive code.** *(Draft: no example needs it yet.)* Some code cannot be reached from outside by design, such as a check for a state that the rest of the program rules out. It is marked with `#[defensive("reason")]`:
+
+- on a `match` arm, or on a `failure` arm;
+- as the first line of the block of an `if` or `else` branch, or of a `let ... else`, marking that branch;
+- on a statement, marking the branches inside it, such as the error path of a `?`.
 
 ```rust
 let Some(net) = parse_price(&fields[2]) else {
@@ -686,6 +696,9 @@ let Some(net) = parse_price(&fields[2]) else {
 
 - The overlay shows defensive code as excused, not as covered, with its reason, so the reviewer judges each excuse.
 - Defensive code that a requirement does reach is reported, because the reason given for it is then wrong.
+- A whole function or component cannot be marked. Code that no requirement can reach at all is not defensive but unused, and should be deleted.
+
+*Why not whole functions:* a mark on a function would excuse everything in it at once, which is the easiest way to hide behaviour nobody asked for. Marking single branches keeps each excuse small enough to judge.
 
 ## Grammar of the used subset
 
