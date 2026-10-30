@@ -7,8 +7,8 @@
 //! `docs/language/diagram.schema.json` is generated from [`model`], so the doc
 //! comments there are the format's field reference.
 //!
-//! Pictures are dark by default, with a light palette and a transparent
-//! background as options. `theme.rs` records how the palette was chosen.
+//! Pictures follow the reader's light or dark setting by default, falling
+//! back to dark, with a fixed palette and a transparent background as options. `theme.rs` records how the palette was chosen.
 //!
 //! The renderer is deliberately crude: monospaced text, boxes stacked in
 //! source order, and arrows in lanes. It exists so the data can be looked at

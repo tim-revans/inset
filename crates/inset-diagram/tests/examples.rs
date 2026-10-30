@@ -9,12 +9,10 @@ use inset_diagram::{Hide, Theme, View};
 const EXAMPLES: [&str; 3] = ["hello-http", "stock-tracker", "csv-import"];
 
 /// Every committed SVG: the example, the file name, and the view it shows.
-/// They carry both palettes, so each follows its reader's light or dark setting.
+/// They use the default theme, so each follows its reader's light or dark setting.
 fn views() -> Vec<(&'static str, &'static str, View)> {
-    let auto = View {
-        theme: Theme::Auto,
-        ..View::default()
-    };
+    let auto = View::default();
+    assert_eq!(auto.theme, Theme::Auto);
     let expand = |id: &str| View {
         expand: [id.to_string()].into(),
         ..auto.clone()

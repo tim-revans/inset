@@ -9,15 +9,15 @@
 //! tell two colours apart loses nothing. `docs/language/diagrams.md` lists the
 //! roles.
 
-/// Which palette a picture uses. Dark is the default.
+/// Which palette a picture uses. Following the reader's setting is the default.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Theme {
-    #[default]
     Dark,
     Light,
     /// Both palettes in one picture: light where the reader's system asks for
     /// light, and dark everywhere else, including in renderers that ignore
     /// the media query.
+    #[default]
     Auto,
 }
 
