@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:16:21-16:39
+a message is awaited or sent with `send`
+this message is neither awaited nor sent
+help: add `.await` to wait for the reply, or write `send` before it if it replies with nothing

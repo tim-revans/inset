@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:11:16-11:19
+the outlet `counted` of `Log` is not connected
+this `start` leaves `counted` unconnected
+help: connect it to a message that takes one `u32`, such as `counted: send child.message`

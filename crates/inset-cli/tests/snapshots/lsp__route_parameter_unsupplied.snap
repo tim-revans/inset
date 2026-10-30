@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:11:14-11:18
+nothing supplies the parameter `name`
+neither the path nor the body binds this
+help: name it in the path as `{name}`, or read the body into it with `body = name`

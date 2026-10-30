@@ -1,0 +1,12 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:3:28-3:30
+unknown status `Ok`
+not an HTTP status
+help: the status is written `OK`
+
+requirements/main.req.inset:7:28-7:36
+the route `GET /hello/{name}` never replies `NotFound`
+this reply cannot happen
+help: the route replies `OK`, because it returns a `String`

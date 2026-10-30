@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:16:29-16:35
+`&mut` cannot cross a component boundary
+this lends a value into `Tally` to change
+help: a component changes only its own fields: move the value across with `move` and use what comes back, or keep it in the other component and send that component messages

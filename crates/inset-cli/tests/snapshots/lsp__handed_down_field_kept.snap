@@ -1,0 +1,12 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:9:5-9:9
+`http` is marked `#[handed_down]` but no child receives it
+nothing moves this field into a child
+help: move it into a child with `http: move http`, or remove `#[handed_down]`
+
+src/main.inset:11:34-11:38
+`http` is handed down, so `Greeter` does not keep it
+a `#[handed_down]` field is passed straight to a child
+help: use the field in the child it is moved into, or send that child a message

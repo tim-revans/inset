@@ -1,6 +1,7 @@
 //! Requirement steps, resolved against the app: its name, its `HttpServer`
 //! grants and the routes they serve. A step that names something the program
-//! does not have is a compile error, not a test failure.
+//! does not have is a compile error, not a test failure. A step that
+//! resolves refers to what it names: its app, and the handler of its route.
 
 use std::collections::HashMap;
 
@@ -14,6 +15,7 @@ pub(crate) fn check(
     cx: &Checker,
     program: &Program,
     files: &[(usize, RequirementsFile)],
+    refs: &mut Vec<(usize, Span, Span)>,
 ) -> Vec<Report> {
     let mut reports = Vec::new();
     let mut sentences: HashMap<&str, (usize, Span)> = HashMap::new();
@@ -55,7 +57,9 @@ pub(crate) fn check(
                         via,
                         ..
                     } => {
-                        app_name(cx, app, &mut report);
+                        app_name(cx, app, &mut report, &mut |span, target| {
+                            refs.push((*file, span, target))
+                        });
                         let route = resolve_request(
                             cx,
                             *method,
@@ -64,10 +68,15 @@ pub(crate) fn check(
                             via.as_ref(),
                             &mut report,
                         );
+                        if let Some(route) = route {
+                            refs.push((*file, step.span, route.decl.function));
+                        }
                         last = Some(route);
                     }
                     StepKind::Reply { app, status, .. } => {
-                        app_name(cx, app, &mut report);
+                        app_name(cx, app, &mut report, &mut |span, target| {
+                            refs.push((*file, span, target))
+                        });
                         let Some(route) = last else {
                             report(
                                 Diagnostic::new(
@@ -79,6 +88,9 @@ pub(crate) fn check(
                             );
                             continue;
                         };
+                        if let Some(route) = route {
+                            refs.push((*file, step.span, route.decl.function));
+                        }
                         check_status(status, route, &mut report);
                     }
                 }
@@ -88,11 +100,18 @@ pub(crate) fn check(
     reports
 }
 
-fn app_name(cx: &Checker, name: &Ident, report: &mut impl FnMut(Diagnostic)) {
+fn app_name(
+    cx: &Checker,
+    name: &Ident,
+    report: &mut impl FnMut(Diagnostic),
+    refer: &mut impl FnMut(Span, Span),
+) {
     let Some(app) = cx.app else {
         return;
     };
-    if app.name.name != name.name {
+    if app.name.name == name.name {
+        refer(name.span, app.name.span);
+    } else {
         report(
             Diagnostic::new(
                 format!("no app `{}`", name.name),

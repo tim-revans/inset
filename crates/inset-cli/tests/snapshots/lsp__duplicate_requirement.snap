@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:5:13-5:66
+two requirements say the same thing
+this repeats an earlier requirement's sentence
+help: the first is on line 1 of requirements/main.req.inset; each requirement is one test, so give each a sentence of its own, or merge the two

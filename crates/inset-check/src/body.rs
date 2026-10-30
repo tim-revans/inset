@@ -31,17 +31,37 @@ const MACROS: [&str; 7] = [
 
 impl Checker<'_> {
     pub(crate) fn check_bodies(&mut self) {
-        let mut diagnostics = Vec::new();
+        let mut checked = Vec::new();
         for (index, comp) in self.components.iter().enumerate() {
             for sig in &comp.functions {
-                diagnostics.extend(Body::function(self, Some(index), sig));
+                checked.push(Body::function(self, Some(index), sig));
             }
         }
         for sig in &self.algorithms {
-            diagnostics.extend(Body::function(self, None, sig));
+            checked.push(Body::function(self, None, sig));
         }
-        self.diagnostics.extend(diagnostics);
+        for body in checked {
+            self.diagnostics.extend(body.diagnostics);
+            self.locals.extend(body.locals);
+            self.refs.extend(body.refs);
+        }
     }
+}
+
+/// What checking a function's body found.
+pub(crate) struct Checked {
+    pub diagnostics: Vec<Diagnostic>,
+    /// The parameters and variables it binds, with their types.
+    pub locals: Vec<(Ident, Ty)>,
+    /// Each name it resolved, with the name of what it refers to.
+    pub refs: Vec<(Span, Span)>,
+}
+
+/// A variable in scope: its name, its type and where it was bound.
+struct Local {
+    name: String,
+    ty: Ty,
+    span: Span,
 }
 
 pub(crate) struct Body<'c, 'a> {
@@ -50,10 +70,12 @@ pub(crate) struct Body<'c, 'a> {
     comp: Option<usize>,
     /// The function being checked, or `None` for a handoff in a `start`.
     function: Option<&'c Sig<'a>>,
-    scopes: Vec<Vec<(String, Ty)>>,
+    scopes: Vec<Vec<Local>>,
     /// Inside a closure, which may not wait, send or call a capability.
     in_closure: bool,
     diagnostics: Vec<Diagnostic>,
+    locals: Vec<(Ident, Ty)>,
+    refs: Vec<(Span, Span)>,
 }
 
 impl<'c, 'a> Body<'c, 'a> {
@@ -66,14 +88,12 @@ impl<'c, 'a> Body<'c, 'a> {
             scopes: vec![Vec::new()],
             in_closure: false,
             diagnostics: Vec::new(),
+            locals: Vec::new(),
+            refs: Vec::new(),
         }
     }
 
-    pub(crate) fn function(
-        cx: &'c Checker<'a>,
-        comp: Option<usize>,
-        sig: &'c Sig<'a>,
-    ) -> Vec<Diagnostic> {
+    pub(crate) fn function(cx: &'c Checker<'a>, comp: Option<usize>, sig: &'c Sig<'a>) -> Checked {
         let mut body = Body::new(cx, comp, Some(sig));
         for (param, ty) in sig.ast.params.iter().zip(&sig.params) {
             body.bind(&param.pattern, ty.clone());
@@ -108,7 +128,11 @@ impl<'c, 'a> Body<'c, 'a> {
                 }
             }
         }
-        body.diagnostics
+        Checked {
+            diagnostics: body.diagnostics,
+            locals: body.locals,
+            refs: body.refs,
+        }
     }
 
     /// Checks the value of a handoff in a `start` statement, with the names
@@ -116,11 +140,20 @@ impl<'c, 'a> Body<'c, 'a> {
     pub(crate) fn start_expr(
         cx: &'c Checker<'a>,
         comp: Option<usize>,
-        locals: Vec<(String, Ty)>,
+        names: Vec<(&Ident, Ty)>,
         expr: &Expr,
     ) -> (Ty, Vec<Diagnostic>) {
         let mut body = Body::new(cx, comp, None);
-        body.scopes = vec![locals];
+        body.scopes = vec![
+            names
+                .into_iter()
+                .map(|(name, ty)| Local {
+                    name: name.name.clone(),
+                    ty,
+                    span: name.span,
+                })
+                .collect(),
+        ];
         let ty = body.expr(expr);
         (ty, body.diagnostics)
     }
@@ -151,10 +184,22 @@ impl<'c, 'a> Body<'c, 'a> {
     // ---- Scopes ------------------------------------------------------------
 
     fn local(&self, name: &str) -> Option<&Ty> {
+        self.find_local(name).map(|l| &l.ty)
+    }
+
+    fn find_local(&self, name: &str) -> Option<&Local> {
         self.scopes
             .iter()
             .rev()
-            .find_map(|scope| scope.iter().rev().find(|(n, _)| n == name).map(|(_, t)| t))
+            .find_map(|scope| scope.iter().rev().find(|l| l.name == name))
+    }
+
+    /// The type of the variable a name refers to, recording the reference.
+    fn use_local(&mut self, name: &Ident) -> Option<Ty> {
+        let local = self.find_local(&name.name)?;
+        let (ty, span) = (local.ty.clone(), local.span);
+        self.refs.push((name.span, span));
+        Some(ty)
     }
 
     fn bind(&mut self, pattern: &Pattern, ty: Ty) {
@@ -162,10 +207,12 @@ impl<'c, 'a> Body<'c, 'a> {
             PatternKind::Wild | PatternKind::Lit(_) | PatternKind::Path(_) => {}
             PatternKind::Binding { name, .. } => {
                 if name.name != "None" {
-                    self.scopes
-                        .last_mut()
-                        .expect("a scope")
-                        .push((name.name.clone(), ty));
+                    self.locals.push((name.clone(), ty.clone()));
+                    self.scopes.last_mut().expect("a scope").push(Local {
+                        name: name.name.clone(),
+                        ty,
+                        span: name.span,
+                    });
                 }
             }
             PatternKind::Tuple(elems) => {
@@ -412,10 +459,11 @@ impl<'c, 'a> Body<'c, 'a> {
                 self.self_available(first.span);
                 return Ty::Unknown;
             }
-            if let Some(ty) = self.local(name) {
-                return ty.clone();
+            if let Some(ty) = self.use_local(first) {
+                return ty;
             }
-            if self.cx.algorithms.iter().any(|a| a.name() == name) {
+            if let Some(algorithm) = self.cx.algorithms.iter().find(|a| a.name() == name) {
+                self.refs.push((first.span, algorithm.ast.name.span));
                 return Ty::Unknown;
             }
             return match name {
@@ -439,7 +487,10 @@ impl<'c, 'a> Body<'c, 'a> {
             "Self" => {
                 let name = &path.segments[1].ident;
                 match self.comp() {
-                    Some(comp) if comp.function(&name.name).is_some() => {}
+                    Some(comp) if comp.function(&name.name).is_some() => {
+                        let target = comp.function(&name.name).expect("found").ast.name.span;
+                        self.refs.push((name.span, target));
+                    }
                     Some(comp) => {
                         let comp_name = comp.name().to_string();
                         self.error(Diagnostic::new(
@@ -564,6 +615,7 @@ impl<'c, 'a> Body<'c, 'a> {
             return Ty::Unknown;
         };
         if let Some(field) = comp.field(&name.name) {
+            self.refs.push((name.span, field.decl.name.span));
             if field.handed_down {
                 let diagnostic = handed_down_use(comp.name(), &name.name, name.span);
                 self.error(diagnostic);
@@ -572,7 +624,11 @@ impl<'c, 'a> Body<'c, 'a> {
             return field.ty.clone();
         }
         if let Some(child) = comp.child(&name.name) {
-            return Ty::Handle(child.name.clone());
+            let ty = Ty::Handle(child.name.clone());
+            if let Some(binding) = comp.child_binding(&name.name) {
+                self.refs.push((name.span, binding.span));
+            }
+            return ty;
         }
         let comp_name = comp.name().to_string();
         self.error(
@@ -601,8 +657,8 @@ impl<'c, 'a> Body<'c, 'a> {
                 }
             }
         } else {
-            match self.local(&first.name) {
-                Some(ty) => ty.clone(),
+            match self.use_local(first) {
+                Some(ty) => ty,
                 None => {
                     let diagnostic = self.cannot_find(first);
                     self.error(diagnostic);
@@ -825,6 +881,8 @@ impl<'c, 'a> Body<'c, 'a> {
             _ => None,
         };
         if let Some(sig) = sig {
+            let last = &path.segments[path.segments.len() - 1].ident;
+            self.refs.push((last.span, sig.ast.name.span));
             if sig.kind != FnKind::Algorithm {
                 let kind = if sig.kind == FnKind::Route {
                     "a route handler"
@@ -970,6 +1028,7 @@ impl<'c, 'a> Body<'c, 'a> {
                 return Ty::Unknown;
             }
         };
+        self.refs.push((method.span, sig.ast.name.span));
         let full = format!("{component}::{}", method.name);
         if sig.params.len() != args.len() {
             self.error(arity(span, &full, sig.params.len(), args.len()));
@@ -1314,30 +1373,45 @@ impl<'c, 'a> Body<'c, 'a> {
 
     /// Checks the variables a format string names, such as `{name}`.
     fn format_captures(&mut self, span: Span, text: &str, named: &[String]) {
-        let mut rest = text;
-        while let Some(open) = rest.find(['{', '}']) {
-            let brace = rest.as_bytes()[open];
-            rest = &rest[open + 1..];
-            if rest.as_bytes().first() == Some(&brace) {
-                rest = &rest[1..];
+        // A literal written without escapes has each character of `text` in
+        // the source, so a name in it can be pointed at.
+        let plain = span.end - span.start == text.len() + 2;
+        let mut at = 0;
+        while let Some(open) = text[at..].find(['{', '}']).map(|i| at + i) {
+            let brace = text.as_bytes()[open];
+            at = open + 1;
+            if text.as_bytes().get(at) == Some(&brace) {
+                at += 1;
                 continue;
             }
             if brace == b'}' {
                 continue;
             }
-            let close = rest.find('}').unwrap_or(rest.len());
-            let inside = &rest[..close];
-            rest = &rest[close.min(rest.len())..];
-            let name = inside.split(':').next().unwrap_or("").trim();
+            let close = text[at..].find('}').map_or(text.len(), |i| at + i);
+            let inside = &text[at..close];
+            let name = inside.split(':').next().unwrap_or("");
+            let name_at = at + (name.len() - name.trim_start().len());
+            let name = name.trim();
+            at = close;
             let is_name = name.starts_with(|c: char| c.is_alphabetic() || c == '_')
                 && name.chars().all(|c| c.is_alphanumeric() || c == '_');
-            if is_name && self.local(name).is_none() && !named.iter().any(|n| n == name) {
-                self.error(Diagnostic::new(
-                    format!("cannot find `{name}` in this scope"),
-                    span,
-                    format!("`{{{name}}}` in this format string names no variable"),
-                ));
+            if !is_name || named.iter().any(|n| n == name) {
+                continue;
             }
+            if plain {
+                let start = span.start + 1 + name_at;
+                let ident = Ident::new(name, Span::new(start, start + name.len()));
+                if self.use_local(&ident).is_some() {
+                    continue;
+                }
+            } else if self.local(name).is_some() {
+                continue;
+            }
+            self.error(Diagnostic::new(
+                format!("cannot find `{name}` in this scope"),
+                span,
+                format!("`{{{name}}}` in this format string names no variable"),
+            ));
         }
     }
 }

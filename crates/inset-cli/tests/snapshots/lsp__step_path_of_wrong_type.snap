@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:2:32-2:42
+no route of `Counting` takes `GET /count/two`
+no route matches this request
+help: the route `GET /count/{n}` takes this path, but `two` is not a `u32`

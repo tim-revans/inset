@@ -1,0 +1,10 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:2:25-2:30
+`80800` does not fit in a `u16`
+a `u16` holds 0 to 65535
+
+src/main.inset:4:36-4:40
+the setting `host` is a `String`, but `port` takes a `u16`
+expected `u16`

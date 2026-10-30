@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:16:30-16:34
+`text` crosses into `Tally` without `move`
+only a `Copy` value crosses a boundary bare
+help: write `move text` to hand it over

@@ -29,6 +29,7 @@
 //! Diagnostic wording is pinned by `insta` snapshot tests in `tests/`.
 
 mod body;
+mod index;
 mod items;
 mod program;
 mod requirements;
@@ -39,6 +40,7 @@ mod wiring;
 use inset_syntax::ast::{self, HttpMethod};
 use inset_syntax::{Diagnostic, Ident, Span, is_requirements_file, parse_code, parse_requirements};
 
+pub use index::{Index, Reference, Symbol, SymbolKind};
 pub use program::{MAIN, Program, SourceFile};
 use types::Ty;
 
@@ -50,9 +52,23 @@ pub struct Report {
     pub diagnostic: Diagnostic,
 }
 
+/// What checking a program found: its problems, and what each name in it
+/// refers to.
+#[derive(Clone, Debug)]
+pub struct Analysis {
+    /// In order of file and then of position.
+    pub reports: Vec<Report>,
+    pub index: Index,
+}
+
 /// Parses and checks every file of the program. The reports are in order of
 /// file and then of position.
 pub fn check(program: &Program) -> Vec<Report> {
+    analyze(program).reports
+}
+
+/// Parses and checks every file of the program, and indexes its names.
+pub fn analyze(program: &Program) -> Analysis {
     let mut reports = Vec::new();
     let mut code = None;
     let mut requirement_files = Vec::new();
@@ -109,9 +125,17 @@ pub fn check(program: &Program) -> Vec<Report> {
             diagnostic,
         }));
     }
-    reports.extend(requirements::check(&checker, program, &requirement_files));
+    let mut refs = Vec::new();
+    reports.extend(requirements::check(
+        &checker,
+        program,
+        &requirement_files,
+        &mut refs,
+    ));
     reports.sort_by_key(|r| (r.file, r.diagnostic.span.start));
-    reports
+    let main = main.map(|i| (i, program.files[i].text.as_str()));
+    let index = index::build(&checker, main, refs);
+    Analysis { reports, index }
 }
 
 fn misplaced(path: &str, what: &str, here: &str, there: &str) -> Diagnostic {
@@ -133,6 +157,10 @@ pub(crate) struct Checker<'a> {
     /// Every route of every running component, with the grant it serves.
     pub routes: Vec<RouteInfo>,
     pub diagnostics: Vec<Diagnostic>,
+    /// The parameters and variables of every body, with their types.
+    pub locals: Vec<(Ident, Ty)>,
+    /// Each name in a body resolved, with the name of what it refers to.
+    pub refs: Vec<(Span, Span)>,
     module: &'a ast::Module,
 }
 
@@ -200,7 +228,10 @@ pub(crate) struct RouteDecl {
     /// Whether a body is read and converted, which can fail.
     pub body: bool,
     pub reply: Reply,
+    /// The route attribute.
     pub span: Span,
+    /// The name of the handler.
+    pub function: Span,
 }
 
 /// A route of a running component, and the grant its requests arrive through.
@@ -219,6 +250,8 @@ impl<'a> Checker<'a> {
             algorithms: Vec::new(),
             routes: Vec::new(),
             diagnostics: Vec::new(),
+            locals: Vec::new(),
+            refs: Vec::new(),
             module,
         }
     }
@@ -266,11 +299,19 @@ impl Comp<'_> {
 
     /// The component a child started with `start name: C` runs.
     pub(crate) fn child(&self, name: &str) -> Option<&Ident> {
+        self.start_of(name).map(|s| &s.component)
+    }
+
+    /// The name a child is started under, where the `start` binds it.
+    pub(crate) fn child_binding(&self, name: &str) -> Option<&Ident> {
+        self.start_of(name).and_then(|s| s.binding.as_ref())
+    }
+
+    fn start_of(&self, name: &str) -> Option<&ast::Start> {
         self.ast
             .starts
             .iter()
             .find(|s| s.binding.as_ref().is_some_and(|b| b.name == name))
-            .map(|s| &s.component)
     }
 
     pub(crate) fn function(&self, name: &str) -> Option<&Sig<'_>> {

@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:15:14-15:32
+`send` does not wait, so it cannot take the reply of `Tally::total`
+this message replies with a `u32`
+help: await the message instead, with `.await`

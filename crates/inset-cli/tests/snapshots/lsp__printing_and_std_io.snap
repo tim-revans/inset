@@ -1,0 +1,12 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:12:9-12:16
+Inset has no `println!`
+printing is an effect
+help: send output through a capability the app grants
+
+src/main.inset:13:17-13:24
+Inset has no `std::fs`
+file access is an effect
+help: use a capability the app grants, so the diagram shows it and a test can fake it

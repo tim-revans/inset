@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:11:63-11:67
+the outlet `counted` sends a `u32`, but `Tally::note` takes a `String`
+this message takes a `String`
+help: connect `counted` to a message that takes one `u32`, or change the type of the outlet or the message

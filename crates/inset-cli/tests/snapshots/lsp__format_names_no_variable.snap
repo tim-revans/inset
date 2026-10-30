@@ -1,0 +1,6 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:12:17-12:32
+cannot find `nme` in this scope
+`{nme}` in this format string names no variable

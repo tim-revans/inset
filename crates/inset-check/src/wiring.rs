@@ -742,8 +742,7 @@ impl<'a> Checker<'a> {
                         app.settings
                             .iter()
                             .filter_map(|s| {
-                                self.named(scope, &s.name.name)
-                                    .map(|n| (s.name.name.clone(), n.ty()))
+                                self.named(scope, &s.name.name).map(|n| (&s.name, n.ty()))
                             })
                             .collect()
                     })
@@ -754,7 +753,7 @@ impl<'a> Checker<'a> {
                 let locals = self.components[index]
                     .fields
                     .iter()
-                    .map(|f| (f.decl.name.name.clone(), f.ty.clone()))
+                    .map(|f| (&f.decl.name, f.ty.clone()))
                     .collect();
                 (Some(index), locals)
             }

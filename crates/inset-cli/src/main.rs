@@ -9,6 +9,10 @@
 //! requirements and any other file is code.
 //!
 //! Diagnostics go to standard error, and either command fails if there are any.
+//!
+//! `inset lsp` runs the language server over standard input and output, for
+//! an editor to start. It is part of this binary so the editor and the
+//! command line always check with the same compiler.
 
 use std::io::{IsTerminal, Write};
 use std::process::ExitCode;
@@ -16,7 +20,7 @@ use std::process::ExitCode;
 use inset_check::Program;
 use inset_syntax::{Diagnostic, is_requirements_file, parse_code, parse_requirements};
 
-const USAGE: &str = "usage: inset check <dir>\n       inset parse <file>";
+const USAGE: &str = "usage: inset check <dir>\n       inset parse <file>\n       inset lsp";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -28,6 +32,7 @@ fn main() -> ExitCode {
     {
         ["check", dir] => check(dir),
         ["parse", path] => parse(path),
+        ["lsp"] => lsp(),
         _ => {
             eprintln!("{USAGE}");
             ExitCode::FAILURE
@@ -52,6 +57,16 @@ fn check(dir: &str) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+fn lsp() -> ExitCode {
+    match inset_lsp::serve_stdio() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("inset: language server: {e}");
+            ExitCode::FAILURE
+        }
     }
 }
 

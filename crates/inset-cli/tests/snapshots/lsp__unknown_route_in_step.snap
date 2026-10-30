@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:2:33-2:42
+no route of `HelloHttp` takes `GET /helo/Ada`
+no route matches this request
+help: the routes of `HelloHttp` are `GET /hello/{name}`

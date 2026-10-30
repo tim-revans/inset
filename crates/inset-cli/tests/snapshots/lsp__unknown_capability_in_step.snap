@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:2:48-2:53
+`HelloHttp` has no capability `https`
+not a grant of the app
+help: the servers of `HelloHttp` are `http`

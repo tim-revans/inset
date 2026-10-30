@@ -1,17 +1,18 @@
 {
   "name": "inset",
   "displayName": "Inset",
-  "description": "Syntax highlighting for the Inset language and its requirement tests",
+  "description": "The Inset language: highlighting, and live diagnostics, hover, go-to-definition and outline from its language server",
   "version": "0.1.0",
   "publisher": "inset",
   "license": "MIT OR Apache-2.0",
   "private": true,
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.91.0"
   },
   "categories": [
     "Programming Languages"
   ],
+  "main": "./extension.js",
   "scripts": {
     "test": "node test/grammar.test.mjs",
     "package": "vsce package --skip-license --allow-missing-repository"
@@ -70,6 +71,23 @@
         }
       }
     ],
+    "configuration": {
+      "title": "Inset",
+      "properties": {
+        "inset.server.path": {
+          "type": "string",
+          "default": "inset",
+          "markdownDescription": "The `inset` command, which runs the language server as `inset lsp`. A bare name is looked up on `PATH`."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "inset.restartServer",
+        "title": "Restart the language server",
+        "category": "Inset"
+      }
+    ],
     "configurationDefaults": {
       "[inset]": {
         "editor.tabSize": 4,
@@ -116,5 +134,8 @@
     "@vscode/vsce": "4.0.0",
     "vscode-oniguruma": "2.0.1",
     "vscode-textmate": "9.3.2"
+  },
+  "dependencies": {
+    "vscode-languageclient": "10.1.2"
   }
 }

@@ -1,0 +1,63 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+```inset
+component Greeter
+```
+
+Greets visitors by name.
+
+Holds `http: HttpServer`. Serves `GET /hello/{name}`.
+
+----
+
+```inset
+http: HttpServer
+```
+
+A capability `Greeter` holds.
+
+----
+
+```inset
+grant http: HttpServer { port };
+```
+
+A capability the app grants.
+
+----
+
+```inset
+name: String
+```
+
+----
+
+```inset
+setting port: u16 = 8080;
+```
+
+The port to serve on.
+
+A setting of the app.
+
+----
+
+```inset
+#[get("/hello/{name}", via = http)]
+fn hello(name: String) -> String
+```
+
+Replies with a greeting for the name in the path.
+
+A route of `Greeter`, whose requests arrive through the grant `http`.
+
+----
+
+```inset
+app HelloHttp
+```
+
+Hello HTTP: the smallest Inset program that serves the web.
+
+Grants `http: HttpServer`.

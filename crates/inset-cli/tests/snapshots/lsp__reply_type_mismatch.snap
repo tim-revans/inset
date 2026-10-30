@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:12:9-12:17
+expected a `String`, found a `&str`
+the reply of `hello` is a `String`
+help: make a `String` from it with `.to_string()`

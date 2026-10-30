@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:14:9-14:23
+the failure arm `Message(tally)` gives no reason
+this response has no doc comment
+help: write why the program can go on after this failure as a `///` comment above the arm; the diagram shows it to the reviewer

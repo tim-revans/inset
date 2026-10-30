@@ -1,0 +1,13 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset
+  HelloHttp (app) line 2
+    port (u16) line 4
+    http (HttpServer) line 5
+    Greeter (Greeter) line 6
+  Greeter (component) line 10
+    http (HttpServer) line 11
+    hello (GET /hello/{name}) line 15
+requirements/hello.req.inset
+  Visitors are greeted by the name in the web address (requirement) line 1

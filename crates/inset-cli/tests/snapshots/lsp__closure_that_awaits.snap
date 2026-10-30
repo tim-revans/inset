@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:16:52-16:76
+a closure cannot `await`
+this waits inside a closure
+help: await in the function's body, outside the closure, so the flowchart shows the call as a step of its own

@@ -630,6 +630,7 @@ fn route_decl(
         body: route.body.is_some(),
         reply,
         span,
+        function: function.name.span,
     })
 }
 

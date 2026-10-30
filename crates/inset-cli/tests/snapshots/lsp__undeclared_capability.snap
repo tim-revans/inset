@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:12:14-12:23
+`Greeter` has no field or child `greetings`
+not a field or child of `Greeter`
+help: a component uses only what it is handed: declare `greetings` as a field of `Greeter`, and have whoever starts `Greeter` move a capability into it with `greetings: move ...`

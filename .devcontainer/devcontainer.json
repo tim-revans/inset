@@ -9,10 +9,12 @@
     "source=inset-cargo-registry,target=/home/dev/.cargo/registry,type=volume",
     "source=inset-target,target=/home/dev/target,type=volume"
   ],
-  // Packages the Inset extension before VS Code installs the extensions below,
-  // so a new container shows highlighted Inset files straight away. The path
-  // below is where `cargo xtask editor` writes it, under CARGO_TARGET_DIR.
-  "onCreateCommand": "cargo xtask editor",
+  // Installs the `inset` command, which the extension starts as its language
+  // server, and packages the Inset extension before VS Code installs the
+  // extensions below, so a new container shows highlighted and checked Inset
+  // files straight away. The path below is where `cargo xtask editor` writes
+  // the extension, under CARGO_TARGET_DIR.
+  "onCreateCommand": "cargo install --locked --path crates/inset-cli && cargo xtask editor",
   "customizations": {
     "vscode": {
       "extensions": [

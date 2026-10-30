@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:24:18-24:23
+`Tally` starts itself
+this `start` leads back to a component already starting
+help: the loop is `Tally` → `Tally`; a component cannot be among its own descendants

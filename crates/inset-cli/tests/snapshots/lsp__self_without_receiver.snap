@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:12:23-12:27
+`self` is not available here
+`hello` takes no `self`
+help: take `&self` to read the component's fields, or `&mut self` to change them
