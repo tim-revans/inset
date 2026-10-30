@@ -208,3 +208,37 @@ fn validation_reports_bad_ids_and_references() {
         "{errors}"
     );
 }
+
+/// The theme changes only the palette, and leaving the background off removes
+/// only the background.
+#[test]
+fn themes_and_background_change_nothing_else() {
+    let palette = |svg: &str| -> String {
+        svg.lines()
+            .filter(|line| !line.starts_with(".inset-diagram "))
+            .map(|line| format!("{line}\n"))
+            .collect()
+    };
+    for (example, file, view) in views() {
+        let dark = inset_diagram::render(&diagram(example), &view).unwrap();
+        let light_view = View {
+            theme: inset_diagram::Theme::Light,
+            ..view.clone()
+        };
+        let light = inset_diagram::render(&diagram(example), &light_view).unwrap();
+        assert_ne!(dark, light, "{example}/{file}");
+        assert_eq!(palette(&dark), palette(&light), "{example}/{file}");
+
+        let bare_view = View {
+            transparent: true,
+            ..view.clone()
+        };
+        let bare = inset_diagram::render(&diagram(example), &bare_view).unwrap();
+        let without_ground: String = dark
+            .lines()
+            .filter(|line| !line.contains(r#"class="ground""#))
+            .map(|line| format!("{line}\n"))
+            .collect();
+        assert_eq!(bare, without_ground, "{example}/{file}");
+    }
+}

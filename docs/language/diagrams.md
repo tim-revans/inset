@@ -13,7 +13,7 @@ A reviewer starts at the outside and drills in:
 | Component view | The app, what it is granted, the components it starts, and what is outside: HTTP clients on the left, stored data on the right | `inset-diagram render diagram.json` |
 | Inside a component | The same picture with one component expanded, its children drawn inside it, and the messages between them | `--expand <component id>` |
 | Flowchart | One function's body: its steps, decisions, loops and forks | `--flowchart <function id>` |
-| Coverage | The same pictures, with what no requirement reached marked | *(Draft: comes with the coverage overlay)* |
+| Coverage | The same pictures, with what no requirement reached marked | *(Draft: comes with the coverage overlay, with its own colours chosen against this palette)* |
 
 A component with children is drawn collapsed unless the view expands it, with `[+]` and the names of its children. A collapsed component still shows its own routes, messages and failure section. An arrow that ends inside a collapsed component ends at its box, and an arrow with both ends inside it is not drawn. So collapsing hides how a component is built, never what it does at its edge.
 
@@ -49,6 +49,23 @@ The drawing conventions:
 | Handoffs | The `start { ... }` row of each component, as written in its parent |
 
 Rows inside a box are grouped under small headings: `fields`, `routes`, `messages`, `algorithms` and `failure`. A capability that a component uses is shown as its edge, not as a field row. A field that is only handed down to a child is a row marked `handed down`.
+
+### Colour
+
+Pictures are dark by default. `--theme light` draws them in the light palette, and `--transparent` leaves the background off, so a picture sits on whatever page holds it. Every role has one colour in each palette:
+
+| Role | Used for | Dark | Light |
+| --- | --- | --- | --- |
+| Component | Component boxes, outlet ports, keywords | `#5797f8` | `#196df7` |
+| Capability | Capability edges and what is outside | `#eba566` | `#e2760f` |
+| External component | The double box | `#e057c5` | `#a41faa` |
+| Failure | Failure arms and their responses | `#f64234` | `#9c200b` |
+| Ink | Text, message arrows and flowchart outlines | `#e7ecf0` | `#182029` |
+| Background | Behind everything, unless `--transparent` | `#0c1015` | `#fdfdfd` |
+
+Each colour was chosen by measurement against its palette's background. Every pair of role colours stays apart under simulated protanopia and deuteranopia, and with normal vision. Every role colour has at least 3:1 contrast with the background, and every text colour at least 4.5:1 on every box it sits on. Colour only repeats what the shape already says: an external component keeps its double box, `send` keeps its dashed line, and a failure arm keeps its text. So a reader who cannot tell two colours apart loses nothing. The full set of values is in `crates/inset-diagram/src/theme.rs`.
+
+*Why dark by default:* most readers of the pictures are developers, who mostly work in dark editors. A requirements reviewer who prefers light pages asks for `--theme light`.
 
 ## Diagram data and views
 

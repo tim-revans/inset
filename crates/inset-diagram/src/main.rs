@@ -14,6 +14,8 @@ render options:
   --expand-all              draw every component with its children inside
   --flowchart <function id> draw the function's flowchart instead
   --hide <label>            leave a kind of label off (repeatable)
+  --theme <dark|light>      the palette (default dark)
+  --transparent             leave the background off
   -o <file>                 write the SVG to a file instead of standard output";
 
 fn main() -> ExitCode {
@@ -59,6 +61,8 @@ fn run(args: &[String]) -> Result<(), String> {
                     "--hide" => {
                         view.hide.insert(value()?.parse::<Hide>()?);
                     }
+                    "--theme" => view.theme = value()?.parse()?,
+                    "--transparent" => view.transparent = true,
                     "-o" => out = Some(value()?),
                     _ => return Err(format!("unknown option `{arg}`\n{USAGE}")),
                 }

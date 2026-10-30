@@ -4,6 +4,8 @@ use std::collections::BTreeSet;
 use std::fmt;
 use std::str::FromStr;
 
+use crate::theme::Theme;
+
 /// A kind of label a view can leave off. The names are the option values of
 /// `--hide`, and the table in `docs/language/diagrams.md` lists them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -94,6 +96,10 @@ pub struct View {
     pub expand_all: bool,
     /// Labels to leave off.
     pub hide: BTreeSet<Hide>,
+    /// The palette.
+    pub theme: Theme,
+    /// Leave the background off, so the picture sits on whatever is behind it.
+    pub transparent: bool,
 }
 
 impl View {

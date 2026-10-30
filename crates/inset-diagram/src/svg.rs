@@ -6,6 +6,7 @@
 //! always measures every label, shown or not, and an option only decides
 //! whether a line is written. So hiding a label changes nothing else.
 
+use crate::theme;
 use crate::view::{Hide, View};
 
 /// The width of one character at 12px, in a typical monospaced font.
@@ -228,18 +229,21 @@ impl<'v> Canvas<'v> {
     pub fn finish(self, width: f64, height: f64) -> String {
         let mut out = String::new();
         out.push_str(&format!(
-            r#"<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="{w}" height="{h}" viewBox="0 0 {w} {h}">"#,
+            r#"<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" class="inset-diagram" width="{w}" height="{h}" viewBox="0 0 {w} {h}">"#,
             w = n(width),
             h = n(height)
         ));
         out.push('\n');
-        out.push_str(STYLE);
-        out.push_str(&format!(
-            r#"<rect x="0" y="0" width="{}" height="{}" class="ground"/>"#,
-            n(width),
-            n(height)
-        ));
-        out.push('\n');
+        out.push_str(&theme::style(self.view.theme));
+        out.push_str(DEFS);
+        if !self.view.transparent {
+            out.push_str(&format!(
+                r#"<rect x="0" y="0" width="{}" height="{}" class="ground"/>"#,
+                n(width),
+                n(height)
+            ));
+            out.push('\n');
+        }
         for line in self.lines {
             out.push_str(&line);
             out.push('\n');
@@ -249,31 +253,7 @@ impl<'v> Canvas<'v> {
     }
 }
 
-const STYLE: &str = r##"<style>
-text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; fill: #1f2328; white-space: pre; }
-.title { font-weight: bold; }
-.kw { fill: #8250df; }
-.dim { fill: #59636e; }
-.doc { fill: #59636e; font-style: italic; }
-.sec { fill: #818b98; font-size: 10px; letter-spacing: 0.05em; }
-.warn { fill: #9a6700; }
-.ground { fill: #ffffff; }
-.app { fill: #f6f8fa; stroke: #59636e; stroke-width: 1.5; }
-.comp { fill: #ffffff; stroke: #0969da; stroke-width: 1.2; }
-.ext { fill: #fbf7ff; stroke: #8250df; stroke-width: 1.2; }
-.outside { fill: #ffffff; stroke: #818b98; stroke-dasharray: 3 2; }
-.port { fill: #ffffff; stroke: #0969da; stroke-width: 1.5; }
-.edge { fill: none; stroke: #1f2328; stroke-width: 1.2; }
-.send { stroke-dasharray: 5 3; }
-.cap { fill: none; stroke: #bc4c00; stroke-width: 1.4; }
-.node { fill: #ffffff; stroke: #1f2328; }
-.decide { fill: #fff8c5; stroke: #1f2328; }
-.term { fill: #ddf4ff; stroke: #1f2328; }
-.bar { fill: #1f2328; }
-.arrow { fill: #1f2328; }
-.arrow-cap { fill: #bc4c00; }
-</style>
-<defs>
+const DEFS: &str = r##"<defs>
 <marker id="arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow"/></marker>
 <marker id="arrow-cap" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow-cap"/></marker>
 </defs>

@@ -7,6 +7,9 @@
 //! `docs/language/diagram.schema.json` is generated from [`model`], so the doc
 //! comments there are the format's field reference.
 //!
+//! Pictures are dark by default, with a light palette and a transparent
+//! background as options. `theme.rs` records how the palette was chosen.
+//!
 //! The renderer is deliberately crude: monospaced text, boxes stacked in
 //! source order, and arrows in lanes. It exists so the data can be looked at
 //! and reviewed. Layout measures every label whether or not it is shown, so
@@ -22,9 +25,11 @@ pub mod view;
 mod components;
 mod flowchart;
 mod svg;
+mod theme;
 mod validate;
 
 pub use model::Diagram;
+pub use theme::Theme;
 pub use validate::validate;
 pub use view::{Hide, View};
 
