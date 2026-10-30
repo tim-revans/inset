@@ -1,14 +1,20 @@
 //! The `CsvReader` external component, written in Rust with the `csv` crate.
 //!
-//! `main.inset` declares its interface. The compiler checks that this file
-//! provides it, and the diagram shows it as an opaque box.
+//! This file is the root of a crate of its own, built as a WebAssembly
+//! component of its own. The compiler generates the `interface` crate from the
+//! declaration in `main.inset`: the `CsvReader` trait, the `Row` type, and the
+//! `export!` macro that makes `Reader` the component's implementation.
 
-use crate::Row;
+use interface::{CsvReader, Row};
 
-pub struct CsvReader;
+struct Reader;
 
-impl CsvReader {
-    pub fn read(&self, text: &str) -> Vec<Row> {
+impl CsvReader for Reader {
+    fn new() -> Self {
+        Reader
+    }
+
+    fn read(&self, text: &str) -> Vec<Row> {
         let mut reader = csv::ReaderBuilder::new()
             .flexible(true)
             .from_reader(text.as_bytes());
@@ -24,3 +30,5 @@ impl CsvReader {
         rows
     }
 }
+
+interface::export!(Reader);

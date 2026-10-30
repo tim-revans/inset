@@ -487,7 +487,7 @@ let results = fork for row in rows {
 
 ### External components
 
-**Status:** Used for Rust crates. WebAssembly components are Draft.
+**Status:** Used for Rust. External components written in other languages, as ready-built WebAssembly components, are Draft.
 
 An external component is written in another language. Inset declares its messages and capabilities, and the diagram shows it as an opaque box with its interface.
 
@@ -497,14 +497,46 @@ An external component is written in another language. Inset declares its message
 extern component CsvReader {
     /// Reads every row after the header line, whatever number of fields it has.
     #[message]
-    fn read(&self, text: &String) -> Vec<Row>;
+    fn read(&self, text: &str) -> Vec<Row>;
 }
 ```
 
 - `extern component` declares a component with no Inset body. As in a Rust `extern` block, its functions are signatures ending in `;`.
 - Its fields are the capabilities it holds, as in any component. `CsvReader` has none. *(Draft: an external component with capabilities.)*
-- `#[rust(path = ..., crates = [...])]` names the Rust file that implements it, relative to the file declaring it, and the crates that file may use, as `name@version`.
-- The Rust file defines a type with the component's name and the declared functions. It may use the Inset types of the program by their module paths, such as `crate::Row`. The compiler checks it against the declaration. *(Draft: stage 13 fixes the exact Rust interface. See [open question 1](open-questions.md).)*
+- `#[rust(path = ..., crates = [...])]` names the Rust file that implements it, relative to the file declaring it, and the crates that file may use, as `name@version`. The versions chosen are locked in `inset.lock` beside `src/`, in Cargo's lock-file format, so a build always uses the same code.
+- An external component's message parameters and replies must be types the WebAssembly component model can carry: the program's own `struct` and `enum` types, and the standard types, with a map carried as a list of pairs. Messages already allow no generics or lifetimes.
+
+**The Rust side.** The Rust file is the root of a crate of its own. The compiler generates a crate named `interface` from the declaration, holding:
+
+- a trait with the component's name, with one method per declared message, exactly as declared, and `fn new(...) -> Self`, which takes the component's fields in order;
+- the program's types that the messages use, such as `Row`;
+- an `export!` macro, which names the type that implements the trait.
+
+```rust
+use interface::{CsvReader, Row};
+
+struct Reader;
+
+impl CsvReader for Reader {
+    fn new() -> Self {
+        Reader
+    }
+
+    fn read(&self, text: &str) -> Vec<Row> { ... }
+}
+
+interface::export!(Reader);
+```
+
+- A file that does not match the declaration fails to build with rustc's own error about the trait, such as a missing method or a wrong signature.
+- `new` is called when the component starts, and again when it restarts.
+- The trait exists only in the generated Rust. Inset code still cannot declare traits.
+
+*Why a generated trait:* it is how WebAssembly's own Rust bindings, from `wit-bindgen`, ask for an implementation, so a model has seen it many times, and a mismatch is reported in terms a model already knows how to fix.
+
+**Enforcement.** Each external component is built as a WebAssembly component of its own. It imports only the capabilities in its fields, so the host gives it nothing else: a crate that tries to open a file gets an error from the host, not the file. Values crossing into and out of it are copied, as message values are.
+
+*Why a component of its own:* Rust compiled into the same WebAssembly component as the rest of the program could call anything the program was granted, whatever its declaration says, and the diagram would then be wrong. A separate component lets the host enforce the declaration. This is what the WebAssembly component model is for, and why Inset compiles to it.
 - An external component is started and sent messages like any component. Like any component, requirements reach it only through the app, as CSV import's "A field in quotes may contain commas" does.
 
 *Why `extern`:* in Rust, `extern` declares something whose body is written elsewhere, which is what this is. `component` after it says what kind of thing is declared.
