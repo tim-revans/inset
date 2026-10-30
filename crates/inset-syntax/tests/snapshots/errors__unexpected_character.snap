@@ -1,0 +1,11 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "fn greeting(name: String) -> String {\n    format!(\"Hello, {}!\", $name)\n}\n"
+---
+Error: unexpected character `$`
+   ╭─[ main.inset:2:27 ]
+   │
+ 2 │     format!("Hello, {}!", $name)
+   │                           ┬  
+   │                           ╰── Inset has no token that starts with this
+───╯

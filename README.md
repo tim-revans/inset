@@ -10,9 +10,10 @@ The compiler is written in Rust and emits Rust. That Rust builds to WebAssembly 
 
 ## Status
 
-The syntax is being designed through example programs, the diagram data format is defined, and the runtime that built programs run on exists. The compiler does not exist yet, so nothing compiles from Inset source.
+The syntax is being designed through example programs, the diagram data format is defined, and the runtime that built programs run on exists. The compiler has its parser, which reads Hello HTTP, but nothing compiles from Inset source yet.
 
 - [`docs/language/syntax.md`](docs/language/syntax.md) is the syntax reference.
+- [`crates/inset-syntax/`](crates/inset-syntax/) parses both dialects into a syntax tree, with diagnostics for malformed input: `cargo run -p inset-cli -- parse examples/hello-http/src/main.inset` prints the tree.
 - [`docs/language/diagrams.md`](docs/language/diagrams.md) describes the generated diagrams and their data format, whose JSON Schema is [`diagram.schema.json`](docs/language/diagram.schema.json).
 - [`crates/inset-diagram/`](crates/inset-diagram/) reads diagram data and draws it as SVG: `cargo run -p inset-diagram -- render examples/stock-tracker/expected/diagram.json`.
 - [`docs/language/runtime.md`](docs/language/runtime.md) describes how a built program runs: the Rust the compiler will emit, [`crates/inset-runtime/`](crates/inset-runtime/), which that Rust links, and [`crates/inset-host/`](crates/inset-host/), the WebAssembly host that runs it with only the capabilities it is granted. `cargo xtask e2e hello-spike` serves Hello HTTP from its hand-written Rust and asks it for a greeting.

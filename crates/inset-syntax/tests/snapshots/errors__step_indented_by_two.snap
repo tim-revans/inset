@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "requirement \"Visitors are greeted by the name in the web address\"\n  when HelloHttp receives GET /hello/Ada\n    then HelloHttp replies OK with \"Hello, Ada!\"\n"
+---
+Error: step indented by 2 spaces
+   ╭─[ hello.req.inset:2:1 ]
+   │
+ 2 │   when HelloHttp receives GET /hello/Ada
+   │ ─┬  
+   │  ╰── steps are indented by four spaces
+   │ 
+   │ Help: a line indented further than a step continues the step above it
+───╯

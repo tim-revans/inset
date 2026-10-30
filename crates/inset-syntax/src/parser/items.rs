@@ -1,0 +1,745 @@
+//! Items: apps, components, functions and their attributes.
+
+use super::{List, PResult, Parser, Reported};
+use crate::ast::*;
+use crate::lexer::{Keyword as Kw, Punct as P, TokenKind as T};
+use crate::{Diagnostic, Ident, Span};
+
+impl Parser<'_> {
+    // ---- Items -----------------------------------------------------------
+
+    pub(crate) fn parse_module(&mut self) -> Module {
+        let mut items = Vec::new();
+        while *self.kind() != T::Eof {
+            let start = self.pos;
+            if self.at(P::RBrace) {
+                let span = self.bump().span;
+                self.report(Diagnostic::new(
+                    "unexpected `}`",
+                    span,
+                    "this closes nothing",
+                ));
+                continue;
+            }
+            match self.parse_item() {
+                Ok(item) => items.push(item),
+                Err(Reported) => self.recover(start, List::Items),
+            }
+        }
+        Module { items }
+    }
+
+    pub(super) fn parse_docs(&mut self) -> Vec<Doc> {
+        let mut docs = Vec::new();
+        while let T::Doc(text) = self.kind() {
+            docs.push(Doc {
+                text: text.clone(),
+                span: self.span(),
+            });
+            self.bump();
+        }
+        docs
+    }
+
+    pub(super) fn parse_item(&mut self) -> PResult<Item> {
+        let start = self.span();
+        let docs = self.parse_docs();
+        let attrs = self.parse_attrs()?;
+        let vis = self.parse_vis()?;
+        let kind = match self.kind() {
+            T::Keyword(Kw::App) => ItemKind::App(self.parse_app()?),
+            T::Keyword(Kw::Component) => ItemKind::Component(self.parse_component()?),
+            T::Keyword(Kw::Fn | Kw::Async) => {
+                ItemKind::Function(self.parse_function(docs.clone(), attrs.clone(), vis.clone())?)
+            }
+            T::Keyword(
+                kw @ (Kw::Struct
+                | Kw::Enum
+                | Kw::Extern
+                | Kw::Mod
+                | Kw::Use
+                | Kw::Impl
+                | Kw::Const
+                | Kw::Type),
+            ) => {
+                let what = format!("`{}`", kw.as_str());
+                let span = self.span();
+                return Err(self.unsupported(&what, span));
+            }
+            T::Keyword(kw @ (Kw::Static | Kw::Trait | Kw::Unsafe)) => {
+                let kw = *kw;
+                return Err(self.left_out(kw));
+            }
+            T::Eof if !docs.is_empty() => {
+                let span = docs[docs.len() - 1].span;
+                return Err(self.report(Diagnostic::new(
+                    "doc comment documents nothing",
+                    span,
+                    "nothing follows this doc comment",
+                )));
+            }
+            _ => return Err(self.expected("an item, such as `app`, `component` or `fn`")),
+        };
+        Ok(Item {
+            docs,
+            attrs,
+            vis,
+            kind,
+            span: start.to(self.prev_span()),
+        })
+    }
+
+    /// A Rust feature that Inset leaves out, with the Inset alternative.
+    pub(super) fn left_out(&mut self, kw: Kw) -> Reported {
+        let (why, help) = match kw {
+            Kw::Static => (
+                "state shared outside a component is a data flow the diagram cannot draw",
+                "keep state in a component's fields",
+            ),
+            Kw::Trait => (
+                "dynamic dispatch hides which code runs",
+                "use an enum or a concrete type",
+            ),
+            _ => (
+                "Inset relies on Rust for safety",
+                "write it without `unsafe`",
+            ),
+        };
+        let span = self.span();
+        self.report(
+            Diagnostic::new(format!("Inset has no `{}`", kw.as_str()), span, why).with_help(help),
+        )
+    }
+
+    pub(super) fn parse_vis(&mut self) -> PResult<Visibility> {
+        if !self.at_kw(Kw::Pub) {
+            return Ok(Visibility::Private);
+        }
+        let start = self.bump().span;
+        if !self.at(P::LParen) {
+            return Ok(Visibility::Pub(start));
+        }
+        self.bump();
+        let in_crate = match self.kind() {
+            T::Keyword(Kw::Crate) => true,
+            T::Keyword(Kw::Super) => false,
+            _ => return Err(self.expected("`crate` or `super`")),
+        };
+        self.bump();
+        let span = start.to(self.expect(P::RParen, "the visibility")?);
+        Ok(if in_crate {
+            Visibility::PubCrate(span)
+        } else {
+            Visibility::PubSuper(span)
+        })
+    }
+
+    // ---- Attributes ------------------------------------------------------
+
+    pub(super) fn parse_attrs(&mut self) -> PResult<Vec<Attribute>> {
+        let mut attrs = Vec::new();
+        while self.at(P::Pound) {
+            attrs.push(self.parse_attr()?);
+        }
+        Ok(attrs)
+    }
+
+    pub(super) fn parse_attr(&mut self) -> PResult<Attribute> {
+        let start = self.bump().span;
+        if self.at(P::Not) {
+            let span = start.to(self.span());
+            return Err(self.report(Diagnostic::new(
+                "inner attributes are not supported",
+                span,
+                "Inset has no `#![...]` attributes",
+            )));
+        }
+        let open = self.expect(P::LBracket, "`#`")?;
+        let T::Ident(name) = self.kind().clone() else {
+            return Err(self.expected("an attribute name"));
+        };
+        let name_span = self.bump().span;
+        let kind = if let Some(method) = HttpMethod::from_attribute(&name) {
+            AttributeKind::Route(self.parse_route(method, name_span)?)
+        } else {
+            match name.as_str() {
+                "message" => AttributeKind::Message,
+                "handed_down" => AttributeKind::HandedDown,
+                "derive" | "status" | "rust" | "defensive" => {
+                    return Err(self.unsupported(&format!("`#[{name}]`"), name_span));
+                }
+                _ => {
+                    return Err(self.report(
+                        Diagnostic::new(
+                            format!("unknown attribute `{name}`"),
+                            name_span,
+                            "Inset has no attribute with this name",
+                        )
+                        .with_help(
+                            "the attributes are `get`, `post`, `put`, `patch`, `delete`, \
+                             `message`, `handed_down`, `derive`, `status`, `rust` and `defensive`",
+                        ),
+                    ));
+                }
+            }
+        };
+        let end = self.expect_close(P::RBracket, open, "the attribute")?;
+        Ok(Attribute {
+            kind,
+            span: start.to(end),
+        })
+    }
+
+    /// `("/path", via = server, body = param)`, after the method's name.
+    pub(super) fn parse_route(&mut self, method: HttpMethod, name_span: Span) -> PResult<Route> {
+        let attribute = method.attribute_name();
+        let Some(open) = self.at(P::LParen).then(|| self.bump().span) else {
+            return Err(self.report(
+                Diagnostic::new(
+                    format!("`#[{attribute}]` needs a path and a server"),
+                    name_span,
+                    "the route's path and server go after this",
+                )
+                .with_help(format!("write `#[{attribute}(\"/path\", via = http)]`")),
+            ));
+        };
+        let T::Str(value) = self.kind().clone() else {
+            return Err(self.expected("the route's path, as a string such as \"/items/{sku}\""));
+        };
+        let path = StrLit {
+            value,
+            span: self.bump().span,
+        };
+        let mut via = None;
+        let mut body = None;
+        while self.eat(P::Comma) {
+            if self.at(P::RParen) {
+                break;
+            }
+            let key = self.parse_ident("`via` or `body`")?;
+            let slot = match key.name.as_str() {
+                "via" => &mut via,
+                "body" => &mut body,
+                "header" => return Err(self.unsupported("`header(...)` in a route", key.span)),
+                _ => {
+                    return Err(self.report(Diagnostic::new(
+                        format!("unknown route argument `{}`", key.name),
+                        key.span,
+                        "a route takes `via` and `body`",
+                    )));
+                }
+            };
+            if slot.is_some() {
+                return Err(self.report(Diagnostic::new(
+                    format!("`{}` is given twice", key.name),
+                    key.span,
+                    "this repeats an earlier argument",
+                )));
+            }
+            self.expect(P::Eq, &format!("`{}`", key.name))?;
+            *slot = Some(self.parse_ident("a name")?);
+        }
+        let close = self.expect_close(P::RParen, open, "the route's arguments")?;
+        let Some(via) = via else {
+            return Err(self.report(
+                Diagnostic::new(
+                    format!("`#[{attribute}]` needs `via`"),
+                    name_span.to(close),
+                    "this route does not say which server its requests arrive through",
+                )
+                .with_help("add `via =` and the name of the component's `HttpServer` field, such as `via = http`"),
+            ));
+        };
+        Ok(Route {
+            method,
+            path,
+            via,
+            body,
+        })
+    }
+
+    // ---- App -------------------------------------------------------------
+
+    pub(super) fn parse_app(&mut self) -> PResult<App> {
+        self.bump();
+        let name = self.parse_ident("the app's name")?;
+        let open = self.expect(P::LBrace, "the app's name")?;
+        let mut app = App {
+            name,
+            settings: Vec::new(),
+            grants: Vec::new(),
+            starts: Vec::new(),
+        };
+        while !self.at(P::RBrace) && *self.kind() != T::Eof {
+            let start = self.pos;
+            if self.parse_app_member(&mut app).is_err() {
+                self.recover(start, List::Members);
+            }
+        }
+        self.expect_close(P::RBrace, open, "the app's body")?;
+        Ok(app)
+    }
+
+    pub(super) fn parse_app_member(&mut self, app: &mut App) -> PResult<()> {
+        let docs = self.parse_docs();
+        match self.kind() {
+            T::Keyword(Kw::Setting) => app.settings.push(self.parse_setting(docs)?),
+            T::Keyword(Kw::Grant) => app.grants.push(self.parse_grant(docs)?),
+            T::Keyword(Kw::Start) => app.starts.push(self.parse_start(docs)?),
+            T::Keyword(Kw::Fn | Kw::Async) | T::Punct(P::Pound) => {
+                let span = self.span();
+                return Err(self.report(
+                    Diagnostic::new(
+                        "an app has no functions",
+                        span,
+                        "an app holds only settings, grants and starts",
+                    )
+                    .with_help("put the function in a component the app starts"),
+                ));
+            }
+            T::Punct(P::RBrace) if !docs.is_empty() => {
+                let span = docs[docs.len() - 1].span;
+                return Err(self.report(Diagnostic::new(
+                    "doc comment documents nothing",
+                    span,
+                    "nothing follows this doc comment",
+                )));
+            }
+            _ => return Err(self.expected("`setting`, `grant` or `start`")),
+        }
+        Ok(())
+    }
+
+    pub(super) fn parse_setting(&mut self, docs: Vec<Doc>) -> PResult<Setting> {
+        let start = self.bump().span;
+        let name = self.parse_ident("the setting's name")?;
+        self.expect(P::Colon, "the setting's name")?;
+        let ty = self.parse_type()?;
+        if !self.at(P::Eq) {
+            let span = self.span();
+            return Err(self.report(
+                Diagnostic::new(
+                    format!("setting `{}` has no default", name.name),
+                    span,
+                    "expected `=` and a default value",
+                )
+                .with_help("every setting has a default, used when the program is run without it"),
+            ));
+        }
+        self.bump();
+        let default = self.parse_expr()?;
+        let end = self.expect(P::Semi, "the setting")?;
+        Ok(Setting {
+            docs,
+            name,
+            ty,
+            default,
+            span: start.to(end),
+        })
+    }
+
+    pub(super) fn parse_grant(&mut self, docs: Vec<Doc>) -> PResult<Grant> {
+        let start = self.bump().span;
+        let name = self.parse_ident("the grant's name")?;
+        self.expect(P::Colon, "the grant's name")?;
+        let ty = self.parse_type()?;
+        let open = self.expect(P::LBrace, "the capability's type")?;
+        let fields = self.parse_field_inits(open)?;
+        let end = self.expect(P::Semi, "the grant")?;
+        Ok(Grant {
+            docs,
+            name,
+            ty,
+            fields,
+            span: start.to(end),
+        })
+    }
+
+    /// `name: value, name, ...` up to and including the closing `}`.
+    pub(super) fn parse_field_inits(&mut self, open: Span) -> PResult<Vec<FieldInit>> {
+        let mut fields = Vec::new();
+        while !self.at(P::RBrace) {
+            fields.push(self.parse_field_init()?);
+            if !self.eat(P::Comma) {
+                break;
+            }
+        }
+        self.expect_close(P::RBrace, open, "the fields")?;
+        Ok(fields)
+    }
+
+    pub(super) fn parse_field_init(&mut self) -> PResult<FieldInit> {
+        let name = self.parse_ident("a field name")?;
+        if !self.eat(P::Colon) {
+            return Ok(FieldInit {
+                span: name.span,
+                name,
+                value: None,
+            });
+        }
+        let value = self.parse_expr()?;
+        Ok(FieldInit {
+            span: name.span.to(value.span),
+            name,
+            value: Some(value),
+        })
+    }
+
+    pub(super) fn parse_start(&mut self, docs: Vec<Doc>) -> PResult<Start> {
+        let start = self.bump().span;
+        let binding =
+            if matches!(self.kind(), T::Ident(_)) && matches!(self.nth(1), T::Punct(P::Colon)) {
+                let binding = self.parse_ident("a name")?;
+                self.bump();
+                Some(binding)
+            } else {
+                None
+            };
+        let component = self.parse_ident("the component to start")?;
+        let open = self.expect(P::LBrace, "the component's name")?;
+        let mut handoffs = Vec::new();
+        while !self.at(P::RBrace) {
+            handoffs.push(self.parse_handoff()?);
+            if !self.eat(P::Comma) {
+                break;
+            }
+        }
+        self.expect_close(P::RBrace, open, "the handoffs")?;
+        let end = self.expect(P::Semi, "the `start` statement")?;
+        Ok(Start {
+            docs,
+            binding,
+            component,
+            handoffs,
+            span: start.to(end),
+        })
+    }
+
+    pub(super) fn parse_handoff(&mut self) -> PResult<Handoff> {
+        let field = self.parse_ident("the name of a field of the component")?;
+        if !self.at(P::Colon) {
+            let span = self.span();
+            return Err(self.report(
+                Diagnostic::new(
+                    format!(
+                        "expected `:` after the field `{}`, found {}",
+                        field.name,
+                        self.kind()
+                    ),
+                    span,
+                    "expected `:`",
+                )
+                .with_help(format!(
+                    "a handoff says how the value crosses the boundary, such as `{0}: move {0}`",
+                    field.name
+                )),
+            ));
+        }
+        self.bump();
+        let value = match self.kind() {
+            T::Keyword(Kw::Move) => {
+                self.bump();
+                HandoffValue::Move(self.parse_place()?)
+            }
+            T::Keyword(Kw::Send) => {
+                self.bump();
+                let target = match self.kind().clone() {
+                    T::Keyword(Kw::SelfValue) => Ident::new("self", self.bump().span),
+                    _ => self.parse_ident("`self` or the name of a started component")?,
+                };
+                self.expect(P::Dot, "the component")?;
+                let message = self.parse_ident("the name of a message")?;
+                HandoffValue::Connect { target, message }
+            }
+            T::Punct(P::And)
+                if matches!(self.nth(1), T::Ident(_))
+                    && matches!(self.nth(2), T::Punct(P::Comma | P::RBrace)) =>
+            {
+                self.bump();
+                HandoffValue::Lend(self.parse_ident("a name")?)
+            }
+            _ => HandoffValue::Expr(self.parse_expr()?),
+        };
+        Ok(Handoff {
+            span: field.span.to(self.prev_span()),
+            field,
+            value,
+        })
+    }
+
+    pub(super) fn parse_place(&mut self) -> PResult<Place> {
+        let first = match self.kind().clone() {
+            T::Keyword(Kw::SelfValue) => Ident::new("self", self.bump().span),
+            T::Ident(name) => Ident::new(name, self.bump().span),
+            _ => return Err(self.expected("a variable or field to move")),
+        };
+        let mut parts = vec![first];
+        while self.eat(P::Dot) {
+            parts.push(self.parse_ident("a field name")?);
+        }
+        let span = parts[0].span.to(parts[parts.len() - 1].span);
+        Ok(Place { parts, span })
+    }
+
+    // ---- Component -------------------------------------------------------
+
+    pub(super) fn parse_component(&mut self) -> PResult<Component> {
+        self.bump();
+        let name = self.parse_ident("the component's name")?;
+        let open = self.expect(P::LBrace, "the component's name")?;
+        let mut component = Component {
+            name,
+            fields: Vec::new(),
+            starts: Vec::new(),
+            functions: Vec::new(),
+        };
+        while !self.at(P::RBrace) && *self.kind() != T::Eof {
+            let start = self.pos;
+            if self.parse_component_member(&mut component).is_err() {
+                self.recover(start, List::Members);
+            }
+        }
+        self.expect_close(P::RBrace, open, "the component's body")?;
+        Ok(component)
+    }
+
+    pub(super) fn parse_component_member(&mut self, component: &mut Component) -> PResult<()> {
+        let docs = self.parse_docs();
+        let attrs = self.parse_attrs()?;
+        let vis = self.parse_vis()?;
+        match self.kind() {
+            T::Ident(_) => {
+                self.no_visibility(&vis, "a field")?;
+                let field = self.parse_field_decl(docs, attrs)?;
+                if !component.starts.is_empty() || !component.functions.is_empty() {
+                    self.out_of_order(
+                        field.span,
+                        "a field",
+                        "fields come first in a component",
+                        "move it above the component's `start` statements and functions",
+                    );
+                }
+                component.fields.push(field);
+            }
+            T::Keyword(Kw::Start) => {
+                self.no_visibility(&vis, "a `start` statement")?;
+                if let Some(attr) = attrs.first() {
+                    let span = attr.span;
+                    return Err(self.report(Diagnostic::new(
+                        "a `start` statement takes no attributes",
+                        span,
+                        "remove this attribute",
+                    )));
+                }
+                let start = self.parse_start(docs)?;
+                if !component.functions.is_empty() {
+                    self.out_of_order(
+                        start.span,
+                        "a `start` statement",
+                        "`start` statements come before functions in a component",
+                        "move it above the component's functions",
+                    );
+                }
+                component.starts.push(start);
+            }
+            T::Keyword(Kw::Fn | Kw::Async) => {
+                component
+                    .functions
+                    .push(self.parse_function(docs, attrs, vis)?);
+            }
+            T::Keyword(Kw::Failure) => {
+                let span = self.span();
+                return Err(self.unsupported("a `failure` block", span));
+            }
+            T::Punct(P::RBrace) if !docs.is_empty() || !attrs.is_empty() => {
+                let span = docs
+                    .last()
+                    .map(|d| d.span)
+                    .or(attrs.last().map(|a| a.span))
+                    .unwrap_or_default();
+                return Err(self.report(Diagnostic::new(
+                    "doc comment or attribute applies to nothing",
+                    span,
+                    "nothing follows this",
+                )));
+            }
+            _ => return Err(self.expected("a field, a `start` statement or a function")),
+        }
+        Ok(())
+    }
+
+    pub(super) fn no_visibility(&mut self, vis: &Visibility, what: &str) -> PResult<()> {
+        if let Visibility::Pub(span) | Visibility::PubCrate(span) | Visibility::PubSuper(span) = vis
+        {
+            return Err(self.report(Diagnostic::new(
+                format!("{what} cannot be `pub`"),
+                *span,
+                "only a component and its functions can be `pub`",
+            )));
+        }
+        Ok(())
+    }
+
+    /// Reports a member written after one that should follow it. The member
+    /// is still kept, so later checks see it.
+    pub(super) fn out_of_order(&mut self, span: Span, what: &str, rule: &str, help: &str) {
+        let diagnostic =
+            Diagnostic::new(format!("{what} is out of order"), span, rule).with_help(help);
+        self.diagnostics.push((span.start, diagnostic));
+    }
+
+    pub(super) fn parse_field_decl(
+        &mut self,
+        docs: Vec<Doc>,
+        attrs: Vec<Attribute>,
+    ) -> PResult<FieldDecl> {
+        let name = self.parse_ident("a field name")?;
+        self.expect(P::Colon, "the field's name")?;
+        let ty = self.parse_type()?;
+        let span = docs
+            .first()
+            .map(|d| d.span)
+            .or(attrs.first().map(|a| a.span))
+            .unwrap_or(name.span)
+            .to(ty.span);
+        if !self.at(P::RBrace) {
+            self.expect(P::Comma, "the field")?;
+        }
+        Ok(FieldDecl {
+            docs,
+            attrs,
+            name,
+            ty,
+            span,
+        })
+    }
+
+    // ---- Functions -------------------------------------------------------
+
+    pub(super) fn parse_function(
+        &mut self,
+        docs: Vec<Doc>,
+        attrs: Vec<Attribute>,
+        vis: Visibility,
+    ) -> PResult<Function> {
+        let start = docs
+            .first()
+            .map(|d| d.span)
+            .or(attrs.first().map(|a| a.span))
+            .unwrap_or(self.span());
+        let is_async = self.eat_kw(Kw::Async);
+        if !self.at_kw(Kw::Fn) {
+            return Err(self.expected("`fn`"));
+        }
+        self.bump();
+        let name = self.parse_ident("the function's name")?;
+        if self.at(P::Lt) {
+            let span = self.span();
+            return Err(self.unsupported("a generic function", span));
+        }
+        let open = self.expect(P::LParen, "the function's name")?;
+        let receiver = self.parse_receiver()?;
+        let mut params = Vec::new();
+        if receiver.is_none() || self.eat(P::Comma) {
+            while !self.at(P::RParen) {
+                params.push(self.parse_param()?);
+                if !self.eat(P::Comma) {
+                    break;
+                }
+            }
+        }
+        self.expect_close(P::RParen, open, "the parameters")?;
+        let ret = if self.eat(P::Arrow) {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+        if self.at_kw(Kw::Where) {
+            let span = self.span();
+            return Err(self.unsupported("a `where` clause", span));
+        }
+        if !self.at(P::LBrace) {
+            return Err(self.expected("the function's body, in `{` `}`"));
+        }
+        let body = self.parse_block()?;
+        Ok(Function {
+            docs,
+            attrs,
+            vis,
+            is_async,
+            name,
+            receiver,
+            params,
+            ret,
+            span: start.to(body.span),
+            body,
+        })
+    }
+
+    /// `&self` or `&mut self`. A receiver that takes `self` by value is an
+    /// error, since a component is never consumed by its own handler.
+    pub(super) fn parse_receiver(&mut self) -> PResult<Option<Receiver>> {
+        let start = self.span();
+        let by_value = match (
+            self.kind().clone(),
+            self.nth(1).clone(),
+            self.nth(2).clone(),
+        ) {
+            (T::Punct(P::And), T::Keyword(Kw::SelfValue), _) => {
+                self.bump();
+                return Ok(Some(Receiver {
+                    mutable: false,
+                    span: start.to(self.bump().span),
+                }));
+            }
+            (T::Punct(P::And), T::Keyword(Kw::Mut), T::Keyword(Kw::SelfValue)) => {
+                self.bump();
+                self.bump();
+                return Ok(Some(Receiver {
+                    mutable: true,
+                    span: start.to(self.bump().span),
+                }));
+            }
+            (T::Keyword(Kw::SelfValue), _, _) => start,
+            (T::Keyword(Kw::Mut), T::Keyword(Kw::SelfValue), _) => {
+                start.to(self.tokens[self.pos + 1].span)
+            }
+            _ => return Ok(None),
+        };
+        Err(self.report(
+            Diagnostic::new(
+                "a handler cannot take `self` by value",
+                by_value,
+                "this would consume the component",
+            )
+            .with_help(
+                "take `&self` to read the component's fields, or `&mut self` to change them",
+            ),
+        ))
+    }
+
+    pub(super) fn parse_param(&mut self) -> PResult<Param> {
+        let pattern = self.parse_pattern()?;
+        if !self.at(P::Colon) {
+            let span = self.span();
+            return Err(self.report(
+                Diagnostic::new(
+                    format!(
+                        "expected `:` and a type after the parameter, found {}",
+                        self.kind()
+                    ),
+                    span,
+                    "expected `:`",
+                )
+                .with_help("every parameter has a type, such as `name: String`"),
+            ));
+        }
+        self.bump();
+        let ty = self.parse_type()?;
+        Ok(Param {
+            span: pattern.span.to(ty.span),
+            pattern,
+            ty,
+        })
+    }
+}

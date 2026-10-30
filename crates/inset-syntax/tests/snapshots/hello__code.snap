@@ -1,0 +1,258 @@
+---
+source: crates/inset-syntax/tests/hello.rs
+expression: parsed.ast
+---
+Module {
+    items: [
+        Item {
+            docs: [
+                Doc {
+                    text: "Hello HTTP: the smallest Inset program that serves the web.",
+                    span: 0..63,
+                },
+            ],
+            attrs: [],
+            vis: Private,
+            kind: App(
+                App {
+                    name: "HelloHttp" @ 68..77,
+                    settings: [
+                        Setting {
+                            docs: [
+                                Doc {
+                                    text: "The port to serve on.",
+                                    span: 84..109,
+                                },
+                            ],
+                            name: "port" @ 122..126,
+                            ty: Type {
+                                kind: Path(
+                                    Path {
+                                        segments: [
+                                            PathSegment {
+                                                ident: "u16" @ 128..131,
+                                                generics: [],
+                                            },
+                                        ],
+                                        span: 128..131,
+                                    },
+                                ),
+                                span: 128..131,
+                            },
+                            default: Expr {
+                                kind: Lit(
+                                    Lit {
+                                        kind: Int(
+                                            "8080",
+                                        ),
+                                        span: 134..138,
+                                    },
+                                ),
+                                span: 134..138,
+                            },
+                            span: 114..139,
+                        },
+                    ],
+                    grants: [
+                        Grant {
+                            docs: [],
+                            name: "http" @ 150..154,
+                            ty: Type {
+                                kind: Path(
+                                    Path {
+                                        segments: [
+                                            PathSegment {
+                                                ident: "HttpServer" @ 156..166,
+                                                generics: [],
+                                            },
+                                        ],
+                                        span: 156..166,
+                                    },
+                                ),
+                                span: 156..166,
+                            },
+                            fields: [
+                                FieldInit {
+                                    name: "port" @ 169..173,
+                                    value: None,
+                                    span: 169..173,
+                                },
+                            ],
+                            span: 144..176,
+                        },
+                    ],
+                    starts: [
+                        Start {
+                            docs: [],
+                            binding: None,
+                            component: "Greeter" @ 187..194,
+                            handoffs: [
+                                Handoff {
+                                    field: "http" @ 197..201,
+                                    value: Move(
+                                        Place {
+                                            parts: [
+                                                "http" @ 208..212,
+                                            ],
+                                            span: 208..212,
+                                        },
+                                    ),
+                                    span: 197..212,
+                                },
+                            ],
+                            span: 181..215,
+                        },
+                    ],
+                },
+            ),
+            span: 0..217,
+        },
+        Item {
+            docs: [
+                Doc {
+                    text: "Greets visitors by name.",
+                    span: 219..247,
+                },
+            ],
+            attrs: [],
+            vis: Private,
+            kind: Component(
+                Component {
+                    name: "Greeter" @ 258..265,
+                    fields: [
+                        FieldDecl {
+                            docs: [],
+                            attrs: [],
+                            name: "http" @ 272..276,
+                            ty: Type {
+                                kind: Path(
+                                    Path {
+                                        segments: [
+                                            PathSegment {
+                                                ident: "HttpServer" @ 278..288,
+                                                generics: [],
+                                            },
+                                        ],
+                                        span: 278..288,
+                                    },
+                                ),
+                                span: 278..288,
+                            },
+                            span: 272..288,
+                        },
+                    ],
+                    starts: [],
+                    functions: [
+                        Function {
+                            docs: [
+                                Doc {
+                                    text: "Replies with a greeting for the name in the path.",
+                                    span: 295..348,
+                                },
+                            ],
+                            attrs: [
+                                Attribute {
+                                    kind: Route(
+                                        Route {
+                                            method: Get,
+                                            path: StrLit {
+                                                value: "/hello/{name}",
+                                                span: 359..374,
+                                            },
+                                            via: "http" @ 382..386,
+                                            body: None,
+                                        },
+                                    ),
+                                    span: 353..388,
+                                },
+                            ],
+                            vis: Private,
+                            is_async: false,
+                            name: "hello" @ 396..401,
+                            receiver: None,
+                            params: [
+                                Param {
+                                    pattern: Pattern {
+                                        kind: Binding {
+                                            mutable: false,
+                                            name: "name" @ 402..406,
+                                        },
+                                        span: 402..406,
+                                    },
+                                    ty: Type {
+                                        kind: Path(
+                                            Path {
+                                                segments: [
+                                                    PathSegment {
+                                                        ident: "String" @ 408..414,
+                                                        generics: [],
+                                                    },
+                                                ],
+                                                span: 408..414,
+                                            },
+                                        ),
+                                        span: 408..414,
+                                    },
+                                    span: 402..414,
+                                },
+                            ],
+                            ret: Some(
+                                Type {
+                                    kind: Path(
+                                        Path {
+                                            segments: [
+                                                PathSegment {
+                                                    ident: "String" @ 419..425,
+                                                    generics: [],
+                                                },
+                                            ],
+                                            span: 419..425,
+                                        },
+                                    ),
+                                    span: 419..425,
+                                },
+                            ),
+                            body: Block {
+                                stmts: [
+                                    Expr {
+                                        expr: Expr {
+                                            kind: Macro {
+                                                name: Path {
+                                                    segments: [
+                                                        PathSegment {
+                                                            ident: "format" @ 436..442,
+                                                            generics: [],
+                                                        },
+                                                    ],
+                                                    span: 436..442,
+                                                },
+                                                args: [
+                                                    Expr {
+                                                        kind: Lit(
+                                                            Lit {
+                                                                kind: Str(
+                                                                    "Hello, {name}!",
+                                                                ),
+                                                                span: 444..460,
+                                                            },
+                                                        ),
+                                                        span: 444..460,
+                                                    },
+                                                ],
+                                            },
+                                            span: 436..461,
+                                        },
+                                        semi: false,
+                                    },
+                                ],
+                                span: 426..467,
+                            },
+                            span: 295..467,
+                        },
+                    ],
+                },
+            ),
+            span: 219..469,
+        },
+    ],
+}

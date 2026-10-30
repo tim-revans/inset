@@ -1,0 +1,18 @@
+[package]
+name = "inset-syntax"
+version = "0.0.0"
+description = "The Inset lexer, parser, syntax tree and diagnostics"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+ariadne = "0.6"
+
+[dev-dependencies]
+insta = "1.49"
+proptest = "1.12"
+
+[lints]
+workspace = true

@@ -1,0 +1,11 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "app HelloHttp {\n    setting port: u16 = 8080\n    grant http: HttpServer { port };\n    start Greeter { http: move http };\n}\n"
+---
+Error: expected `;` after the setting, found keyword `grant`
+   ╭─[ main.inset:2:25 ]
+   │
+ 2 │     setting port: u16 = 8080
+   │                         ──┬─  
+   │                           ╰─── expected `;` after this
+───╯

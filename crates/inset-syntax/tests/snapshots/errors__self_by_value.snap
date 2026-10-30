@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "component Greeter {\n    http: HttpServer,\n\n    #[get(\"/hello/{name}\", via = http)]\n    fn hello(self, name: String) -> String {\n        format!(\"Hello, {name}!\")\n    }\n}\n"
+---
+Error: a handler cannot take `self` by value
+   ╭─[ main.inset:5:14 ]
+   │
+ 5 │     fn hello(self, name: String) -> String {
+   │              ──┬─  
+   │                ╰─── this would consume the component
+   │ 
+   │ Help: take `&self` to read the component's fields, or `&mut self` to change them
+───╯

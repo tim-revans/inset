@@ -1,6 +1,6 @@
 # Inset syntax
 
-The living reference for Inset's syntax. It is a draft: the parser does not exist yet, and the syntax changes as each example program is written.
+The living reference for Inset's syntax. It is a draft: the parser in [`crates/inset-syntax/`](../../crates/inset-syntax/) reads what Hello HTTP uses and reports the rest as not supported yet, and the syntax changes as each example program is compiled.
 
 Each construct is marked with its status:
 
@@ -784,3 +784,7 @@ value        = a Rust literal, or a struct, enum or list built from values ;
 ```
 
 `HTTP_METHOD` is one of `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. A `segment` is one or more characters other than whitespace and `/`. `step_rest` is the rest of a step of the same kind as the one before. `EXPR` is a Rust expression. A `HEADING` is free text, and a `CELL` the text that replaces its placeholder. Placeholders, `<` free text `>`, are replaced before a step is read, so they may appear anywhere in a step.
+
+Expressions, types, patterns and blocks may nest at most 64 levels deep. Deeper code is an error, whose help suggests moving the inner part into a function of its own.
+
+*Why a limit:* the parser reads nested code by recursion, and without a limit, input nested deeply enough would overflow its stack and crash the compiler, or the language server as someone types. No code a reviewer could follow nests anywhere near 64 levels.

@@ -1,0 +1,11 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "requirement \"Visitors are greeted by the name in the web address\"\n    when HelloHttp receives GET /hello/Ada\n    then HelloHttp replies OK with\n        \"\"\"\n        Hello, Ada!\n\nrequirement \"Visitors with no name are greeted anyway\"\n    when HelloHttp receives GET /hello/\n    then HelloHttp replies NotFound\n"
+---
+Error: unclosed text block
+   ╭─[ hello.req.inset:4:9 ]
+   │
+ 4 │         """
+   │         ─┬─  
+   │          ╰─── this `"""` has no closing `"""` at the same indentation
+───╯

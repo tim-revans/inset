@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "fn in_range(low: u32, x: u32, high: u32) -> bool {\n    low <= x < high\n}\n"
+---
+Error: comparison operators cannot be chained
+   ╭─[ main.inset:2:9 ]
+   │
+ 2 │     low <= x < high
+   │         ───┬──  
+   │            ╰──── the second comparison would compare the first one's `bool`
+   │ 
+   │ Help: join two comparisons with `&&`, such as `a < b && b < c`
+───╯

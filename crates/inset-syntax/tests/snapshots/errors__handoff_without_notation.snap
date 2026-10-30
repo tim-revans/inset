@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "app HelloHttp {\n    setting port: u16 = 8080;\n    grant http: HttpServer { port };\n    start Greeter { http };\n}\n"
+---
+Error: expected `:` after the field `http`, found `}`
+   ╭─[ main.inset:4:26 ]
+   │
+ 4 │     start Greeter { http };
+   │                          ┬  
+   │                          ╰── expected `:`
+   │ 
+   │ Help: a handoff says how the value crosses the boundary, such as `http: move http`
+───╯

@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "app HelloHttp {\n    setting port: u16;\n    grant http: HttpServer { port };\n}\n"
+---
+Error: setting `port` has no default
+   ╭─[ main.inset:2:22 ]
+   │
+ 2 │     setting port: u16;
+   │                      ┬  
+   │                      ╰── expected `=` and a default value
+   │ 
+   │ Help: every setting has a default, used when the program is run without it
+───╯

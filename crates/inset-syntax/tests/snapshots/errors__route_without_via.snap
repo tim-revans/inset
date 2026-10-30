@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "component Greeter {\n    http: HttpServer,\n\n    #[get(\"/hello/{name}\")]\n    fn hello(name: String) -> String {\n        format!(\"Hello, {name}!\")\n    }\n}\n"
+---
+Error: `#[get]` needs `via`
+   ╭─[ main.inset:4:7 ]
+   │
+ 4 │     #[get("/hello/{name}")]
+   │       ──────────┬─────────  
+   │                 ╰─────────── this route does not say which server its requests arrive through
+   │ 
+   │ Help: add `via =` and the name of the component's `HttpServer` field, such as `via = http`
+───╯

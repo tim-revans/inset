@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "requirement \"Visitors are greeted by the name in the web address\"\n    and HelloHttp receives GET /hello/Ada\n    then HelloHttp replies OK with \"Hello, Ada!\"\n"
+---
+Error: `and` with no step before it
+   ╭─[ hello.req.inset:2:5 ]
+   │
+ 2 │     and HelloHttp receives GET /hello/Ada
+   │     ─┬─  
+   │      ╰─── `and` repeats the kind of the step before it
+   │ 
+   │ Help: start with `given`, `when` or `then`
+───╯

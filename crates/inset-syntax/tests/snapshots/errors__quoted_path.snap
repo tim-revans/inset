@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "requirement \"Visitors are greeted by the name in the web address\"\n    when HelloHttp receives GET \"/hello/Ada\"\n    then HelloHttp replies OK with \"Hello, Ada!\"\n"
+---
+Error: expected a path, found `"/hello/Ada"`
+   ╭─[ hello.req.inset:2:33 ]
+   │
+ 2 │     when HelloHttp receives GET "/hello/Ada"
+   │                                 ──────┬─────  
+   │                                       ╰─────── a path starts with `/`
+   │ 
+   │ Help: write the path as in a browser's address bar, without quotes, such as `/hello/Ada`
+───╯

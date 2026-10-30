@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "requirement \"Visitors are greeted by the name in the web address\"\n    when HelloHttp receives get /hello/Ada\n    then HelloHttp replies OK with \"Hello, Ada!\"\n"
+---
+Error: unknown HTTP method `get`
+   ╭─[ hello.req.inset:2:29 ]
+   │
+ 2 │     when HelloHttp receives get /hello/Ada
+   │                             ─┬─  
+   │                              ╰─── expected `GET`, `POST`, `PUT`, `PATCH` or `DELETE`
+   │ 
+   │ Help: methods are written in capitals: `GET`
+───╯

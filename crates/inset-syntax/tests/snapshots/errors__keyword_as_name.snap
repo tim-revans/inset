@@ -1,0 +1,22 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "fn greeting(name: String) -> String {\n    let start = format!(\"Hello, {name}\");\n    start + \"!\"\n}\n"
+---
+Error: expected a pattern, found keyword `start`
+   ╭─[ main.inset:2:9 ]
+   │
+ 2 │     let start = format!("Hello, {name}");
+   │         ──┬──  
+   │           ╰──── this is a keyword, so it cannot be a name
+   │ 
+   │ Help: `start` is a keyword in Inset, though not in Rust; choose another name
+───╯
+Error: expected an expression, found keyword `start`
+   ╭─[ main.inset:3:5 ]
+   │
+ 3 │     start + "!"
+   │     ──┬──  
+   │       ╰──── this is a keyword, so it cannot be a name
+   │ 
+   │ Help: `start` is a keyword in Inset, though not in Rust; choose another name
+───╯

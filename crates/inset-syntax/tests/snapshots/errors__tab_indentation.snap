@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "requirement \"Visitors are greeted by the name in the web address\"\n\twhen HelloHttp receives GET /hello/Ada\n    then HelloHttp replies OK with \"Hello, Ada!\"\n"
+---
+Error: tab in a requirement's indentation
+   ╭─[ hello.req.inset:2:1 ]
+   │
+ 2 │     when HelloHttp receives GET /hello/Ada
+   │ ┬───  
+   │ ╰───── this is a tab
+   │ 
+   │ Help: indent with spaces: four for a step
+───╯

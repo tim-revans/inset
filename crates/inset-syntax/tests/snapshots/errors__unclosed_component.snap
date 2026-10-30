@@ -1,0 +1,11 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "component Greeter {\n    http: HttpServer,\n\n    #[get(\"/hello/{name}\", via = http)]\n    fn hello(name: String) -> String {\n        format!(\"Hello, {name}!\")\n    }\n"
+---
+Error: unclosed `{`
+   ╭─[ main.inset:1:19 ]
+   │
+ 1 │ component Greeter {
+   │                   ┬  
+   │                   ╰── this `{` has no matching `}`
+───╯

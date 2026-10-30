@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "component Greeter {\n    http: HttpServer,\n\n    #[get(\"/hello/{name}, via = http)]\n    fn hello(name: String) -> String {\n        format!(\"Hello, {name}!\")\n    }\n}\n"
+---
+Error: unterminated string
+   ╭─[ main.inset:4:11 ]
+   │
+ 4 │     #[get("/hello/{name}, via = http)]
+   │           ┬  
+   │           ╰── this string runs on to line 6, which puts every string after it out of step
+   │ 
+   │ Help: if the string should end on this line, add its closing `"`
+───╯

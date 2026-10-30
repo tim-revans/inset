@@ -1,0 +1,18 @@
+[package]
+name = "inset-cli"
+version = "0.0.0"
+description = "The `inset` command line"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "inset"
+path = "src/main.rs"
+
+[dependencies]
+inset-syntax = { path = "../inset-syntax" }
+
+[lints]
+workspace = true

@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "component Greeter {\n    http: HttpServer,\n\n    #[route(\"/hello/{name}\", via = http)]\n    fn hello(name: String) -> String {\n        format!(\"Hello, {name}!\")\n    }\n}\n"
+---
+Error: unknown attribute `route`
+   ╭─[ main.inset:4:7 ]
+   │
+ 4 │     #[route("/hello/{name}", via = http)]
+   │       ──┬──  
+   │         ╰──── Inset has no attribute with this name
+   │ 
+   │ Help: the attributes are `get`, `post`, `put`, `patch`, `delete`, `message`, `handed_down`, `derive`, `status`, `rust` and `defensive`
+───╯

@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "component Greeter {\n    #[get(\"/hello/{name}\", via = http)]\n    fn hello(name: String) -> String {\n        format!(\"Hello, {name}!\")\n    }\n\n    http: HttpServer,\n}\n"
+---
+Error: a field is out of order
+   ╭─[ main.inset:7:5 ]
+   │
+ 7 │     http: HttpServer,
+   │     ────────┬───────  
+   │             ╰───────── fields come first in a component
+   │ 
+   │ Help: move it above the component's `start` statements and functions
+───╯

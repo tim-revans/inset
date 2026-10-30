@@ -1,0 +1,44 @@
+---
+source: crates/inset-syntax/tests/hello.rs
+expression: parsed.ast
+---
+RequirementsFile {
+    requirements: [
+        Requirement {
+            sentence: StrLit {
+                value: "Visitors are greeted by the name in the web address",
+                span: 12..65,
+            },
+            steps: [
+                Step {
+                    keyword: When,
+                    kind: Request {
+                        app: "HelloHttp" @ 75..84,
+                        method: Get,
+                        path: Text {
+                            value: "/hello/Ada",
+                            span: 98..108,
+                        },
+                        body: None,
+                    },
+                    span: 70..108,
+                },
+                Step {
+                    keyword: Then,
+                    kind: Reply {
+                        app: "HelloHttp" @ 118..127,
+                        status: "OK" @ 136..138,
+                        body: Some(
+                            Text {
+                                value: "Hello, Ada!",
+                                span: 144..157,
+                            },
+                        ),
+                    },
+                    span: 113..157,
+                },
+            ],
+            span: 0..157,
+        },
+    ],
+}
