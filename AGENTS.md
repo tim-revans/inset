@@ -18,3 +18,4 @@ Read this before changing anything in the repo.
 
 - Secrets or credentials.
 - Local agent configuration, notes or plans. These are git-ignored; keep it that way.
+- Attribution to an AI tool or vendor, in files, commit messages or PR descriptions. No co-author trailers, session links or "generated with" lines. Inset is for AI authors in general, not any one product.
