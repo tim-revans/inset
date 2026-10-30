@@ -1,6 +1,6 @@
 >mod warehouse;
 #^^^ storage.type.module.inset
-#    ^^^^^^^^^ entity.name.module.inset
+#    ^^^^^^^^^ entity.name.namespace.module.inset
 #             ^ punctuation.terminator.statement.inset
 >
 >use warehouse::Warehouse;
@@ -187,7 +187,7 @@
 #     ^ meta.attribute.status.inset punctuation.brackets.attribute.inset
 #      ^^^^^^ meta.attribute.status.inset keyword.other.attribute.inset
 #            ^ meta.attribute.status.inset punctuation.brackets.round.inset
-#             ^^^^^^^^ meta.attribute.status.inset constant.other.status.inset
+#             ^^^^^^^^ meta.attribute.status.inset constant.other.status.inset variable.other.enummember.status.inset
 #                     ^ meta.attribute.status.inset punctuation.brackets.round.inset
 #                      ^ meta.attribute.status.inset punctuation.brackets.attribute.inset
 >    UnknownItem,
@@ -201,7 +201,7 @@
 #     ^ meta.attribute.status.inset punctuation.brackets.attribute.inset
 #      ^^^^^^ meta.attribute.status.inset keyword.other.attribute.inset
 #            ^ meta.attribute.status.inset punctuation.brackets.round.inset
-#             ^^^^^^^^ meta.attribute.status.inset constant.other.status.inset
+#             ^^^^^^^^ meta.attribute.status.inset constant.other.status.inset variable.other.enummember.status.inset
 #                     ^ meta.attribute.status.inset punctuation.brackets.round.inset
 #                      ^ meta.attribute.status.inset punctuation.brackets.attribute.inset
 >    NotEnoughStock,

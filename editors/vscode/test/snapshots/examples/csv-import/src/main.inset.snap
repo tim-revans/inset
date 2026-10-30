@@ -186,7 +186,7 @@
 #     ^ meta.attribute.status.inset punctuation.brackets.attribute.inset
 #      ^^^^^^ meta.attribute.status.inset keyword.other.attribute.inset
 #            ^ meta.attribute.status.inset punctuation.brackets.round.inset
-#             ^^^^^^^^^^ meta.attribute.status.inset constant.other.status.inset
+#             ^^^^^^^^^^ meta.attribute.status.inset constant.other.status.inset variable.other.enummember.status.inset
 #                       ^ meta.attribute.status.inset punctuation.brackets.round.inset
 #                        ^ meta.attribute.status.inset punctuation.brackets.attribute.inset
 >    InvalidRows(String),

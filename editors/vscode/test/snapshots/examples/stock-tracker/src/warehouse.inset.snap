@@ -82,7 +82,7 @@
 #        ^^^ meta.failure.inset comment.line.documentation.inset punctuation.definition.comment.inset
 #           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.failure.inset comment.line.documentation.inset
 >        Message(inventory) => rollback,
-#        ^^^^^^^ meta.failure.inset support.constant.failure.inset
+#        ^^^^^^^ meta.failure.inset support.constant.failure.inset variable.other.enummember.failure.inset
 #               ^ meta.failure.inset punctuation.brackets.round.inset
 #                ^^^^^^^^^ meta.failure.inset variable.other.inset
 #                         ^ meta.failure.inset punctuation.brackets.round.inset
@@ -443,7 +443,7 @@
 #        ^^^ meta.failure.inset comment.line.documentation.inset punctuation.definition.comment.inset
 #           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.failure.inset comment.line.documentation.inset
 >        Capability(items) => rollback,
-#        ^^^^^^^^^^ meta.failure.inset support.constant.failure.inset
+#        ^^^^^^^^^^ meta.failure.inset support.constant.failure.inset variable.other.enummember.failure.inset
 #                  ^ meta.failure.inset punctuation.brackets.round.inset
 #                   ^^^^^ meta.failure.inset variable.other.inset
 #                        ^ meta.failure.inset punctuation.brackets.round.inset

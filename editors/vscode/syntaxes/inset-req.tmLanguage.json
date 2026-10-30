@@ -148,7 +148,7 @@
           "name": "keyword.other.inset-req"
         },
         "3": {
-          "name": "constant.other.status.inset-req"
+          "name": "constant.other.status.inset-req variable.other.enummember.status.inset-req"
         }
       }
     },

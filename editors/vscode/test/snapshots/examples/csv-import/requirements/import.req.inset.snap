@@ -29,7 +29,7 @@
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
 #                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                           ^^ meta.requirement.inset-req constant.other.status.inset-req
+#                           ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
 #                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                   ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                    ^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
@@ -114,7 +114,7 @@
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
 #                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                           ^^ meta.requirement.inset-req constant.other.status.inset-req
+#                           ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
 #                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                   ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                    ^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
@@ -170,7 +170,7 @@
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
 #                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                           ^^ meta.requirement.inset-req constant.other.status.inset-req
+#                           ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
 #                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                   ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                    ^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
@@ -214,7 +214,7 @@
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
 #                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                           ^^^^^^^^^^ meta.requirement.inset-req constant.other.status.inset-req
+#                           ^^^^^^^^^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
 #                                      ^^^^ meta.requirement.inset-req keyword.other.inset-req
 >    """
 #    ^^^ meta.requirement.inset-req string.quoted.triple.inset-req punctuation.definition.string.begin.inset-req
@@ -260,7 +260,7 @@
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
 #                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                           ^^^^^^^^^^ meta.requirement.inset-req constant.other.status.inset-req
+#                           ^^^^^^^^^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
 #                                      ^^^^ meta.requirement.inset-req keyword.other.inset-req
 >    """
 #    ^^^ meta.requirement.inset-req string.quoted.triple.inset-req punctuation.definition.string.begin.inset-req
@@ -346,7 +346,7 @@
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
 #                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                           ^^ meta.requirement.inset-req constant.other.status.inset-req
+#                           ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
 #                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                   ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                    ^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
@@ -415,7 +415,7 @@
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
 #                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                           ^^ meta.requirement.inset-req constant.other.status.inset-req
+#                           ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
 #                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                   ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                    ^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req

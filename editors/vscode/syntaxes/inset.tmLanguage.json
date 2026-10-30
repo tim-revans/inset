@@ -185,7 +185,7 @@
               "name": "punctuation.brackets.round.inset"
             },
             "5": {
-              "name": "constant.other.status.inset"
+              "name": "constant.other.status.inset variable.other.enummember.status.inset"
             },
             "6": {
               "name": "punctuation.brackets.round.inset"
@@ -433,7 +433,7 @@
               "name": "storage.type.module.inset"
             },
             "2": {
-              "name": "entity.name.module.inset"
+              "name": "entity.name.namespace.module.inset"
             }
           }
         },
@@ -544,7 +544,7 @@
         },
         {
           "match": "\\b(Panic|Overflow|Capability|Message|Child)\\b",
-          "name": "support.constant.failure.inset"
+          "name": "support.constant.failure.inset variable.other.enummember.failure.inset"
         },
         {
           "match": "\\b(rollback|restart)\\b",
@@ -552,7 +552,7 @@
         },
         {
           "match": "\\b_\\b",
-          "name": "support.constant.failure.inset"
+          "name": "support.constant.failure.inset variable.other.enummember.failure.inset"
         },
         {
           "include": "#expressions"
