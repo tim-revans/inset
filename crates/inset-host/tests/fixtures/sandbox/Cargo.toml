@@ -1,0 +1,11 @@
+[package]
+name = "fixture-sandbox"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+inset-runtime = { path = "../../../../inset-runtime" }

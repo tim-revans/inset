@@ -8,6 +8,8 @@ A web server with one address. A request for `/hello/Ada` gets the text reply `H
 | --- | --- |
 | `src/main.inset` | The app, which receives the network capability from the host, and the `Greeter` component it starts |
 | `requirements/hello.req.inset` | The one requirement test |
+| `expected/diagram.json` and `expected/*.svg` | The diagram the compiler must emit, and its pictures |
+| `expected/rust/` | The Rust the compiler must emit, written by hand (see [runtime.md](../../docs/language/runtime.md)) |
 
 ## What it exercises
 

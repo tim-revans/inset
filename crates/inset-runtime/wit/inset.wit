@@ -1,0 +1,132 @@
+/// The interface between a built Inset program and the host that runs it.
+///
+/// `docs/language/runtime.md` explains the choices made here.
+package inset:host@0.1.0;
+
+/// Every built Inset program is one WebAssembly component of this world.
+///
+/// Rust's standard library on `wasm32-wasip2` also imports WASI's command
+/// interfaces (clocks, random numbers, files, sockets). The host links them
+/// with nothing granted: no files, no network, fixed clocks and seeded random
+/// numbers.
+world program {
+    import capabilities;
+    import report;
+    export app;
+}
+
+/// What the program exports, so the host can learn what it needs and run it.
+interface app {
+    /// The type of a setting, which the host checks `--set` values against.
+    enum setting-type {
+        %bool,
+        %u8,
+        %u16,
+        %u32,
+        %u64,
+        %i8,
+        %i16,
+        %i32,
+        %i64,
+        %string,
+    }
+
+    /// A value whoever runs the program may choose.
+    record setting {
+        name: string,
+        %type: setting-type,
+        /// The default, written as `--set` would write it.
+        default: string,
+    }
+
+    /// The value of one field of a grant.
+    variant grant-value {
+        /// Fixed in the source, written as `--set` would write it.
+        literal(string),
+        /// The value of the setting with this name.
+        setting(string),
+    }
+
+    record grant-field {
+        name: string,
+        value: grant-value,
+    }
+
+    /// A capability the program asks the host for.
+    record grant {
+        name: string,
+        /// The capability type, such as `HttpServer` or `Table<String, Item>`.
+        capability: string,
+        fields: list<grant-field>,
+    }
+
+    /// Everything the host must know before it starts the program.
+    record manifest {
+        app: string,
+        settings: list<setting>,
+        grants: list<grant>,
+    }
+
+    /// An HTTP request that arrived through one of the program's `HttpServer` grants.
+    record request {
+        method: string,
+        /// The path and query, as sent.
+        path: string,
+        body: list<u8>,
+    }
+
+    record response {
+        status: u16,
+        content-type: option<string>,
+        body: list<u8>,
+    }
+
+    /// A failure that no component responded to, which stops the program.
+    record stopped {
+        /// The diagram ID of the component it happened in, such as `HelloHttp/Greeter`.
+        component: string,
+        /// The failure condition, as a `failure` block names it, such as `Capability(items)`.
+        failure: string,
+        message: string,
+    }
+
+    describe: func() -> manifest;
+
+    /// Starts the app's components. After a panic that the program survives,
+    /// the host starts a fresh instance with the state handed to `report.trapping`.
+    start: func(restore: option<list<u8>>) -> result<_, stopped>;
+
+    /// Handles one request that arrived through the grant `server`. The host
+    /// calls it for one request at a time, and it returns once the whole
+    /// program is idle again.
+    handle: func(server: string, request: request) -> result<response, stopped>;
+}
+
+/// Capabilities the host grants. Each is opened by the name of its grant.
+interface capabilities {
+    /// A stored map from keys to values, each encoded by the program.
+    ///
+    /// Writes are held in a transaction until `commit`, which the program
+    /// calls when the handler that made them completes.
+    resource table {
+        get: func(key: list<u8>) -> result<option<list<u8>>, string>;
+        insert: func(key: list<u8>, value: list<u8>) -> result<_, string>;
+        commit: func();
+        rollback: func();
+    }
+
+    /// The table the app was granted as `grant`. The host refuses any other name.
+    open-table: func(grant: string) -> result<table, string>;
+}
+
+/// What the program tells the host, so a person running it can see what happened.
+interface report {
+    /// A component rolled back a handler, as its `failure` block says to,
+    /// and the program carries on.
+    rolled-back: func(component: string, failure: string, message: string);
+
+    /// A panic is about to trap the instance. `recovery` is the state to start
+    /// a fresh instance from, present when every handler the panic interrupts
+    /// responds with `rollback`. Without it, the program stops.
+    trapping: func(component: string, failure: string, message: string, recovery: option<list<u8>>);
+}

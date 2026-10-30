@@ -4,20 +4,31 @@
 //! without extra tooling. The VS Code extension's grammar tests and packaging
 //! need Node.js, so those steps shell out to `npm` in `editors/vscode`.
 
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
+use std::time::{Duration, Instant};
 
 const USAGE: &str = "usage: cargo xtask <task>
 
 tasks:
-  ci        format check, clippy, tests, editor grammar tests
-  editor    package the VS Code extension as a .vsix";
+  ci                format check, clippy, tests, editor grammar tests
+  editor            package the VS Code extension as a .vsix
+  e2e hello-spike   run Hello HTTP's hand-written Rust in the host and request a greeting";
 
 fn main() -> ExitCode {
     let task = std::env::args().nth(1);
     let result = match task.as_deref() {
         Some("ci") => ci(),
         Some("editor") => editor(),
+        Some("e2e") => match std::env::args().nth(2).as_deref() {
+            Some("hello-spike") => hello_spike(),
+            _ => {
+                eprintln!("{USAGE}");
+                return ExitCode::FAILURE;
+            }
+        },
         _ => {
             eprintln!("{USAGE}");
             return ExitCode::FAILURE;
@@ -43,6 +54,17 @@ fn ci() -> Result<(), String> {
         "-D",
         "warnings",
     ])?;
+    // The runtime's reports to the host compile only for WebAssembly.
+    cargo(&[
+        "clippy",
+        "--target",
+        "wasm32-wasip2",
+        "-p",
+        "inset-runtime",
+        "--",
+        "-D",
+        "warnings",
+    ])?;
     cargo(&["test", "--workspace"])?;
     npm_install()?;
     npm(&["test"])?;
@@ -52,16 +74,80 @@ fn ci() -> Result<(), String> {
 /// Packages the VS Code extension for local install. Publishing waits for the alpha.
 fn editor() -> Result<(), String> {
     npm_install()?;
-    let target = std::env::var_os("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| repo_dir().join("target"));
-    let out_dir = target.join("vscode");
+    let out_dir = target_dir().join("vscode");
     std::fs::create_dir_all(&out_dir).map_err(|e| format!("create {} ({e})", out_dir.display()))?;
     let vsix = out_dir.join("inset.vsix");
     let out = vsix.to_string_lossy();
     npm(&["run", "package", "--", "--out", &out])?;
     eprintln!("xtask: install with `code --install-extension {out}`");
     Ok(())
+}
+
+/// Builds Hello HTTP's hand-written target Rust to a WebAssembly component,
+/// serves it with `inset-host run` on a free port, and checks the greeting
+/// that comes back over a real socket.
+fn hello_spike() -> Result<(), String> {
+    cargo(&[
+        "build",
+        "--release",
+        "--target",
+        "wasm32-wasip2",
+        "-p",
+        "hello-http",
+    ])?;
+    cargo(&["build", "-p", "inset-host"])?;
+    let target = target_dir();
+    let component = target.join("wasm32-wasip2/release/hello_http.wasm");
+    let port = TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr())
+        .map_err(|e| format!("find a free port ({e})"))?
+        .port();
+    eprintln!(
+        "xtask: inset-host run {} --set port={port}",
+        component.display()
+    );
+    let mut host = Command::new(target.join("debug/inset-host"))
+        .arg("run")
+        .arg(&component)
+        .args(["--set", &format!("port={port}")])
+        .spawn()
+        .map_err(|e| format!("start inset-host ({e})"))?;
+    let reply = get(port, "/hello/Ada");
+    let _ = host.kill();
+    let _ = host.wait();
+    let reply = reply?;
+    eprintln!("xtask: GET /hello/Ada replied:\n{reply}");
+    let ok = reply.starts_with("HTTP/1.1 200 OK\r\n") && reply.ends_with("\r\n\r\nHello, Ada!");
+    if ok {
+        Ok(())
+    } else {
+        Err("e2e hello-spike: unexpected reply".into())
+    }
+}
+
+/// Sends a GET request once the server is listening, and returns the raw reply.
+fn get(port: u16, path: &str) -> Result<String, String> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut stream = loop {
+        match TcpStream::connect(("127.0.0.1", port)) {
+            Ok(stream) => break stream,
+            Err(_) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(50)),
+            Err(e) => return Err(format!("connect to port {port} ({e})")),
+        }
+    };
+    let request = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+    let mut reply = String::new();
+    stream
+        .write_all(request.as_bytes())
+        .and_then(|()| stream.read_to_string(&mut reply))
+        .map_err(|e| format!("GET {path} ({e})"))?;
+    Ok(reply)
+}
+
+fn target_dir() -> PathBuf {
+    std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| repo_dir().join("target"))
 }
 
 fn cargo(args: &[&str]) -> Result<(), String> {

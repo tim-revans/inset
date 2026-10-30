@@ -7,7 +7,7 @@ Each construct is marked with its status:
 - **Used**: an example program uses it.
 - **Draft**: planned, but no example uses it yet, so expect it to change.
 
-How the generated diagrams look is in [`diagrams.md`](diagrams.md). The example programs are in [`examples/`](../../examples/): Hello HTTP, Stock tracker and CSV import.
+How the generated diagrams look is in [`diagrams.md`](diagrams.md), and how a built program runs is in [`runtime.md`](runtime.md). The example programs are in [`examples/`](../../examples/): Hello HTTP, Stock tracker and CSV import.
 
 The VS Code extension in [`editors/vscode/`](../../editors/vscode/) highlights this syntax, so its grammars change with it, in the same commit. Its snapshot tests cover every example program and every code block on this page marked `inset` (code) or `inset-req` (requirements).
 
@@ -95,7 +95,7 @@ app PriceImport {
 - `start Component { handoffs };` starts a component and hands it its fields (see [Starting components](#starting-components)).
 - `grant` is the only way to create a capability. `setting` and `grant` may appear only in an app.
 - Settings may be `bool`, an integer type, or `String`. Passing a setting to a component in `start` is Draft.
-- A relative file path in a grant is resolved by the host. *(Draft: stage 4 settles against what.)*
+- A relative file path in a grant is resolved against the directory the program is run from, as any command-line tool resolves the paths it is given (see [`runtime.md`](runtime.md#settings-and-grants)).
 
 *Why settings are declared:* some configuration is part of what the reviewer approves, and some belongs to whoever runs the program. The Stock tracker's database is its own, so its file is fixed in the grant. CSV import writes a catalogue that other tools read, so where it lives is a setting. Inset does not choose between the two. The source states which values can change at run time, and the diagram lists them with their defaults, so the reviewer can see exactly what the person running the program controls. A setting can only change a value in a grant. It cannot add a grant or change a capability's type.
 
@@ -563,7 +563,7 @@ requirement "Visitors are greeted by the name in the web address"
 
 **What a requirement can see.** A requirement tests the app as a black box. Names in its values, such as `Item`, resolve as they would in `src/main.inset`. It can send the app HTTP requests, set up what the app's granted capabilities hold, and observe the replies and what the capabilities hold afterwards. It cannot name a component, a message or an algorithm. The test runs the built program in the same WebAssembly host that runs it for real, with a fake behind each `grant`, and every component starts for real.
 
-*Why tests run in the host:* there is then one way to run a requirement, and it tests what ships, including the host's enforcement of each component's capabilities. A faster native mode would add a second answer to "what did this test run?", and a program could pass in one and fail in the other. An AI author spends nothing while it waits for tests, and the host starts a built component in well under a second, so the cost is small.
+*Why tests run in the host:* there is then one way to run a requirement, and it tests what ships, including the host's enforcement of each component's capabilities. A faster native mode would add a second answer to "what did this test run?", and a program could pass in one and fail in the other. An AI author spends nothing while it waits for tests, and the host starts a built component in well under a millisecond once it is loaded (see [`runtime.md`](runtime.md#starting-a-program)), so the cost is small.
 
 *Why requirements see only the outside:* review splits into jobs. The diagrams show how the program is built, and the requirements state what it must do. A requirement that named `Inventory` or `reorder_quantity` would write the AI's own design into the statement of intent, which is where a hidden assumption does the most harm, because the reviewer approves it as a requirement. A requirement written against the outside also survives any restructuring of the inside. The cost is that a failure names the behaviour that broke, not the code that broke it. The diagram and the coverage overlay show where to look.
 

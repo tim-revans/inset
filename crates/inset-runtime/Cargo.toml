@@ -1,0 +1,16 @@
+[package]
+name = "inset-runtime"
+version = "0.0.0"
+description = "The support library linked into every built Inset program: components as actors, capabilities and failures"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = "1"
+serde_json = "1"
+wit-bindgen = { version = "0.63.0", default-features = false, features = ["macros", "realloc"] }
+
+[lints]
+workspace = true

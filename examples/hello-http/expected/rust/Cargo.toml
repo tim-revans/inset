@@ -1,0 +1,14 @@
+# The Rust the Inset compiler should emit for Hello HTTP, written by hand.
+# It builds to one WebAssembly component: cargo build --target wasm32-wasip2.
+
+[package]
+name = "hello-http"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+inset-runtime = { path = "../../../../crates/inset-runtime" }
