@@ -40,7 +40,7 @@ enum ImportError {
 extern component CsvReader {
     /// Reads every row after the header line, whatever number of fields it has.
     #[message]
-    fn read(&self, text: &String) -> Vec<Row>;
+    fn read(&self, text: &str) -> Vec<Row>;
 }
 
 /// Accepts price lists over HTTP and stores their products.
@@ -68,7 +68,7 @@ component Importer {
 }
 
 /// Reads every row of a price list, or describes every invalid row, one per line.
-fn parse_price_list(rows: &Vec<Row>) -> Result<Vec<(String, Product)>, String> {
+fn parse_price_list(rows: &[Row]) -> Result<Vec<(String, Product)>, String> {
     let results = fork for row in rows {
         parse_row(row)
     };
@@ -100,7 +100,7 @@ fn parse_row(row: &Row) -> Result<(String, Product), String> {
 }
 
 /// Reads a price of zero or more pounds with at most two decimal places, such as `12.50`.
-fn parse_price(text: &String) -> Option<Decimal> {
+fn parse_price(text: &str) -> Option<Decimal> {
     match text.parse::<Decimal>() {
         Ok(price) if price >= dec!(0) && price.scale() <= 2 => Some(price),
         _ => None,

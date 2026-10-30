@@ -38,6 +38,9 @@ The program is split into two modules to show that Inset's modules are Rust's: `
 | Error replies | `Option` replies `404 Not Found` for `None`. `ShipError` names a status on each variant |
 | Algorithm in a component | `Inventory::reorder_quantity`, which takes no `self` and so touches no capability |
 | Examples table | "Stock that falls to its reorder level...", one row per case of reordering, which covers every branch of `reorder_quantity` from outside |
+| Failure responses | `Inventory` rolls back a request whose database call fails, and `Warehouse` rolls back a request whose message to `Inventory` fails. Each arm gives its reason. Any other failure stops the program |
+| Fault injection in tests | `and items fails` in "A database failure fails the request and changes nothing" |
+| Closures and iterators | `iter_mut().find(...)` in `Reorders::raise`, and `map(...).collect()` in `pending_reorders` |
 | Capability facts in tests | `given items["bolt-m6"] is Item { ... }` and `and items is empty` |
 | Several requests in one test | "A new reorder for an item replaces its earlier one" |
 
@@ -109,3 +112,4 @@ Sketches of what each review level should show. Stage 3 replaces them with `expe
 - Messages go from a parent to its children, or from a child to an earlier sibling its parent lent it. `Reorders` started first, so the arrow from `Inventory` to it cannot be part of a loop.
 - Moving the reorder decision from `Warehouse` into `Inventory` changed no requirement, because requirements only see the app's boundary.
 - The examples table reaches both branches of the flowchart through HTTP requests alone.
+- Each component box has a failure section. `Inventory` shows `Capability(items) → rollback` and `Warehouse` shows `Message(inventory) → rollback`, each with its reason. `Reorders` has none, so the reviewer can see that any failure there stops the program.

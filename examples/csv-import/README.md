@@ -90,5 +90,6 @@ Sketches of what each review level should show. Stage 3 replaces them with `expe
             Ok(products)   Err(errors)
 ```
 
+- No component has a failure section, so any failure, such as a database error while storing products, stops the program. The reviewer can see that nothing is hidden.
 - The only external system the program touches is `catalogue.db`, through `Importer`. The Rust code cannot reach it, because it holds nothing.
 - The flowchart shows that rows are read independently, which is what makes reporting every invalid line possible.

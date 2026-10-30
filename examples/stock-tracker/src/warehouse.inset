@@ -9,6 +9,11 @@ pub component Warehouse {
     start reorders: Reorders { orders: Vec::new() };
     start inventory: Inventory { items: move items, reorders: &reorders };
 
+    failure {
+        /// Inventory rolls back a request whose database call fails, so this request fails too.
+        Message(inventory) => rollback,
+    }
+
     /// Replies with the quantity on hand.
     #[get("/items/{sku}", via = http)]
     async fn stock(&self, sku: String) -> Option<String> {
@@ -33,11 +38,8 @@ pub component Warehouse {
     /// Lists the reorders waiting to be placed, one per line: the SKU, then the quantity.
     #[get("/reorders", via = http)]
     async fn pending_reorders(&self) -> String {
-        let mut text = String::new();
-        for order in self.reorders.pending().await {
-            text.push_str(&format!("{} {}\n", order.sku, order.quantity));
-        }
-        text
+        let orders = self.reorders.pending().await;
+        orders.iter().map(|order| format!("{} {}\n", order.sku, order.quantity)).collect()
     }
 }
 
@@ -46,25 +48,31 @@ component Inventory {
     items: Table<String, Item>,
     reorders: &Handle<Reorders>,
 
+    failure {
+        /// A database error affects only the request it happened in. The next request
+        /// may succeed, so the program keeps running.
+        Capability(items) => rollback,
+    }
+
     /// The item with this SKU, if there is one.
     #[message]
-    async fn item(&self, sku: &String) -> Option<Item> {
+    async fn item(&self, sku: &str) -> Option<Item> {
         self.items.get(sku).await
     }
 
     /// Adds to an item's stock, and returns the item as it now stands.
     #[message]
-    async fn receive(&mut self, sku: &String, quantity: u32) -> Option<Item> {
+    async fn receive(&mut self, sku: &str, quantity: u32) -> Option<Item> {
         let mut item = self.items.get(sku).await?;
         item.on_hand += quantity;
-        self.items.insert(sku.clone(), item.clone()).await;
+        self.items.insert(sku.to_string(), item.clone()).await;
         Some(item)
     }
 
     /// Takes from an item's stock if it holds enough, and returns the item as it now stands.
     /// Raises a reorder if that leaves stock at or below its reorder level.
     #[message]
-    async fn ship(&mut self, sku: &String, quantity: u32) -> Result<Item, ShipError> {
+    async fn ship(&mut self, sku: &str, quantity: u32) -> Result<Item, ShipError> {
         let Some(mut item) = self.items.get(sku).await else {
             return Err(ShipError::UnknownItem);
         };
@@ -72,10 +80,10 @@ component Inventory {
             return Err(ShipError::NotEnoughStock);
         }
         item.on_hand -= quantity;
-        self.items.insert(sku.clone(), item.clone()).await;
+        self.items.insert(sku.to_string(), item.clone()).await;
         let order = Self::reorder_quantity(item.on_hand, item.reorder_level, item.target_level);
         if order > 0 {
-            send self.reorders.raise(Reorder { sku: sku.clone(), quantity: order });
+            send self.reorders.raise(Reorder { sku: sku.to_string(), quantity: order });
         }
         Ok(item)
     }
@@ -97,13 +105,11 @@ component Reorders {
     /// Records a reorder, replacing any earlier one for the same item.
     #[message]
     fn raise(&mut self, order: Reorder) {
-        for pending in &mut self.orders {
-            if pending.sku == order.sku {
-                pending.quantity = order.quantity;
-                return;
-            }
+        if let Some(pending) = self.orders.iter_mut().find(|pending| pending.sku == order.sku) {
+            pending.quantity = order.quantity;
+        } else {
+            self.orders.push(order);
         }
-        self.orders.push(order);
     }
 
     /// Every reorder waiting to be placed, oldest first.

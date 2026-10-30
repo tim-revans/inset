@@ -52,3 +52,10 @@ requirement "A new reorder for an item replaces its earlier one"
   then StockTracker replies OK with "6"
   when StockTracker receives GET /reorders
   then StockTracker replies OK with "bolt-m6 44\n"
+
+requirement "A database failure fails the request and changes nothing"
+  given items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
+  and items fails
+  when StockTracker receives POST /items/bolt-m6/receipts with "20"
+  then StockTracker replies InternalServerError
+  and items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }

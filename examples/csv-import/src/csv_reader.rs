@@ -8,7 +8,7 @@ use crate::Row;
 pub struct CsvReader;
 
 impl CsvReader {
-    pub fn read(&self, text: &String) -> Vec<Row> {
+    pub fn read(&self, text: &str) -> Vec<Row> {
         let mut reader = csv::ReaderBuilder::new()
             .flexible(true)
             .from_reader(text.as_bytes());
