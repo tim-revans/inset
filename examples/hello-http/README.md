@@ -25,24 +25,17 @@ It covers the brief's Hello HTTP row: one component, one route, one requirement 
 
 ## Expected diagram
 
-A sketch of what the component view should show. Stage 3 replaces it with `expected/diagram.json` and a rendered SVG. To fit in text, capability edges are labelled with the field's name only. The default view also shows its type (see [diagrams.md](../../docs/language/diagrams.md)).
+`expected/diagram.json` is the diagram data the compiler must emit, written by hand. The SVGs are drawn from it with `inset-diagram render` (see [diagrams.md](../../docs/language/diagrams.md)).
 
-```
-                     ┌─ HelloHttp ──────────────────────────────────────┐
-                     │                                                  │
-                     │  setting port: u16 = 8080                        │
-                     │  grant http: HttpServer (port: setting)          │
-                     │        │                                         │
-                     │        │ move                                    │
-                     │        ▼                                         │
- ( HTTP clients ) ───┼── GET /hello/{name} ──▶ ┌───────────┐            │
-                     │        via http         │  Greeter  │            │
-                  ◀──┼── String ───────────────┤           │            │
-                     │                         └───────────┘            │
-                     └──────────────────────────────────────────────────┘
-```
+**Component view** (`expected/diagram.svg`):
+
+![The HelloHttp app with its port setting and http grant, the Greeter component inside it, and an arrow from HTTP clients to its GET /hello/{name} route](expected/diagram.svg)
+
+**Flowchart of `hello`** (`expected/hello.svg`, with `--flowchart HelloHttp/Greeter/fn:hello`):
+
+![The flowchart of hello: one return step](expected/hello.svg)
 
 - The grant is the only place a capability enters the program, so the reviewer sees every external access at the app boundary.
 - The setting is listed with its default, so the reviewer sees what can change at run time.
-- The request arrow is labelled with the route, and the reply arrow with its type.
+- The request arrow from HTTP clients ends at the route it reaches, and the route's row shows the handler's reply type.
 - The requirement test covers the route and its reply, so the coverage overlay should leave nothing uncovered.

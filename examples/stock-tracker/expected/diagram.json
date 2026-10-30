@@ -1,0 +1,471 @@
+{
+  "version": 1,
+  "app": {
+    "id": "StockTracker",
+    "name": "StockTracker",
+    "doc": "Stock tracker: how many of each item the warehouse holds, and what to reorder.",
+    "settings": [
+      {
+        "id": "StockTracker/setting:port",
+        "name": "port",
+        "type": "u16",
+        "default": "8080",
+        "doc": "The port to serve on."
+      }
+    ],
+    "grants": [
+      {
+        "id": "StockTracker/grant:http",
+        "name": "http",
+        "type": "HttpServer",
+        "config": [
+          { "from": "setting", "name": "port", "setting": "StockTracker/setting:port" }
+        ],
+        "outside": { "kind": "clients", "label": "HTTP clients" }
+      },
+      {
+        "id": "StockTracker/grant:items",
+        "name": "items",
+        "type": "Table<String, Item>",
+        "config": [
+          { "from": "fixed", "name": "file", "value": "\"stock.db\"" },
+          { "from": "fixed", "name": "name", "value": "\"items\"" }
+        ],
+        "outside": { "kind": "resource", "label": "stock.db" }
+      }
+    ],
+    "components": [
+      {
+        "id": "StockTracker/Warehouse",
+        "type": "Warehouse",
+        "definition": "crate::warehouse::Warehouse",
+        "doc": "Answers HTTP requests from warehouse staff about stock and reorders.",
+        "start": [
+          { "pass": "move", "field": "http", "from": "StockTracker/grant:http" },
+          { "pass": "move", "field": "items", "from": "StockTracker/grant:items" }
+        ],
+        "fields": [
+          { "id": "StockTracker/Warehouse/field:http", "name": "http", "type": "HttpServer", "kind": "capability" },
+          {
+            "id": "StockTracker/Warehouse/field:items",
+            "name": "items",
+            "type": "Table<String, Item>",
+            "kind": "capability",
+            "handed_down": true
+          }
+        ],
+        "failure": [
+          {
+            "id": "StockTracker/Warehouse/failure:message:inventory",
+            "condition": { "kind": "message", "component": "StockTracker/Warehouse/inventory" },
+            "response": "rollback",
+            "reason": "Inventory rolls back a request whose database call fails, so this request fails too."
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "path": "/items/{sku}",
+            "via": "StockTracker/Warehouse/field:http",
+            "handler": {
+              "id": "StockTracker/Warehouse/fn:stock",
+              "name": "stock",
+              "doc": "Replies with the quantity on hand.",
+              "receiver": "ref",
+              "async": true,
+              "params": [{ "name": "sku", "type": "String" }],
+              "returns": "Option<String>",
+              "body": [
+                {
+                  "kind": "action",
+                  "id": "StockTracker/Warehouse/fn:stock/0",
+                  "text": "let item = self.inventory.item(&sku).await?",
+                  "links": ["StockTracker/Warehouse/fn:stock->StockTracker/Warehouse/inventory/fn:item"],
+                  "exit": { "id": "StockTracker/Warehouse/fn:stock/0/err", "text": "None" }
+                },
+                { "kind": "return", "id": "StockTracker/Warehouse/fn:stock/1", "text": "Some(item.on_hand.to_string())" }
+              ]
+            }
+          },
+          {
+            "method": "POST",
+            "path": "/items/{sku}/receipts",
+            "via": "StockTracker/Warehouse/field:http",
+            "body": "quantity",
+            "handler": {
+              "id": "StockTracker/Warehouse/fn:receive",
+              "name": "receive",
+              "doc": "Adds stock that has arrived, and replies with the new quantity on hand.",
+              "receiver": "ref",
+              "async": true,
+              "params": [{ "name": "sku", "type": "String" }, { "name": "quantity", "type": "u32" }],
+              "returns": "Option<String>",
+              "body": [
+                {
+                  "kind": "action",
+                  "id": "StockTracker/Warehouse/fn:receive/0",
+                  "text": "let item = self.inventory.receive(&sku, quantity).await?",
+                  "links": ["StockTracker/Warehouse/fn:receive->StockTracker/Warehouse/inventory/fn:receive"],
+                  "exit": { "id": "StockTracker/Warehouse/fn:receive/0/err", "text": "None" }
+                },
+                { "kind": "return", "id": "StockTracker/Warehouse/fn:receive/1", "text": "Some(item.on_hand.to_string())" }
+              ]
+            }
+          },
+          {
+            "method": "POST",
+            "path": "/items/{sku}/shipments",
+            "via": "StockTracker/Warehouse/field:http",
+            "body": "quantity",
+            "handler": {
+              "id": "StockTracker/Warehouse/fn:ship",
+              "name": "ship",
+              "doc": "Takes away stock that has been shipped, and replies with the new quantity on hand.",
+              "receiver": "ref",
+              "async": true,
+              "params": [{ "name": "sku", "type": "String" }, { "name": "quantity", "type": "u32" }],
+              "returns": "Result<String, ShipError>",
+              "body": [
+                {
+                  "kind": "action",
+                  "id": "StockTracker/Warehouse/fn:ship/0",
+                  "text": "let item = self.inventory.ship(&sku, quantity).await?",
+                  "links": ["StockTracker/Warehouse/fn:ship->StockTracker/Warehouse/inventory/fn:ship"],
+                  "exit": { "id": "StockTracker/Warehouse/fn:ship/0/err", "text": "Err(error)" }
+                },
+                { "kind": "return", "id": "StockTracker/Warehouse/fn:ship/1", "text": "Ok(item.on_hand.to_string())" }
+              ]
+            }
+          },
+          {
+            "method": "GET",
+            "path": "/reorders",
+            "via": "StockTracker/Warehouse/field:http",
+            "handler": {
+              "id": "StockTracker/Warehouse/fn:pending_reorders",
+              "name": "pending_reorders",
+              "doc": "Lists the reorders waiting to be placed, one per line: the SKU, then the quantity.",
+              "receiver": "ref",
+              "async": true,
+              "returns": "String",
+              "body": [
+                {
+                  "kind": "action",
+                  "id": "StockTracker/Warehouse/fn:pending_reorders/0",
+                  "text": "let orders = self.reorders.pending().await",
+                  "links": ["StockTracker/Warehouse/fn:pending_reorders->StockTracker/Warehouse/reorders/fn:pending"]
+                },
+                {
+                  "kind": "return",
+                  "id": "StockTracker/Warehouse/fn:pending_reorders/1",
+                  "text": "orders.iter().map(|order| format!(\"{} {}\\n\", order.sku, order.quantity)).collect()"
+                }
+              ]
+            }
+          }
+        ],
+        "components": [
+          {
+            "id": "StockTracker/Warehouse/reorders",
+            "name": "reorders",
+            "type": "Reorders",
+            "definition": "crate::warehouse::Reorders",
+            "doc": "Keeps the reorders waiting to be placed, at most one per item.",
+            "start": [
+              { "pass": "new", "field": "orders", "text": "Vec::new()" }
+            ],
+            "fields": [
+              { "id": "StockTracker/Warehouse/reorders/field:orders", "name": "orders", "type": "Vec<Reorder>", "kind": "state" }
+            ],
+            "messages": [
+              {
+                "id": "StockTracker/Warehouse/reorders/fn:raise",
+                "name": "raise",
+                "doc": "Records a reorder, replacing any earlier one for the same item.",
+                "receiver": "mut",
+                "params": [{ "name": "order", "type": "Reorder" }],
+                "body": [
+                  {
+                    "kind": "decision",
+                    "id": "StockTracker/Warehouse/reorders/fn:raise/0",
+                    "text": "if let Some(pending) = self.orders.iter_mut().find(|pending| pending.sku == order.sku)",
+                    "branches": [
+                      {
+                        "id": "StockTracker/Warehouse/reorders/fn:raise/0/b0",
+                        "label": "Some(pending)",
+                        "steps": [
+                          { "kind": "action", "id": "StockTracker/Warehouse/reorders/fn:raise/0/b0/0", "text": "pending.quantity = order.quantity" }
+                        ]
+                      },
+                      {
+                        "id": "StockTracker/Warehouse/reorders/fn:raise/0/b1",
+                        "label": "else",
+                        "steps": [
+                          { "kind": "action", "id": "StockTracker/Warehouse/reorders/fn:raise/0/b1/0", "text": "self.orders.push(order)" }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "StockTracker/Warehouse/reorders/fn:pending",
+                "name": "pending",
+                "doc": "Every reorder waiting to be placed, oldest first.",
+                "receiver": "ref",
+                "returns": "Vec<Reorder>",
+                "body": [
+                  { "kind": "return", "id": "StockTracker/Warehouse/reorders/fn:pending/0", "text": "self.orders.clone()" }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "StockTracker/Warehouse/inventory",
+            "name": "inventory",
+            "type": "Inventory",
+            "definition": "crate::warehouse::Inventory",
+            "doc": "Keeps the stock record of every item, and raises a reorder when stock runs low.",
+            "start": [
+              { "pass": "move", "field": "items", "from": "StockTracker/Warehouse/field:items" },
+              { "pass": "connect", "field": "low_stock", "to": "StockTracker/Warehouse/reorders/fn:raise" }
+            ],
+            "fields": [
+              {
+                "id": "StockTracker/Warehouse/inventory/field:items",
+                "name": "items",
+                "type": "Table<String, Item>",
+                "kind": "capability"
+              },
+              {
+                "id": "StockTracker/Warehouse/inventory/field:low_stock",
+                "name": "low_stock",
+                "type": "Outlet<Reorder>",
+                "kind": "outlet",
+                "doc": "A reorder for each item that shipping leaves at or below its reorder level."
+              }
+            ],
+            "failure": [
+              {
+                "id": "StockTracker/Warehouse/inventory/failure:capability:items",
+                "condition": { "kind": "capability", "field": "StockTracker/Warehouse/inventory/field:items" },
+                "response": "rollback",
+                "reason": "A database error affects only the request it happened in. The next request\nmay succeed, so the program keeps running."
+              }
+            ],
+            "messages": [
+              {
+                "id": "StockTracker/Warehouse/inventory/fn:item",
+                "name": "item",
+                "doc": "The item with this SKU, if there is one.",
+                "receiver": "ref",
+                "async": true,
+                "params": [{ "name": "sku", "type": "&str" }],
+                "returns": "Option<Item>",
+                "body": [
+                  {
+                    "kind": "return",
+                    "id": "StockTracker/Warehouse/inventory/fn:item/0",
+                    "text": "self.items.get(sku).await",
+                    "links": ["StockTracker/Warehouse/inventory/field:items->StockTracker/grant:items"]
+                  }
+                ]
+              },
+              {
+                "id": "StockTracker/Warehouse/inventory/fn:receive",
+                "name": "receive",
+                "doc": "Adds to an item's stock, and returns the item as it now stands.",
+                "receiver": "mut",
+                "async": true,
+                "params": [{ "name": "sku", "type": "&str" }, { "name": "quantity", "type": "u32" }],
+                "returns": "Option<Item>",
+                "body": [
+                  {
+                    "kind": "action",
+                    "id": "StockTracker/Warehouse/inventory/fn:receive/0",
+                    "text": "let mut item = self.items.get(sku).await?",
+                    "links": ["StockTracker/Warehouse/inventory/field:items->StockTracker/grant:items"],
+                    "exit": { "id": "StockTracker/Warehouse/inventory/fn:receive/0/err", "text": "None" }
+                  },
+                  { "kind": "action", "id": "StockTracker/Warehouse/inventory/fn:receive/1", "text": "item.on_hand += quantity" },
+                  {
+                    "kind": "action",
+                    "id": "StockTracker/Warehouse/inventory/fn:receive/2",
+                    "text": "self.items.insert(sku.to_string(), item.clone()).await",
+                    "links": ["StockTracker/Warehouse/inventory/field:items->StockTracker/grant:items"]
+                  },
+                  { "kind": "return", "id": "StockTracker/Warehouse/inventory/fn:receive/3", "text": "Some(item)" }
+                ]
+              },
+              {
+                "id": "StockTracker/Warehouse/inventory/fn:ship",
+                "name": "ship",
+                "doc": "Takes from an item's stock if it holds enough, and returns the item as it now stands.\nRaises a reorder if that leaves stock at or below its reorder level.",
+                "receiver": "mut",
+                "async": true,
+                "params": [{ "name": "sku", "type": "&str" }, { "name": "quantity", "type": "u32" }],
+                "returns": "Result<Item, ShipError>",
+                "body": [
+                  {
+                    "kind": "decision",
+                    "id": "StockTracker/Warehouse/inventory/fn:ship/0",
+                    "text": "let Some(mut item) = self.items.get(sku).await else",
+                    "links": ["StockTracker/Warehouse/inventory/field:items->StockTracker/grant:items"],
+                    "branches": [
+                      { "id": "StockTracker/Warehouse/inventory/fn:ship/0/b0", "label": "Some(mut item)" },
+                      {
+                        "id": "StockTracker/Warehouse/inventory/fn:ship/0/b1",
+                        "label": "else",
+                        "steps": [
+                          { "kind": "return", "id": "StockTracker/Warehouse/inventory/fn:ship/0/b1/0", "text": "Err(ShipError::UnknownItem)" }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "decision",
+                    "id": "StockTracker/Warehouse/inventory/fn:ship/1",
+                    "text": "if item.on_hand < quantity",
+                    "branches": [
+                      {
+                        "id": "StockTracker/Warehouse/inventory/fn:ship/1/b0",
+                        "label": "yes",
+                        "steps": [
+                          { "kind": "return", "id": "StockTracker/Warehouse/inventory/fn:ship/1/b0/0", "text": "Err(ShipError::NotEnoughStock)" }
+                        ]
+                      },
+                      { "id": "StockTracker/Warehouse/inventory/fn:ship/1/b1", "label": "no" }
+                    ]
+                  },
+                  { "kind": "action", "id": "StockTracker/Warehouse/inventory/fn:ship/2", "text": "item.on_hand -= quantity" },
+                  {
+                    "kind": "action",
+                    "id": "StockTracker/Warehouse/inventory/fn:ship/3",
+                    "text": "self.items.insert(sku.to_string(), item.clone()).await",
+                    "links": ["StockTracker/Warehouse/inventory/field:items->StockTracker/grant:items"]
+                  },
+                  {
+                    "kind": "action",
+                    "id": "StockTracker/Warehouse/inventory/fn:ship/4",
+                    "text": "let order = Self::reorder_quantity(item.on_hand, item.reorder_level, item.target_level)",
+                    "links": ["StockTracker/Warehouse/inventory/fn:reorder_quantity"]
+                  },
+                  {
+                    "kind": "decision",
+                    "id": "StockTracker/Warehouse/inventory/fn:ship/5",
+                    "text": "if order > 0",
+                    "branches": [
+                      {
+                        "id": "StockTracker/Warehouse/inventory/fn:ship/5/b0",
+                        "label": "yes",
+                        "steps": [
+                          {
+                            "kind": "action",
+                            "id": "StockTracker/Warehouse/inventory/fn:ship/5/b0/0",
+                            "text": "send self.low_stock.emit(Reorder { sku: sku.to_string(), quantity: order })",
+                            "links": ["StockTracker/Warehouse/inventory/fn:ship->StockTracker/Warehouse/inventory/field:low_stock"]
+                          }
+                        ]
+                      },
+                      { "id": "StockTracker/Warehouse/inventory/fn:ship/5/b1", "label": "no" }
+                    ]
+                  },
+                  { "kind": "return", "id": "StockTracker/Warehouse/inventory/fn:ship/6", "text": "Ok(item)" }
+                ]
+              }
+            ],
+            "algorithms": [
+              {
+                "id": "StockTracker/Warehouse/inventory/fn:reorder_quantity",
+                "name": "reorder_quantity",
+                "doc": "How many to reorder so that stock goes back up to its target level.",
+                "params": [
+                  { "name": "on_hand", "type": "u32" },
+                  { "name": "reorder_level", "type": "u32" },
+                  { "name": "target_level", "type": "u32" }
+                ],
+                "returns": "u32",
+                "body": [
+                  {
+                    "kind": "decision",
+                    "id": "StockTracker/Warehouse/inventory/fn:reorder_quantity/0",
+                    "text": "if on_hand > reorder_level",
+                    "branches": [
+                      {
+                        "id": "StockTracker/Warehouse/inventory/fn:reorder_quantity/0/b0",
+                        "label": "yes",
+                        "steps": [
+                          { "kind": "return", "id": "StockTracker/Warehouse/inventory/fn:reorder_quantity/0/b0/0", "text": "0" }
+                        ]
+                      },
+                      {
+                        "id": "StockTracker/Warehouse/inventory/fn:reorder_quantity/0/b1",
+                        "label": "no",
+                        "steps": [
+                          {
+                            "kind": "return",
+                            "id": "StockTracker/Warehouse/inventory/fn:reorder_quantity/0/b1/0",
+                            "text": "target_level.saturating_sub(on_hand)"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "edges": [
+    {
+      "kind": "capability",
+      "id": "StockTracker/Warehouse/field:http->StockTracker/grant:http",
+      "from": "StockTracker/Warehouse/field:http",
+      "to": "StockTracker/grant:http"
+    },
+    {
+      "kind": "capability",
+      "id": "StockTracker/Warehouse/inventory/field:items->StockTracker/grant:items",
+      "from": "StockTracker/Warehouse/inventory/field:items",
+      "to": "StockTracker/grant:items",
+      "operations": ["get", "insert"]
+    },
+    {
+      "kind": "message",
+      "id": "StockTracker/Warehouse/fn:stock->StockTracker/Warehouse/inventory/fn:item",
+      "from": "StockTracker/Warehouse/fn:stock",
+      "to": "StockTracker/Warehouse/inventory/fn:item",
+      "args": [{ "pass": "lend", "text": "sku" }]
+    },
+    {
+      "kind": "message",
+      "id": "StockTracker/Warehouse/fn:receive->StockTracker/Warehouse/inventory/fn:receive",
+      "from": "StockTracker/Warehouse/fn:receive",
+      "to": "StockTracker/Warehouse/inventory/fn:receive",
+      "args": [{ "pass": "lend", "text": "sku" }, { "pass": "copy", "text": "quantity" }]
+    },
+    {
+      "kind": "message",
+      "id": "StockTracker/Warehouse/fn:ship->StockTracker/Warehouse/inventory/fn:ship",
+      "from": "StockTracker/Warehouse/fn:ship",
+      "to": "StockTracker/Warehouse/inventory/fn:ship",
+      "args": [{ "pass": "lend", "text": "sku" }, { "pass": "copy", "text": "quantity" }]
+    },
+    {
+      "kind": "message",
+      "id": "StockTracker/Warehouse/fn:pending_reorders->StockTracker/Warehouse/reorders/fn:pending",
+      "from": "StockTracker/Warehouse/fn:pending_reorders",
+      "to": "StockTracker/Warehouse/reorders/fn:pending"
+    },
+    {
+      "kind": "emit",
+      "id": "StockTracker/Warehouse/inventory/fn:ship->StockTracker/Warehouse/inventory/field:low_stock",
+      "from": "StockTracker/Warehouse/inventory/fn:ship",
+      "to": "StockTracker/Warehouse/inventory/field:low_stock",
+      "value": { "pass": "new", "text": "Reorder { sku: sku.to_string(), quantity: order }" }
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="1528" height="370" viewBox="0 0 1528 370">
+<style>
+text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; fill: #1f2328; white-space: pre; }
+.title { font-weight: bold; }
+.kw { fill: #8250df; }
+.dim { fill: #59636e; }
+.doc { fill: #59636e; font-style: italic; }
+.sec { fill: #818b98; font-size: 10px; letter-spacing: 0.05em; }
+.warn { fill: #9a6700; }
+.ground { fill: #ffffff; }
+.app { fill: #f6f8fa; stroke: #59636e; stroke-width: 1.5; }
+.comp { fill: #ffffff; stroke: #0969da; stroke-width: 1.2; }
+.ext { fill: #fbf7ff; stroke: #8250df; stroke-width: 1.2; }
+.outside { fill: #ffffff; stroke: #818b98; stroke-dasharray: 3 2; }
+.port { fill: #ffffff; stroke: #0969da; stroke-width: 1.5; }
+.edge { fill: none; stroke: #1f2328; stroke-width: 1.2; }
+.send { stroke-dasharray: 5 3; }
+.cap { fill: none; stroke: #bc4c00; stroke-width: 1.4; }
+.node { fill: #ffffff; stroke: #1f2328; }
+.decide { fill: #fff8c5; stroke: #1f2328; }
+.term { fill: #ddf4ff; stroke: #1f2328; }
+.bar { fill: #1f2328; }
+.arrow { fill: #1f2328; }
+.arrow-cap { fill: #bc4c00; }
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow"/></marker>
+<marker id="arrow-cap" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow-cap"/></marker>
+</defs>
+<rect x="0" y="0" width="1528" height="370" class="ground"/>
+<rect x="263.6" y="16" width="734.4" height="338" rx="8" class="app" data-id="PriceImport"/>
+<g data-id="PriceImport">
+<text x="273.6" y="34" class="kw">app </text>
+<text x="302.4" y="34" class="title">PriceImport</text>
+</g>
+<text x="273.6" y="50" class="doc opt-docs">Price import: stores a supplier's price list in the product</text>
+<text x="273.6" y="66" class="doc opt-docs">catalogue.</text>
+<g data-id="PriceImport/setting:port">
+<title class="opt-docs">The port to serve on.</title>
+<text x="273.6" y="82" class="kw">setting </text>
+<text x="331.2" y="82" class="">port</text>
+<text x="360" y="82" class="dim opt-setting-types">: u16</text>
+<text x="396" y="82" class=""> = 8080</text>
+</g>
+<g data-id="PriceImport/setting:catalogue">
+<title class="opt-docs">The catalogue database, which other tools also read.</title>
+<text x="273.6" y="98" class="kw">setting </text>
+<text x="331.2" y="98" class="">catalogue</text>
+<text x="396" y="98" class="dim opt-setting-types">: String</text>
+<text x="453.6" y="98" class=""> = &quot;catalogue.db&quot;</text>
+</g>
+<g data-id="PriceImport/grant:http">
+<text x="273.6" y="114" class="kw">grant </text>
+<text x="316.8" y="114" class="">http</text>
+<text x="345.6" y="114" class="dim opt-grant-types">: HttpServer</text>
+<text x="432" y="114" class=" opt-grant-values"> { port: setting port }</text>
+</g>
+<g data-id="PriceImport/grant:products">
+<text x="273.6" y="130" class="kw">grant </text>
+<text x="316.8" y="130" class="">products</text>
+<text x="374.4" y="130" class="dim opt-grant-types">: Table&lt;String, Product&gt;</text>
+<text x="547.2" y="130" class=" opt-grant-values"> { file: setting catalogue, name: &quot;products&quot; }</text>
+</g>
+<text x="273.6" y="146" class="sec">algorithms</text>
+<g data-id="PriceImport/fn:parse_price_list">
+<title class="opt-docs">Reads every row of a price list, or describes every invalid row, one per line.</title>
+<text x="273.6" y="162" class="">parse_price_list</text>
+<text x="388.8" y="162" class="dim opt-signatures">(rows: &amp;[Row]) -&gt; Result&lt;Vec&lt;(String, Product)&gt;, String&gt;</text>
+</g>
+<g data-id="PriceImport/fn:parse_row">
+<title class="opt-docs">Reads one row: a SKU, a product name and a net price.</title>
+<text x="273.6" y="178" class="">parse_row</text>
+<text x="338.4" y="178" class="dim opt-signatures">(row: &amp;Row) -&gt; Result&lt;(String, Product), String&gt;</text>
+</g>
+<g data-id="PriceImport/fn:parse_price">
+<title class="opt-docs">Reads a price of zero or more pounds with at most two decimal places, such as `12.50`.</title>
+<text x="273.6" y="194" class="">parse_price</text>
+<text x="352.8" y="194" class="dim opt-signatures">(text: &amp;str) -&gt; Option&lt;Decimal&gt;</text>
+</g>
+<g data-id="PriceImport/fn:add_vat">
+<title class="opt-docs">Adds VAT at 20%, rounded to the nearest penny.</title>
+<text x="273.6" y="210" class="">add_vat</text>
+<text x="324" y="210" class="dim opt-signatures">(net: Decimal) -&gt; Decimal</text>
+</g>
+<rect x="293.6" y="223" width="688.4" height="112" rx="4" class="comp" data-id="PriceImport/Importer"/>
+<g data-id="PriceImport/Importer">
+<text x="303.6" y="241" class="title">Importer</text>
+</g>
+<text x="303.6" y="257" class="doc opt-docs">Accepts price lists over HTTP and stores their products.</text>
+<text x="303.6" y="273" class="dim opt-handoffs">start { http: move http, products: move products }</text>
+<text x="303.6" y="289" class="sec">routes</text>
+<g data-id="PriceImport/Importer/fn:import">
+<title class="opt-docs">Stores every product in a price list, or none if any row is invalid.&#10;A price list is CSV with a header line, then one row per product: SKU, name, net price.</title>
+<text x="303.6" y="305" class="kw">POST </text>
+<text x="339.6" y="305" class="">/price-lists  </text>
+<text x="440.4" y="305" class="dim">body text  </text>
+<text x="519.6" y="305" class="">import</text>
+<text x="562.8" y="305" class="dim opt-signatures">(&amp;mut self, text: String) -&gt; Result&lt;String, ImportError&gt;</text>
+</g>
+<text x="303.6" y="321" class="dim">[+] csv: CsvReader</text>
+<path d="M116.4,301 L293.6,301" class="cap" marker-end="url(#arrow-cap)" data-id="PriceImport/Importer/field:http-&gt;PriceImport/grant:http"/>
+<text x="126.4" y="296" class=" opt-capability-names">http</text>
+<text x="155.2" y="296" class="dim opt-capability-types">: HttpServer</text>
+<rect x="10" y="290" width="106.4" height="22" rx="11" class="outside" data-id="PriceImport/grant:http/outside"/>
+<text x="20" y="305" class="">HTTP clients</text>
+<path d="M982,237 L1260.4,237" class="cap" marker-end="url(#arrow-cap)" data-id="PriceImport/Importer/field:products-&gt;PriceImport/grant:products"/>
+<text x="1008" y="232" class=" opt-capability-names">products</text>
+<text x="1065.6" y="232" class="dim opt-capability-types">: Table&lt;String, Product&gt;</text>
+<text x="1008" y="251" class="dim opt-capability-operations">insert</text>
+<rect x="1260.4" y="226" width="257.6" height="22" rx="11" class="outside" data-id="PriceImport/grant:products/outside"/>
+<text x="1270.4" y="241" class="">catalogue.db</text>
+<text x="1356.8" y="241" class="dim"> or setting catalogue</text>
+</svg>

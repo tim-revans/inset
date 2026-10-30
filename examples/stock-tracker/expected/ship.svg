@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="545.6" height="732" viewBox="0 0 545.6 732">
+<style>
+text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; fill: #1f2328; white-space: pre; }
+.title { font-weight: bold; }
+.kw { fill: #8250df; }
+.dim { fill: #59636e; }
+.doc { fill: #59636e; font-style: italic; }
+.sec { fill: #818b98; font-size: 10px; letter-spacing: 0.05em; }
+.warn { fill: #9a6700; }
+.ground { fill: #ffffff; }
+.app { fill: #f6f8fa; stroke: #59636e; stroke-width: 1.5; }
+.comp { fill: #ffffff; stroke: #0969da; stroke-width: 1.2; }
+.ext { fill: #fbf7ff; stroke: #8250df; stroke-width: 1.2; }
+.outside { fill: #ffffff; stroke: #818b98; stroke-dasharray: 3 2; }
+.port { fill: #ffffff; stroke: #0969da; stroke-width: 1.5; }
+.edge { fill: none; stroke: #1f2328; stroke-width: 1.2; }
+.send { stroke-dasharray: 5 3; }
+.cap { fill: none; stroke: #bc4c00; stroke-width: 1.4; }
+.node { fill: #ffffff; stroke: #1f2328; }
+.decide { fill: #fff8c5; stroke: #1f2328; }
+.term { fill: #ddf4ff; stroke: #1f2328; }
+.bar { fill: #1f2328; }
+.arrow { fill: #1f2328; }
+.arrow-cap { fill: #bc4c00; }
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow"/></marker>
+<marker id="arrow-cap" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow-cap"/></marker>
+</defs>
+<rect x="0" y="0" width="545.6" height="732" class="ground"/>
+<g data-id="StockTracker/Warehouse/inventory/fn:ship">
+<text x="16" y="20" class="title">Inventory::ship</text>
+</g>
+<text x="16" y="36" class="doc opt-docs">Takes from an item's stock if it holds enough, and returns the item as</text>
+<text x="16" y="52" class="doc opt-docs">it now stands. Raises a reorder if that leaves stock at or below its</text>
+<text x="16" y="68" class="doc opt-docs">reorder level.</text>
+<rect x="16" y="84" width="513.6" height="24" rx="12" class="term"/>
+<text x="28" y="100" class="">ship</text>
+<text x="56.8" y="100" class="dim opt-signatures">(&amp;mut self, sku: &amp;str, quantity: u32) -&gt; Result&lt;Item, ShipError&gt;</text>
+<path d="M272.8,108 L272.8,130" class="edge" marker-end="url(#arrow)"/>
+<polygon points="87.2,152 101.2,130 444.4,130 458.4,152 444.4,174 101.2,174" class="decide" data-id="StockTracker/Warehouse/inventory/fn:ship/0"/>
+<text x="107.2" y="148" class="">let Some(mut item) = self.items.get(sku).await</text>
+<text x="107.2" y="164" class="">else</text>
+<path d="M215.6,174 L215.6,184 L102.7,184 L102.7,208" class="edge" data-id="StockTracker/Warehouse/inventory/fn:ship/0/b0"/>
+<text x="109.7" y="202" class="dim">Some(mut item)</text>
+<path d="M330,174 L330,184 L345.7,184 L345.7,208" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/inventory/fn:ship/0/b1"/>
+<text x="352.7" y="202" class="dim">else</text>
+<rect x="238.5" y="208" width="214.4" height="24" rx="12" class="term" data-id="StockTracker/Warehouse/inventory/fn:ship/0/b1/0"/>
+<text x="248.5" y="224" class="">Err(ShipError::UnknownItem)</text>
+<path d="M102.7,208 L102.7,244 L272.8,244" class="edge"/>
+<path d="M272.8,244 L272.8,266" class="edge" marker-end="url(#arrow)"/>
+<polygon points="159.2,280 173.2,266 372.4,266 386.4,280 372.4,294 173.2,294" class="decide" data-id="StockTracker/Warehouse/inventory/fn:ship/1"/>
+<text x="179.2" y="284" class="">if item.on_hand &lt; quantity</text>
+<path d="M239.6,294 L239.6,304 L243.1,304 L243.1,328" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/inventory/fn:ship/1/b0"/>
+<text x="250.1" y="322" class="dim">yes</text>
+<rect x="125.1" y="328" width="236" height="24" rx="12" class="term" data-id="StockTracker/Warehouse/inventory/fn:ship/1/b0/0"/>
+<text x="135.1" y="344" class="">Err(ShipError::NotEnoughStock)</text>
+<path d="M306,294 L306,304 L399.1,304 L399.1,328" class="edge" data-id="StockTracker/Warehouse/inventory/fn:ship/1/b1"/>
+<text x="406.1" y="322" class="dim">no</text>
+<path d="M399.1,328 L399.1,364 L272.8,364" class="edge"/>
+<path d="M272.8,364 L272.8,386" class="edge" marker-end="url(#arrow)"/>
+<rect x="176.4" y="386" width="192.8" height="24" rx="2" class="node" data-id="StockTracker/Warehouse/inventory/fn:ship/2"/>
+<text x="186.4" y="402" class="">item.on_hand -= quantity</text>
+<path d="M272.8,410 L272.8,432" class="edge" marker-end="url(#arrow)"/>
+<rect x="140.4" y="432" width="264.8" height="40" rx="2" class="node" data-id="StockTracker/Warehouse/inventory/fn:ship/3"/>
+<text x="150.4" y="448" class="">self.items.insert(sku.to_string(),</text>
+<text x="150.4" y="464" class="">item.clone()).await</text>
+<path d="M272.8,472 L272.8,494" class="edge" marker-end="url(#arrow)"/>
+<rect x="90" y="494" width="365.6" height="40" rx="2" class="node" data-id="StockTracker/Warehouse/inventory/fn:ship/4"/>
+<text x="100" y="510" class="">let order = Self::reorder_quantity(item.on_hand,</text>
+<text x="100" y="526" class="">item.reorder_level, item.target_level)</text>
+<path d="M272.8,534 L272.8,556" class="edge" marker-end="url(#arrow)"/>
+<polygon points="209.6,570 223.6,556 322,556 336,570 322,584 223.6,584" class="decide" data-id="StockTracker/Warehouse/inventory/fn:ship/5"/>
+<text x="229.6" y="574" class="">if order &gt; 0</text>
+<path d="M256.4,584 L256.4,594 L243.1,594 L243.1,618" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/inventory/fn:ship/5/b0"/>
+<text x="250.1" y="612" class="dim">yes</text>
+<rect x="92.7" y="618" width="300.8" height="40" rx="2" class="node" data-id="StockTracker/Warehouse/inventory/fn:ship/5/b0/0"/>
+<text x="102.7" y="634" class="">send self.low_stock.emit(Reorder { sku:</text>
+<text x="102.7" y="650" class="">sku.to_string(), quantity: order })</text>
+<path d="M289.2,584 L289.2,594 L431.5,594 L431.5,618" class="edge" data-id="StockTracker/Warehouse/inventory/fn:ship/5/b1"/>
+<text x="438.5" y="612" class="dim">no</text>
+<path d="M243.1,658 L243.1,670 L272.8,670" class="edge"/>
+<path d="M431.5,618 L431.5,670 L272.8,670" class="edge"/>
+<path d="M272.8,670 L272.8,692" class="edge" marker-end="url(#arrow)"/>
+<rect x="234" y="692" width="77.6" height="24" rx="12" class="term" data-id="StockTracker/Warehouse/inventory/fn:ship/6"/>
+<text x="244" y="708" class="">Ok(item)</text>
+</svg>

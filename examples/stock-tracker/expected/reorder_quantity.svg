@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="603.2" height="200" viewBox="0 0 603.2 200">
+<style>
+text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; fill: #1f2328; white-space: pre; }
+.title { font-weight: bold; }
+.kw { fill: #8250df; }
+.dim { fill: #59636e; }
+.doc { fill: #59636e; font-style: italic; }
+.sec { fill: #818b98; font-size: 10px; letter-spacing: 0.05em; }
+.warn { fill: #9a6700; }
+.ground { fill: #ffffff; }
+.app { fill: #f6f8fa; stroke: #59636e; stroke-width: 1.5; }
+.comp { fill: #ffffff; stroke: #0969da; stroke-width: 1.2; }
+.ext { fill: #fbf7ff; stroke: #8250df; stroke-width: 1.2; }
+.outside { fill: #ffffff; stroke: #818b98; stroke-dasharray: 3 2; }
+.port { fill: #ffffff; stroke: #0969da; stroke-width: 1.5; }
+.edge { fill: none; stroke: #1f2328; stroke-width: 1.2; }
+.send { stroke-dasharray: 5 3; }
+.cap { fill: none; stroke: #bc4c00; stroke-width: 1.4; }
+.node { fill: #ffffff; stroke: #1f2328; }
+.decide { fill: #fff8c5; stroke: #1f2328; }
+.term { fill: #ddf4ff; stroke: #1f2328; }
+.bar { fill: #1f2328; }
+.arrow { fill: #1f2328; }
+.arrow-cap { fill: #bc4c00; }
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow"/></marker>
+<marker id="arrow-cap" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow-cap"/></marker>
+</defs>
+<rect x="0" y="0" width="603.2" height="200" class="ground"/>
+<g data-id="StockTracker/Warehouse/inventory/fn:reorder_quantity">
+<text x="16" y="20" class="title">Inventory::reorder_quantity</text>
+</g>
+<text x="16" y="36" class="doc opt-docs">How many to reorder so that stock goes back up to its target level.</text>
+<rect x="16" y="52" width="571.2" height="24" rx="12" class="term"/>
+<text x="28" y="68" class="">reorder_quantity</text>
+<text x="143.2" y="68" class="dim opt-signatures">(on_hand: u32, reorder_level: u32, target_level: u32) -&gt; u32</text>
+<path d="M301.6,76 L301.6,98" class="edge" marker-end="url(#arrow)"/>
+<polygon points="188,112 202,98 401.2,98 415.2,112 401.2,126 202,126" class="decide" data-id="StockTracker/Warehouse/inventory/fn:reorder_quantity/0"/>
+<text x="208" y="116" class="">if on_hand &gt; reorder_level</text>
+<path d="M268.4,126 L268.4,136 L140.5,136 L140.5,160" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/inventory/fn:reorder_quantity/0/b0"/>
+<text x="147.5" y="154" class="dim">yes</text>
+<rect x="126.9" y="160" width="27.2" height="24" rx="12" class="term" data-id="StockTracker/Warehouse/inventory/fn:reorder_quantity/0/b0/0"/>
+<text x="136.9" y="176" class="">0</text>
+<path d="M334.8,126 L334.8,136 L336.7,136 L336.7,160" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/inventory/fn:reorder_quantity/0/b1"/>
+<text x="343.7" y="154" class="dim">no</text>
+<rect x="197.1" y="160" width="279.2" height="24" rx="12" class="term" data-id="StockTracker/Warehouse/inventory/fn:reorder_quantity/0/b1/0"/>
+<text x="207.1" y="176" class="">target_level.saturating_sub(on_hand)</text>
+</svg>

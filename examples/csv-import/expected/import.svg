@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="536" height="514" viewBox="0 0 536 514">
+<style>
+text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; fill: #1f2328; white-space: pre; }
+.title { font-weight: bold; }
+.kw { fill: #8250df; }
+.dim { fill: #59636e; }
+.doc { fill: #59636e; font-style: italic; }
+.sec { fill: #818b98; font-size: 10px; letter-spacing: 0.05em; }
+.warn { fill: #9a6700; }
+.ground { fill: #ffffff; }
+.app { fill: #f6f8fa; stroke: #59636e; stroke-width: 1.5; }
+.comp { fill: #ffffff; stroke: #0969da; stroke-width: 1.2; }
+.ext { fill: #fbf7ff; stroke: #8250df; stroke-width: 1.2; }
+.outside { fill: #ffffff; stroke: #818b98; stroke-dasharray: 3 2; }
+.port { fill: #ffffff; stroke: #0969da; stroke-width: 1.5; }
+.edge { fill: none; stroke: #1f2328; stroke-width: 1.2; }
+.send { stroke-dasharray: 5 3; }
+.cap { fill: none; stroke: #bc4c00; stroke-width: 1.4; }
+.node { fill: #ffffff; stroke: #1f2328; }
+.decide { fill: #fff8c5; stroke: #1f2328; }
+.term { fill: #ddf4ff; stroke: #1f2328; }
+.bar { fill: #1f2328; }
+.arrow { fill: #1f2328; }
+.arrow-cap { fill: #bc4c00; }
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow"/></marker>
+<marker id="arrow-cap" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow-cap"/></marker>
+</defs>
+<rect x="0" y="0" width="536" height="514" class="ground"/>
+<g data-id="PriceImport/Importer/fn:import">
+<text x="16" y="20" class="title">Importer::import</text>
+</g>
+<text x="16" y="36" class="doc opt-docs">Stores every product in a price list, or none if any row is invalid. A</text>
+<text x="16" y="52" class="doc opt-docs">price list is CSV with a header line, then one row per product: SKU,</text>
+<text x="16" y="68" class="doc opt-docs">name, net price.</text>
+<rect x="16" y="84" width="470.4" height="24" rx="12" class="term"/>
+<text x="28" y="100" class="">import</text>
+<text x="71.2" y="100" class="dim opt-signatures">(&amp;mut self, text: String) -&gt; Result&lt;String, ImportError&gt;</text>
+<path d="M251.2,108 L251.2,130" class="edge" marker-end="url(#arrow)"/>
+<rect x="108" y="130" width="286.4" height="24" rx="2" class="node" data-id="PriceImport/Importer/fn:import/0"/>
+<text x="118" y="146" class="">let rows = self.csv.read(&amp;text).await</text>
+<path d="M251.2,154 L251.2,176" class="edge" marker-end="url(#arrow)"/>
+<polygon points="72.8,190 86.8,176 415.6,176 429.6,190 415.6,204 86.8,204" class="decide" data-id="PriceImport/Importer/fn:import/1"/>
+<text x="92.8" y="194" class="">let products = match parse_price_list(&amp;rows)</text>
+<path d="M196.4,204 L196.4,214 L52.3,214 L52.3,238" class="edge" data-id="PriceImport/Importer/fn:import/1/b0"/>
+<text x="59.3" y="232" class="dim">Ok(products)</text>
+<path d="M306,204 L306,214 L316.9,214 L316.9,238" class="edge" marker-end="url(#arrow)" data-id="PriceImport/Importer/fn:import/1/b1"/>
+<text x="323.9" y="232" class="dim">Err(errors)</text>
+<rect x="173.7" y="238" width="286.4" height="24" rx="12" class="term" data-id="PriceImport/Importer/fn:import/1/b1/0"/>
+<text x="183.7" y="254" class="">Err(ImportError::InvalidRows(errors))</text>
+<path d="M52.3,238 L52.3,274 L251.2,274" class="edge"/>
+<path d="M251.2,274 L251.2,296" class="edge" marker-end="url(#arrow)"/>
+<rect x="147.6" y="296" width="207.2" height="24" rx="2" class="node" data-id="PriceImport/Importer/fn:import/2"/>
+<text x="157.6" y="312" class="">let count = products.len()</text>
+<path d="M251.2,320 L251.2,342" class="edge" marker-end="url(#arrow)"/>
+<polygon points="123.2,356 137.2,342 365.2,342 379.2,356 365.2,370 137.2,370" class="decide" data-id="PriceImport/Importer/fn:import/3"/>
+<text x="143.2" y="360" class="">for (sku, product) in products</text>
+<path d="M251.2,370 L251.2,404" class="edge" marker-end="url(#arrow)" data-id="PriceImport/Importer/fn:import/3/body"/>
+<text x="255.2" y="396" class="dim">each</text>
+<rect x="97.2" y="404" width="308" height="24" rx="2" class="node" data-id="PriceImport/Importer/fn:import/3/body/0"/>
+<text x="107.2" y="420" class="">self.products.insert(sku, product).await</text>
+<path d="M251.2,428 L251.2,438 L89.2,438 L89.2,356 L123.2,356" class="edge" marker-end="url(#arrow)"/>
+<path d="M379.2,356 L415.2,356 L415.2,452 L251.2,452" class="edge" data-id="PriceImport/Importer/fn:import/3/skip"/>
+<text x="421.2" y="372" class="dim">none</text>
+<path d="M251.2,452 L251.2,474" class="edge" marker-end="url(#arrow)"/>
+<rect x="93.6" y="474" width="315.2" height="24" rx="12" class="term" data-id="PriceImport/Importer/fn:import/4"/>
+<text x="103.6" y="490" class="">Ok(format!(&quot;Products imported: {count}&quot;))</text>
+</svg>

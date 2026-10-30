@@ -41,56 +41,23 @@ The gross price property only holds for whole numbers of pence. For a net price 
 
 ## Expected diagrams
 
-Sketches of what each review level should show. Stage 3 replaces them with `expected/diagram.json` and rendered SVGs. To fit in text, capability edges are labelled with the field's name only. The default view also shows its type (see [diagrams.md](../../docs/language/diagrams.md)).
+`expected/diagram.json` is the diagram data the compiler must emit, written by hand. The SVGs are drawn from it with `inset-diagram render` (see [diagrams.md](../../docs/language/diagrams.md)).
 
-**Component view.** `Importer` is small, so it is shown expanded. The double-lined box is external: the reviewer sees its interface and its capabilities, which are none, but not its code.
+**Component view** (`expected/diagram.svg`). `Importer` is collapsed, and the app box lists the top-level algorithms.
 
-```
-                     ┌─ PriceImport ──────────────────────────────────────────────┐
-                     │                                                            │
-                     │  grant http: HttpServer (port: setting)                    │
-                     │  grant products: Table<String, Product> (file: setting)    │
-                     │        │                                                   │
-                     │        │ move http, move products                          │
-                     │        ▼                                                   │
-                     │  ┌─ Importer ───────────────────────────────────────┐      │
- ( HTTP clients ) ───┼──┼▶ POST /price-lists (via http)                    │      │
-                     │  │      │                                           │      │
-                     │  │      ├── read(&text) ──▶ ╔═ CsvReader ═════════╗ │      │
-                     │  │      │                   ║  external: csv 1.3  ║ │      │
-                     │  │      │                   ║  capabilities: none ║ │      │
-                     │  │      │                   ╚═════════════════════╝ │      │
-                     │  │      │                                           │      │
-                     │  │      └── products ───────────────────────────────┼──────┼──▶ ( catalogue.db )
-                     │  │                                                  │      │
-                     │  │  algorithms: parse_price_list, parse_row,        │      │
-                     │  │              parse_price, add_vat                │      │
-                     │  └──────────────────────────────────────────────────┘      │
-                     └────────────────────────────────────────────────────────────┘
-```
+![The PriceImport app with Importer collapsed inside it, HTTP clients calling POST /price-lists, and the products edge to catalogue.db](expected/diagram.svg)
 
-**Flowchart of `parse_price_list`.** The fork runs one branch per row, and the join waits for them all.
+**Inside `Importer`** (`expected/importer.svg`, with `--expand PriceImport/Importer`). The double-lined box is external: the reviewer sees its interface and its capabilities, which are none, but not its code.
 
-```
-                      ( rows )
-                         │
-                         ▼
-           ═══════ fork: for each row ═══════
-              │            │            │
-              ▼            ▼            ▼
-         [parse_row]  [parse_row]  [parse_row]
-              │            │            │
-           ═══════════════ join ═════════════
-                         │
-                         ▼
-         [ sort results into products and errors ]
-                         │
-                         ▼
-                  ◇ any errors? ◇
-                   │ no       │ yes
-                   ▼          ▼
-            Ok(products)   Err(errors)
-```
+![Importer expanded, sending read(&text) to the external CsvReader](expected/importer.svg)
+
+**Flowchart of `parse_price_list`** (`expected/parse_price_list.svg`). The fork runs one branch per row, and the join waits for them all.
+
+![The flowchart of parse_price_list, with a fork over the rows and a loop over the results](expected/parse_price_list.svg)
+
+**Flowchart of `Importer::import`** (`expected/import.svg`):
+
+![The flowchart of Importer's import handler](expected/import.svg)
 
 - No component has a failure section, so any failure, such as a database error while storing products, stops the program. The reviewer can see that nothing is hidden.
 - The only external system the program touches is `catalogue.db`, through `Importer`. The Rust code cannot reach it, because it holds nothing.

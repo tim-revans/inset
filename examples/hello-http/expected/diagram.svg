@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="730.4" height="226" viewBox="0 0 730.4 226">
+<style>
+text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; fill: #1f2328; white-space: pre; }
+.title { font-weight: bold; }
+.kw { fill: #8250df; }
+.dim { fill: #59636e; }
+.doc { fill: #59636e; font-style: italic; }
+.sec { fill: #818b98; font-size: 10px; letter-spacing: 0.05em; }
+.warn { fill: #9a6700; }
+.ground { fill: #ffffff; }
+.app { fill: #f6f8fa; stroke: #59636e; stroke-width: 1.5; }
+.comp { fill: #ffffff; stroke: #0969da; stroke-width: 1.2; }
+.ext { fill: #fbf7ff; stroke: #8250df; stroke-width: 1.2; }
+.outside { fill: #ffffff; stroke: #818b98; stroke-dasharray: 3 2; }
+.port { fill: #ffffff; stroke: #0969da; stroke-width: 1.5; }
+.edge { fill: none; stroke: #1f2328; stroke-width: 1.2; }
+.send { stroke-dasharray: 5 3; }
+.cap { fill: none; stroke: #bc4c00; stroke-width: 1.4; }
+.node { fill: #ffffff; stroke: #1f2328; }
+.decide { fill: #fff8c5; stroke: #1f2328; }
+.term { fill: #ddf4ff; stroke: #1f2328; }
+.bar { fill: #1f2328; }
+.arrow { fill: #1f2328; }
+.arrow-cap { fill: #bc4c00; }
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow"/></marker>
+<marker id="arrow-cap" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow-cap"/></marker>
+</defs>
+<rect x="0" y="0" width="730.4" height="226" class="ground"/>
+<rect x="263.6" y="16" width="450.8" height="194" rx="8" class="app" data-id="HelloHttp"/>
+<g data-id="HelloHttp">
+<text x="273.6" y="34" class="kw">app </text>
+<text x="302.4" y="34" class="title">HelloHttp</text>
+</g>
+<text x="273.6" y="50" class="doc opt-docs">Hello HTTP: the smallest Inset program that serves the web.</text>
+<g data-id="HelloHttp/setting:port">
+<title class="opt-docs">The port to serve on.</title>
+<text x="273.6" y="66" class="kw">setting </text>
+<text x="331.2" y="66" class="">port</text>
+<text x="360" y="66" class="dim opt-setting-types">: u16</text>
+<text x="396" y="66" class=""> = 8080</text>
+</g>
+<g data-id="HelloHttp/grant:http">
+<text x="273.6" y="82" class="kw">grant </text>
+<text x="316.8" y="82" class="">http</text>
+<text x="345.6" y="82" class="dim opt-grant-types">: HttpServer</text>
+<text x="432" y="82" class=" opt-grant-values"> { port: setting port }</text>
+</g>
+<rect x="293.6" y="95" width="371.6" height="96" rx="4" class="comp" data-id="HelloHttp/Greeter"/>
+<g data-id="HelloHttp/Greeter">
+<text x="303.6" y="113" class="title">Greeter</text>
+</g>
+<text x="303.6" y="129" class="doc opt-docs">Greets visitors by name.</text>
+<text x="303.6" y="145" class="dim opt-handoffs">start { http: move http }</text>
+<text x="303.6" y="161" class="sec">routes</text>
+<g data-id="HelloHttp/Greeter/fn:hello">
+<title class="opt-docs">Replies with a greeting for the name in the path.</title>
+<text x="303.6" y="177" class="kw">GET </text>
+<text x="332.4" y="177" class="">/hello/{name}  </text>
+<text x="440.4" y="177" class="">hello</text>
+<text x="476.4" y="177" class="dim opt-signatures">(name: String) -&gt; String</text>
+</g>
+<path d="M116.4,173 L293.6,173" class="cap" marker-end="url(#arrow-cap)" data-id="HelloHttp/Greeter/field:http-&gt;HelloHttp/grant:http"/>
+<text x="126.4" y="168" class=" opt-capability-names">http</text>
+<text x="155.2" y="168" class="dim opt-capability-types">: HttpServer</text>
+<rect x="10" y="162" width="106.4" height="22" rx="11" class="outside" data-id="HelloHttp/grant:http/outside"/>
+<text x="20" y="177" class="">HTTP clients</text>
+</svg>

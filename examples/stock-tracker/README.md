@@ -50,66 +50,26 @@ No requirement names a component or an algorithm, yet every branch of the code i
 
 ## Expected diagrams
 
-Sketches of what each review level should show. Stage 3 replaces them with `expected/diagram.json` and rendered SVGs. Solid arrows are messages that wait for a reply. Dashed arrows are messages sent without waiting. A `○` on a box's edge is an outlet. To fit in text, capability edges are labelled with the field's name only. The default view also shows its type (see [diagrams.md](../../docs/language/diagrams.md)).
+`expected/diagram.json` is the diagram data the compiler must emit, written by hand. The SVGs are drawn from it with `inset-diagram render` (see [diagrams.md](../../docs/language/diagrams.md)). Solid arrows are messages that wait for a reply. Dashed arrows are messages sent without waiting, and outlet connections. A `○` on a box's edge is an outlet.
 
-**Component view.** `Warehouse` is collapsed, so the `items` edge leaves from it.
+**Component view** (`expected/diagram.svg`). `Warehouse` is collapsed, so the `items` edge leaves from it.
 
-```
-                     ┌─ StockTracker ──────────────────────────────────────┐
-                     │                                                     │
-                     │  grant http: HttpServer (port: setting)             │
-                     │  grant items: Table<String, Item> (fixed: stock.db) │
-                     │        │                                            │
-                     │        │ move http, move items                      │
-                     │        ▼                                            │
- ( HTTP clients ) ───┼── GET  /items/{sku} ──────────▶ ┌──────────────┐    │
-                     │   POST /items/{sku}/receipts    │  Warehouse   │    │
-                     │   POST /items/{sku}/shipments   │     [+]      │ ───┼── items ──▶ ( stock.db )
-                     │   GET  /reorders                └──────────────┘    │
-                     │        via http                                     │
-                     └─────────────────────────────────────────────────────┘
-```
+![The StockTracker app with Warehouse collapsed inside it, HTTP clients calling its four routes, and the items edge to stock.db](expected/diagram.svg)
 
-**Inside `Warehouse`.** The reviewer expands it to see its children.
+**Inside `Warehouse`** (`expected/warehouse.svg`, with `--expand StockTracker/Warehouse`). The reviewer expands it to see its children.
 
-```
- ┌─ Warehouse ───────────────────────────────────────────────────────────────┐
- │                                                                           │
- │  routes (via http)                       items ── move ──┐                │
- │     │                                                    ▼                │
- │     ├── item(&sku) ──────────────────────▶ ┌─────────────────┐   items    │
- │     ├── receive(&sku, quantity) ─────────▶ │    Inventory    │ ───────────┼──▶ ( stock.db )
- │     ├── ship(&sku, quantity) ────────────▶ │                 │            │
- │     │                                      │  algorithm:     │            │
- │     │                                      │  reorder_       │            │
- │     │                                      │  quantity       │            │
- │     │                                      └────────○────────┘            │
- │     │                                               ╎ low_stock           │
- │     │                                               ╎ send raise(Reorder) │
- │     │                                               ▼                     │
- │     │                                      ┌─────────────────┐            │
- │     └── pending() ───────────────────────▶ │    Reorders     │            │
- │                                            └─────────────────┘            │
- └───────────────────────────────────────────────────────────────────────────┘
-```
+![Warehouse expanded, with its routes sending messages to Inventory and Reorders, and Inventory's low_stock outlet connected to Reorders' raise](expected/warehouse.svg)
 
-**Flowchart of `reorder_quantity`.**
+**Flowchart of `reorder_quantity`** (`expected/reorder_quantity.svg`):
 
-```
-          ( on_hand, reorder_level, target_level )
-                            │
-                            ▼
-              ◇ on_hand > reorder_level ? ◇
-                 │ yes                │ no
-                 ▼                    ▼
-              [ 0 ]     [ target_level − on_hand, at least 0 ]
-                 └─────────┬──────────┘
-                           ▼
-                    ( quantity to order )
-```
+![The flowchart of reorder_quantity: one decision with a return on each branch](expected/reorder_quantity.svg)
+
+**Flowchart of `Inventory::ship`** (`expected/ship.svg`), with every branch the requirements must reach:
+
+![The flowchart of Inventory's ship handler](expected/ship.svg)
 
 - `items` enters at the app, passes through `Warehouse` without being used, and is used only by `Inventory`. The reviewer sees exactly one component touching the database.
 - Messages go from a parent to its children. `Inventory` announces low stock through its `low_stock` outlet, drawn as the port `○` on its box, and `Warehouse` connects that port to `Reorders`. `Inventory` never names `Reorders`, and an outlet never waits, so the arrow cannot be part of a loop.
 - Moving the reorder decision from `Warehouse` into `Inventory` changed no requirement, because requirements only see the app's boundary.
 - The examples table reaches both branches of the flowchart through HTTP requests alone.
-- Each component box has a failure section. `Inventory` shows `Capability(items) → rollback` and `Warehouse` shows `Message(inventory) → rollback`, each with its reason. `Reorders` has none, so the reviewer can see that any failure there stops the program.
+- `Inventory` and `Warehouse` each have a failure section: `Capability(items) => rollback` and `Message(inventory) => rollback`, each with its reason. `Reorders` has none, so the reviewer can see that any failure there stops the program.

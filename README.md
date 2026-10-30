@@ -10,11 +10,12 @@ The compiler is written in Rust and emits Rust. That Rust builds to WebAssembly 
 
 ## Status
 
-The syntax is being designed through example programs. Nothing compiles yet.
+The syntax is being designed through example programs, and the diagram data format is defined. Nothing compiles yet.
 
 - [`docs/language/syntax.md`](docs/language/syntax.md) is the syntax reference.
-- [`docs/language/diagrams.md`](docs/language/diagrams.md) describes the generated diagrams.
-- [`examples/`](examples/) holds the example programs that pin the syntax down.
+- [`docs/language/diagrams.md`](docs/language/diagrams.md) describes the generated diagrams and their data format, whose JSON Schema is [`diagram.schema.json`](docs/language/diagram.schema.json).
+- [`crates/inset-diagram/`](crates/inset-diagram/) reads diagram data and draws it as SVG: `cargo run -p inset-diagram -- render examples/stock-tracker/expected/diagram.json`.
+- [`examples/`](examples/) holds the example programs that pin the syntax down, each with its expected diagram data and pictures in `expected/`.
 - [`editors/vscode/`](editors/vscode/) is a VS Code extension that highlights Inset code and requirements. `cargo xtask editor` packages it.
 
 ## Building

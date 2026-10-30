@@ -1,0 +1,354 @@
+{
+  "version": 1,
+  "app": {
+    "id": "PriceImport",
+    "name": "PriceImport",
+    "doc": "Price import: stores a supplier's price list in the product catalogue.",
+    "settings": [
+      {
+        "id": "PriceImport/setting:port",
+        "name": "port",
+        "type": "u16",
+        "default": "8080",
+        "doc": "The port to serve on."
+      },
+      {
+        "id": "PriceImport/setting:catalogue",
+        "name": "catalogue",
+        "type": "String",
+        "default": "\"catalogue.db\"",
+        "doc": "The catalogue database, which other tools also read."
+      }
+    ],
+    "grants": [
+      {
+        "id": "PriceImport/grant:http",
+        "name": "http",
+        "type": "HttpServer",
+        "config": [
+          { "from": "setting", "name": "port", "setting": "PriceImport/setting:port" }
+        ],
+        "outside": { "kind": "clients", "label": "HTTP clients" }
+      },
+      {
+        "id": "PriceImport/grant:products",
+        "name": "products",
+        "type": "Table<String, Product>",
+        "config": [
+          { "from": "setting", "name": "file", "setting": "PriceImport/setting:catalogue" },
+          { "from": "fixed", "name": "name", "value": "\"products\"" }
+        ],
+        "outside": { "kind": "resource", "label": "catalogue.db", "setting": "PriceImport/setting:catalogue" }
+      }
+    ],
+    "components": [
+      {
+        "id": "PriceImport/Importer",
+        "type": "Importer",
+        "definition": "crate::Importer",
+        "doc": "Accepts price lists over HTTP and stores their products.",
+        "start": [
+          { "pass": "move", "field": "http", "from": "PriceImport/grant:http" },
+          { "pass": "move", "field": "products", "from": "PriceImport/grant:products" }
+        ],
+        "fields": [
+          { "id": "PriceImport/Importer/field:http", "name": "http", "type": "HttpServer", "kind": "capability" },
+          {
+            "id": "PriceImport/Importer/field:products",
+            "name": "products",
+            "type": "Table<String, Product>",
+            "kind": "capability"
+          }
+        ],
+        "routes": [
+          {
+            "method": "POST",
+            "path": "/price-lists",
+            "via": "PriceImport/Importer/field:http",
+            "body": "text",
+            "handler": {
+              "id": "PriceImport/Importer/fn:import",
+              "name": "import",
+              "doc": "Stores every product in a price list, or none if any row is invalid.\nA price list is CSV with a header line, then one row per product: SKU, name, net price.",
+              "receiver": "mut",
+              "async": true,
+              "params": [{ "name": "text", "type": "String" }],
+              "returns": "Result<String, ImportError>",
+              "body": [
+                {
+                  "kind": "action",
+                  "id": "PriceImport/Importer/fn:import/0",
+                  "text": "let rows = self.csv.read(&text).await",
+                  "links": ["PriceImport/Importer/fn:import->PriceImport/Importer/csv/fn:read"]
+                },
+                {
+                  "kind": "decision",
+                  "id": "PriceImport/Importer/fn:import/1",
+                  "text": "let products = match parse_price_list(&rows)",
+                  "links": ["PriceImport/fn:parse_price_list"],
+                  "branches": [
+                    { "id": "PriceImport/Importer/fn:import/1/b0", "label": "Ok(products)" },
+                    {
+                      "id": "PriceImport/Importer/fn:import/1/b1",
+                      "label": "Err(errors)",
+                      "steps": [
+                        { "kind": "return", "id": "PriceImport/Importer/fn:import/1/b1/0", "text": "Err(ImportError::InvalidRows(errors))" }
+                      ]
+                    }
+                  ]
+                },
+                { "kind": "action", "id": "PriceImport/Importer/fn:import/2", "text": "let count = products.len()" },
+                {
+                  "kind": "loop",
+                  "id": "PriceImport/Importer/fn:import/3",
+                  "text": "for (sku, product) in products",
+                  "body": {
+                    "id": "PriceImport/Importer/fn:import/3/body",
+                    "label": "each",
+                    "steps": [
+                      {
+                        "kind": "action",
+                        "id": "PriceImport/Importer/fn:import/3/body/0",
+                        "text": "self.products.insert(sku, product).await",
+                        "links": ["PriceImport/Importer/field:products->PriceImport/grant:products"]
+                      }
+                    ]
+                  },
+                  "skip": { "id": "PriceImport/Importer/fn:import/3/skip", "label": "none" }
+                },
+                { "kind": "return", "id": "PriceImport/Importer/fn:import/4", "text": "Ok(format!(\"Products imported: {count}\"))" }
+              ]
+            }
+          }
+        ],
+        "components": [
+          {
+            "id": "PriceImport/Importer/csv",
+            "name": "csv",
+            "type": "CsvReader",
+            "definition": "crate::CsvReader",
+            "doc": "Reads CSV text with the `csv` crate. Holds no capabilities, so it can only compute.",
+            "external": { "language": "rust", "path": "csv_reader.rs", "crates": ["csv@1.3"] },
+            "messages": [
+              {
+                "id": "PriceImport/Importer/csv/fn:read",
+                "name": "read",
+                "doc": "Reads every row after the header line, whatever number of fields it has.",
+                "receiver": "ref",
+                "params": [{ "name": "text", "type": "&str" }],
+                "returns": "Vec<Row>"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "algorithms": [
+    {
+      "id": "PriceImport/fn:parse_price_list",
+      "name": "parse_price_list",
+      "doc": "Reads every row of a price list, or describes every invalid row, one per line.",
+      "params": [{ "name": "rows", "type": "&[Row]" }],
+      "returns": "Result<Vec<(String, Product)>, String>",
+      "body": [
+        {
+          "kind": "loop",
+          "id": "PriceImport/fn:parse_price_list/0",
+          "text": "let results = fork for row in rows",
+          "concurrent": true,
+          "body": {
+            "id": "PriceImport/fn:parse_price_list/0/body",
+            "label": "each",
+            "steps": [
+              {
+                "kind": "action",
+                "id": "PriceImport/fn:parse_price_list/0/body/0",
+                "text": "parse_row(row)",
+                "links": ["PriceImport/fn:parse_row"]
+              }
+            ]
+          },
+          "skip": { "id": "PriceImport/fn:parse_price_list/0/skip", "label": "none" }
+        },
+        { "kind": "action", "id": "PriceImport/fn:parse_price_list/1", "text": "let mut products = Vec::new()" },
+        { "kind": "action", "id": "PriceImport/fn:parse_price_list/2", "text": "let mut errors = String::new()" },
+        {
+          "kind": "loop",
+          "id": "PriceImport/fn:parse_price_list/3",
+          "text": "for result in results",
+          "body": {
+            "id": "PriceImport/fn:parse_price_list/3/body",
+            "label": "each",
+            "steps": [
+              {
+                "kind": "decision",
+                "id": "PriceImport/fn:parse_price_list/3/body/0",
+                "text": "match result",
+                "branches": [
+                  {
+                    "id": "PriceImport/fn:parse_price_list/3/body/0/b0",
+                    "label": "Ok(product)",
+                    "steps": [
+                      { "kind": "action", "id": "PriceImport/fn:parse_price_list/3/body/0/b0/0", "text": "products.push(product)" }
+                    ]
+                  },
+                  {
+                    "id": "PriceImport/fn:parse_price_list/3/body/0/b1",
+                    "label": "Err(error)",
+                    "steps": [
+                      {
+                        "kind": "action",
+                        "id": "PriceImport/fn:parse_price_list/3/body/0/b1/0",
+                        "text": "errors.push_str(&format!(\"{error}\\n\"))"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "skip": { "id": "PriceImport/fn:parse_price_list/3/skip", "label": "none" }
+        },
+        {
+          "kind": "decision",
+          "id": "PriceImport/fn:parse_price_list/4",
+          "text": "if errors.is_empty()",
+          "branches": [
+            {
+              "id": "PriceImport/fn:parse_price_list/4/b0",
+              "label": "yes",
+              "steps": [
+                { "kind": "return", "id": "PriceImport/fn:parse_price_list/4/b0/0", "text": "Ok(products)" }
+              ]
+            },
+            {
+              "id": "PriceImport/fn:parse_price_list/4/b1",
+              "label": "no",
+              "steps": [
+                { "kind": "return", "id": "PriceImport/fn:parse_price_list/4/b1/0", "text": "Err(errors)" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "PriceImport/fn:parse_row",
+      "name": "parse_row",
+      "doc": "Reads one row: a SKU, a product name and a net price.",
+      "params": [{ "name": "row", "type": "&Row" }],
+      "returns": "Result<(String, Product), String>",
+      "body": [
+        {
+          "kind": "decision",
+          "id": "PriceImport/fn:parse_row/0",
+          "text": "if row.fields.len() != 3",
+          "branches": [
+            {
+              "id": "PriceImport/fn:parse_row/0/b0",
+              "label": "yes",
+              "steps": [
+                {
+                  "kind": "return",
+                  "id": "PriceImport/fn:parse_row/0/b0/0",
+                  "text": "Err(format!(\"line {}: expected 3 fields, found {}\", row.line, row.fields.len()))"
+                }
+              ]
+            },
+            { "id": "PriceImport/fn:parse_row/0/b1", "label": "no" }
+          ]
+        },
+        {
+          "kind": "decision",
+          "id": "PriceImport/fn:parse_row/1",
+          "text": "let Some(net) = parse_price(&row.fields[2]) else",
+          "links": ["PriceImport/fn:parse_price"],
+          "branches": [
+            { "id": "PriceImport/fn:parse_row/1/b0", "label": "Some(net)" },
+            {
+              "id": "PriceImport/fn:parse_row/1/b1",
+              "label": "else",
+              "steps": [
+                {
+                  "kind": "return",
+                  "id": "PriceImport/fn:parse_row/1/b1/0",
+                  "text": "Err(format!(\"line {}: net price {:?} is not a price\", row.line, row.fields[2]))"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "action",
+          "id": "PriceImport/fn:parse_row/2",
+          "text": "let product = Product { name: row.fields[1].clone(), net, gross: add_vat(net) }",
+          "links": ["PriceImport/fn:add_vat"]
+        },
+        { "kind": "return", "id": "PriceImport/fn:parse_row/3", "text": "Ok((row.fields[0].clone(), product))" }
+      ]
+    },
+    {
+      "id": "PriceImport/fn:parse_price",
+      "name": "parse_price",
+      "doc": "Reads a price of zero or more pounds with at most two decimal places, such as `12.50`.",
+      "params": [{ "name": "text", "type": "&str" }],
+      "returns": "Option<Decimal>",
+      "body": [
+        {
+          "kind": "decision",
+          "id": "PriceImport/fn:parse_price/0",
+          "text": "match text.parse::<Decimal>()",
+          "branches": [
+            {
+              "id": "PriceImport/fn:parse_price/0/b0",
+              "label": "Ok(price) if price >= dec!(0) && price.scale() <= 2",
+              "steps": [
+                { "kind": "return", "id": "PriceImport/fn:parse_price/0/b0/0", "text": "Some(price)" }
+              ]
+            },
+            {
+              "id": "PriceImport/fn:parse_price/0/b1",
+              "label": "_",
+              "steps": [
+                { "kind": "return", "id": "PriceImport/fn:parse_price/0/b1/0", "text": "None" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "PriceImport/fn:add_vat",
+      "name": "add_vat",
+      "doc": "Adds VAT at 20%, rounded to the nearest penny.",
+      "params": [{ "name": "net", "type": "Decimal" }],
+      "returns": "Decimal",
+      "body": [
+        { "kind": "return", "id": "PriceImport/fn:add_vat/0", "text": "(net * dec!(1.20)).round_dp(2)" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "kind": "capability",
+      "id": "PriceImport/Importer/field:http->PriceImport/grant:http",
+      "from": "PriceImport/Importer/field:http",
+      "to": "PriceImport/grant:http"
+    },
+    {
+      "kind": "capability",
+      "id": "PriceImport/Importer/field:products->PriceImport/grant:products",
+      "from": "PriceImport/Importer/field:products",
+      "to": "PriceImport/grant:products",
+      "operations": ["insert"]
+    },
+    {
+      "kind": "message",
+      "id": "PriceImport/Importer/fn:import->PriceImport/Importer/csv/fn:read",
+      "from": "PriceImport/Importer/fn:import",
+      "to": "PriceImport/Importer/csv/fn:read",
+      "args": [{ "pass": "lend", "text": "text" }]
+    }
+  ]
+}

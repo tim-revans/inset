@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "app": {
+    "id": "HelloHttp",
+    "name": "HelloHttp",
+    "doc": "Hello HTTP: the smallest Inset program that serves the web.",
+    "settings": [
+      {
+        "id": "HelloHttp/setting:port",
+        "name": "port",
+        "type": "u16",
+        "default": "8080",
+        "doc": "The port to serve on."
+      }
+    ],
+    "grants": [
+      {
+        "id": "HelloHttp/grant:http",
+        "name": "http",
+        "type": "HttpServer",
+        "config": [
+          { "from": "setting", "name": "port", "setting": "HelloHttp/setting:port" }
+        ],
+        "outside": { "kind": "clients", "label": "HTTP clients" }
+      }
+    ],
+    "components": [
+      {
+        "id": "HelloHttp/Greeter",
+        "type": "Greeter",
+        "definition": "crate::Greeter",
+        "doc": "Greets visitors by name.",
+        "start": [
+          { "pass": "move", "field": "http", "from": "HelloHttp/grant:http" }
+        ],
+        "fields": [
+          { "id": "HelloHttp/Greeter/field:http", "name": "http", "type": "HttpServer", "kind": "capability" }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "path": "/hello/{name}",
+            "via": "HelloHttp/Greeter/field:http",
+            "handler": {
+              "id": "HelloHttp/Greeter/fn:hello",
+              "name": "hello",
+              "doc": "Replies with a greeting for the name in the path.",
+              "params": [{ "name": "name", "type": "String" }],
+              "returns": "String",
+              "body": [
+                { "kind": "return", "id": "HelloHttp/Greeter/fn:hello/0", "text": "format!(\"Hello, {name}!\")" }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "edges": [
+    {
+      "kind": "capability",
+      "id": "HelloHttp/Greeter/field:http->HelloHttp/grant:http",
+      "from": "HelloHttp/Greeter/field:http",
+      "to": "HelloHttp/grant:http"
+    }
+  ]
+}

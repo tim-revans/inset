@@ -1,0 +1,1281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Diagram",
+  "description": "Everything the source says about a program's structure. A view draws from\nthis and chooses what to show.",
+  "type": "object",
+  "properties": {
+    "algorithms": {
+      "description": "Algorithms declared at the top level of a module, rather than in a component.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Function"
+      }
+    },
+    "app": {
+      "description": "The app: the program's outer boundary.",
+      "$ref": "#/$defs/App"
+    },
+    "coverage": {
+      "description": "Which requirements reached each element, when coverage was measured.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Coverage"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "edges": {
+      "description": "The edges between elements: capability use, messages and emits.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Edge"
+      }
+    },
+    "version": {
+      "description": "The version of this format, which is 1.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "app"
+  ],
+  "$defs": {
+    "App": {
+      "description": "The `app` block: its settings, its grants and the components it starts.",
+      "type": "object",
+      "properties": {
+        "components": {
+          "description": "The components the app starts, in source order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Component"
+          }
+        },
+        "doc": {
+          "description": "The app's doc comment.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "front_end": {
+          "description": "The browser front end, drawn as one opaque box. Draft: no example has one yet.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrontEnd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "grants": {
+          "description": "The `grant` statements, in source order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Grant"
+          }
+        },
+        "id": {
+          "description": "The app's name, which is also the first segment of every other ID.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The app's name, as declared.",
+          "type": "string"
+        },
+        "settings": {
+          "description": "The `setting` statements, in source order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Setting"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Arg": {
+      "description": "A value that crosses a component boundary, and how.",
+      "type": "object",
+      "properties": {
+        "pass": {
+          "$ref": "#/$defs/Pass"
+        },
+        "text": {
+          "description": "The place or expression, as written in the source, without `move` or `&`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "pass",
+        "text"
+      ]
+    },
+    "Branch": {
+      "description": "A way through a decision, loop or fork. Coverage counts branches.",
+      "type": "object",
+      "properties": {
+        "defensive": {
+          "description": "The reason given by `#[defensive(\"...\")]`, when the branch is marked defensive.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "description": "What selects the branch, such as `yes`, a `match` pattern or `else`.",
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Step"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label"
+      ]
+    },
+    "Component": {
+      "description": "A running component: one `start` statement and the component it starts.\nA component type started twice appears twice.",
+      "type": "object",
+      "properties": {
+        "algorithms": {
+          "description": "Algorithms declared in the component, in source order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Function"
+          }
+        },
+        "components": {
+          "description": "The components this one starts, in source order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Component"
+          }
+        },
+        "definition": {
+          "description": "The component type's Rust path, such as `crate::warehouse::Inventory`.",
+          "type": "string"
+        },
+        "doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "external": {
+          "description": "Set for an `extern component`, whose code the diagram does not show.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/External"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failure": {
+          "description": "The arms of the `failure` block, in source order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FailureArm"
+          }
+        },
+        "fields": {
+          "description": "The component's fields, in source order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Field"
+          }
+        },
+        "id": {
+          "description": "The parent's ID, then `/` and the name the `start` binds, or the\ncomponent type's name when the `start` binds none.",
+          "type": "string"
+        },
+        "messages": {
+          "description": "Message handlers, in source order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Function"
+          }
+        },
+        "name": {
+          "description": "The name the `start` statement binds, as in `start inventory: Inventory`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "routes": {
+          "description": "Route handlers, in source order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Route"
+          }
+        },
+        "start": {
+          "description": "The handoffs of the `start` statement, in source order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Handoff"
+          }
+        },
+        "type": {
+          "description": "The component type's name.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "definition"
+      ]
+    },
+    "Condition": {
+      "oneOf": [
+        {
+          "description": "`Panic`.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "panic"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "`Overflow`.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "overflow"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "`Capability(field)`, by the field's ID.",
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "capability"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "field"
+          ]
+        },
+        {
+          "description": "`Message(name)`, by the child's or lent sibling's component ID.",
+          "type": "object",
+          "properties": {
+            "component": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "message"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "component"
+          ]
+        },
+        {
+          "description": "`Child(name)`, by the child's component ID.",
+          "type": "object",
+          "properties": {
+            "component": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "child"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "component"
+          ]
+        },
+        {
+          "description": "`_`.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "any"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "Config": {
+      "description": "One field of a grant, and where its value comes from.",
+      "oneOf": [
+        {
+          "description": "A value fixed in the source.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "fixed"
+            },
+            "name": {
+              "type": "string"
+            },
+            "value": {
+              "description": "The literal, as written in the source, such as `\"stock.db\"`.",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "from",
+            "name",
+            "value"
+          ]
+        },
+        {
+          "description": "The value of a setting.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "setting"
+            },
+            "name": {
+              "type": "string"
+            },
+            "setting": {
+              "description": "The setting's ID.",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "from",
+            "name",
+            "setting"
+          ]
+        }
+      ]
+    },
+    "Coverage": {
+      "description": "Which requirements reached which elements.",
+      "type": "object",
+      "properties": {
+        "reached": {
+          "description": "For each element ID reached, the sentences of the requirements that reached it.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "reached"
+      ]
+    },
+    "Edge": {
+      "description": "An edge between two elements. Its ID is `<from>-><to>`.",
+      "oneOf": [
+        {
+          "description": "A component uses a capability it holds.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "description": "The capability field's ID.",
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "capability"
+            },
+            "operations": {
+              "description": "The capability's methods the component calls, in name order.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "to": {
+              "description": "The grant's ID.",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "id",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "description": "A function sends a message to another component.",
+          "type": "object",
+          "properties": {
+            "args": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Arg"
+              }
+            },
+            "from": {
+              "description": "The sending function's ID.",
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "message"
+            },
+            "send": {
+              "description": "Set for `send`, which does not wait for a reply.",
+              "type": "boolean"
+            },
+            "to": {
+              "description": "The message handler's ID.",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "id",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "description": "A function emits a value through an outlet of its own component.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "description": "The emitting function's ID.",
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "emit"
+            },
+            "to": {
+              "description": "The outlet field's ID.",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/Arg"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "id",
+            "from",
+            "to",
+            "value"
+          ]
+        }
+      ]
+    },
+    "Exit": {
+      "description": "The error path of a `?`, which returns from the function. Coverage counts it as a branch.",
+      "type": "object",
+      "properties": {
+        "defensive": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "The step's ID, then `/err`.",
+          "type": "string"
+        },
+        "text": {
+          "description": "What the function returns, such as `None`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "text"
+      ]
+    },
+    "External": {
+      "description": "Where an external component's code comes from.",
+      "type": "object",
+      "properties": {
+        "crates": {
+          "description": "The crates it may use, as `name@version`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "language": {
+          "description": "The language it is written in. Only `rust` exists so far.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The file that implements it, relative to the file that declares it.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "language",
+        "path"
+      ]
+    },
+    "FailureArm": {
+      "description": "One arm of a `failure` block.",
+      "type": "object",
+      "properties": {
+        "condition": {
+          "$ref": "#/$defs/Condition"
+        },
+        "defensive": {
+          "description": "The reason given by `#[defensive(\"...\")]`, when the arm is marked defensive.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`<component>/failure:<condition>`, where the condition is `panic`,\n`overflow`, `any`, or `capability:`, `message:` or `child:` followed by the name.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "The arm's doc comment, which says why.",
+          "type": "string"
+        },
+        "response": {
+          "$ref": "#/$defs/Response"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "condition",
+        "response",
+        "reason"
+      ]
+    },
+    "Field": {
+      "description": "A field of a component.",
+      "type": "object",
+      "properties": {
+        "doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "handed_down": {
+          "description": "Set when the field is marked `#[handed_down]`: it is only passed on to a child.",
+          "type": "boolean"
+        },
+        "id": {
+          "description": "`<component>/field:<name>`.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/FieldKind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "description": "The field's type, as written in the source.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "type",
+        "kind"
+      ]
+    },
+    "FieldKind": {
+      "oneOf": [
+        {
+          "description": "A capability, such as `HttpServer` or `Table<K, V>`.",
+          "type": "string",
+          "const": "capability"
+        },
+        {
+          "description": "An `Outlet<T>`, drawn as a port on the component's box.",
+          "type": "string",
+          "const": "outlet"
+        },
+        {
+          "description": "A `&Handle<C>` to a sibling lent at start.",
+          "type": "string",
+          "const": "handle"
+        },
+        {
+          "description": "The component's own state.",
+          "type": "string",
+          "const": "state"
+        }
+      ]
+    },
+    "FrontEnd": {
+      "description": "The browser front end. Draft.",
+      "type": "object",
+      "properties": {
+        "calls": {
+          "description": "The routes the front end calls, by handler ID.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "id": {
+          "description": "`<app>/front_end`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ]
+    },
+    "Function": {
+      "description": "A function: a route handler, a message handler or an algorithm.",
+      "type": "object",
+      "properties": {
+        "async": {
+          "description": "Set for an `async fn`.",
+          "type": "boolean"
+        },
+        "body": {
+          "description": "The body as a flowchart. Absent for a message of an external component.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Step"
+          }
+        },
+        "doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "The owner's ID, then `/fn:` and the name. A top-level algorithm's owner\nis the app, followed by `/mod:<path>` unless it is in the root module.",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Param"
+          }
+        },
+        "receiver": {
+          "description": "How the function takes `self`, if it does.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Receiver"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "returns": {
+          "description": "The return type, as written in the source.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Grant": {
+      "description": "A `grant`: a capability the host gives the program.",
+      "type": "object",
+      "properties": {
+        "config": {
+          "description": "The fields that configure the capability, in source order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Config"
+          }
+        },
+        "doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`<app>/grant:<name>`.",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "outside": {
+          "description": "What is outside the program at the other end of this capability.",
+          "$ref": "#/$defs/Outside"
+        },
+        "type": {
+          "description": "The capability type, as written in the source, such as `Table<String, Item>`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "type",
+        "outside"
+      ]
+    },
+    "Handoff": {
+      "description": "One handoff of a `start` statement: how a field of the started component gets its value.",
+      "oneOf": [
+        {
+          "description": "`field: move place`. The value or capability moves into the child.",
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "from": {
+              "type": "string"
+            },
+            "pass": {
+              "type": "string",
+              "const": "move"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "pass",
+            "field",
+            "from"
+          ]
+        },
+        {
+          "description": "`field: &child`. A sibling started earlier is lent to the child.",
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "from": {
+              "type": "string"
+            },
+            "pass": {
+              "type": "string",
+              "const": "lend"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "pass",
+            "field",
+            "from"
+          ]
+        },
+        {
+          "description": "`field: place`, where the place's type is `Copy`.",
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "from": {
+              "type": "string"
+            },
+            "pass": {
+              "type": "string",
+              "const": "copy"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "pass",
+            "field",
+            "from"
+          ]
+        },
+        {
+          "description": "`field: expression`, a new value.",
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "pass": {
+              "type": "string",
+              "const": "new"
+            },
+            "text": {
+              "description": "The expression, as written in the source.",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "pass",
+            "field",
+            "text"
+          ]
+        },
+        {
+          "description": "`field: send target.message`. The child's outlet is connected to a message.",
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "pass": {
+              "type": "string",
+              "const": "connect"
+            },
+            "to": {
+              "description": "The message handler's ID.",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "pass",
+            "field",
+            "to"
+          ]
+        }
+      ]
+    },
+    "Method": {
+      "type": "string",
+      "enum": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ]
+    },
+    "Outside": {
+      "description": "The far end of a capability: who or what the program reaches through it.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/OutsideKind"
+        },
+        "label": {
+          "description": "What to call it, such as `HTTP clients` or `stock.db`.",
+          "type": "string"
+        },
+        "setting": {
+          "description": "When set, `label` is this setting's default, and whoever runs the program may choose another.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "label"
+      ]
+    },
+    "OutsideKind": {
+      "oneOf": [
+        {
+          "description": "Others call in, as HTTP clients do. Drawn on the left of the app.",
+          "type": "string",
+          "const": "clients"
+        },
+        {
+          "description": "The program calls out, as to a database. Drawn on the right of the app.",
+          "type": "string",
+          "const": "resource"
+        }
+      ]
+    },
+    "Param": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type"
+      ]
+    },
+    "Pass": {
+      "oneOf": [
+        {
+          "description": "`move x`.",
+          "type": "string",
+          "const": "move"
+        },
+        {
+          "description": "`&x`.",
+          "type": "string",
+          "const": "lend"
+        },
+        {
+          "description": "`x`, where `x` is `Copy`.",
+          "type": "string",
+          "const": "copy"
+        },
+        {
+          "description": "A new value, built in place.",
+          "type": "string",
+          "const": "new"
+        }
+      ]
+    },
+    "Receiver": {
+      "oneOf": [
+        {
+          "description": "`&self`.",
+          "type": "string",
+          "const": "ref"
+        },
+        {
+          "description": "`&mut self`.",
+          "type": "string",
+          "const": "mut"
+        }
+      ]
+    },
+    "Response": {
+      "type": "string",
+      "enum": [
+        "rollback",
+        "restart"
+      ]
+    },
+    "Route": {
+      "description": "A route handler.",
+      "type": "object",
+      "properties": {
+        "body": {
+          "description": "The parameter the request body binds to.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "handler": {
+          "description": "The function that handles the route.",
+          "$ref": "#/$defs/Function"
+        },
+        "method": {
+          "$ref": "#/$defs/Method"
+        },
+        "path": {
+          "description": "The path template, as written in the attribute.",
+          "type": "string"
+        },
+        "via": {
+          "description": "The ID of the `HttpServer` field the requests arrive through.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "path",
+        "via",
+        "handler"
+      ]
+    },
+    "Setting": {
+      "description": "A `setting`: a grant value that whoever runs the program may choose.",
+      "type": "object",
+      "properties": {
+        "default": {
+          "description": "The default value, as written in the source, such as `8080` or `\"catalogue.db\"`.",
+          "type": "string"
+        },
+        "doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`<app>/setting:<name>`.",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "description": "The setting's type, as written in the source.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "type",
+        "default"
+      ]
+    },
+    "Step": {
+      "description": "One step of a flowchart. A step's ID is its block's ID, then `/` and its\nindex in the block. A function's body is the block with the function's ID.",
+      "oneOf": [
+        {
+          "description": "A statement that runs and carries on.",
+          "type": "object",
+          "properties": {
+            "exit": {
+              "description": "The error path of a `?` in the statement.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Exit"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "action"
+            },
+            "links": {
+              "description": "The edges and functions the statement uses, by ID.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "text": {
+              "description": "The statement, as written in the source, without its `;`.",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "id",
+            "text"
+          ]
+        },
+        {
+          "description": "An `if`, a `match` or a `let ... else`: one branch is taken.",
+          "type": "object",
+          "properties": {
+            "branches": {
+              "description": "The branches, in source order. Their IDs end in `/b0`, `/b1` and so on.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Branch"
+              }
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "decision"
+            },
+            "links": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "text": {
+              "description": "What decides, as written in the source.",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "id",
+            "text",
+            "branches"
+          ]
+        },
+        {
+          "description": "A `for` loop, or a `fork for`.",
+          "type": "object",
+          "properties": {
+            "body": {
+              "description": "Running the body. Its ID ends in `/body`.",
+              "$ref": "#/$defs/Branch"
+            },
+            "concurrent": {
+              "description": "Set for `fork for`, whose bodies run concurrently and are joined.",
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "loop"
+            },
+            "links": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "skip": {
+              "description": "Not running the body at all. Its ID ends in `/skip`, and it has no steps.",
+              "$ref": "#/$defs/Branch"
+            },
+            "text": {
+              "description": "The loop's head, as written in the source.",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "id",
+            "text",
+            "body",
+            "skip"
+          ]
+        },
+        {
+          "description": "A `fork { a, b, ... }`. Draft.",
+          "type": "object",
+          "properties": {
+            "branches": {
+              "description": "One branch per expression. Their IDs end in `/b0`, `/b1` and so on.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Branch"
+              }
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "fork"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "id",
+            "branches"
+          ]
+        },
+        {
+          "description": "The function's value: a `return`, or its final expression.",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "return"
+            },
+            "links": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "id",
+            "text"
+          ]
+        }
+      ]
+    }
+  }
+}

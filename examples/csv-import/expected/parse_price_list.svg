@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="598" height="640" viewBox="0 0 598 640">
+<style>
+text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; fill: #1f2328; white-space: pre; }
+.title { font-weight: bold; }
+.kw { fill: #8250df; }
+.dim { fill: #59636e; }
+.doc { fill: #59636e; font-style: italic; }
+.sec { fill: #818b98; font-size: 10px; letter-spacing: 0.05em; }
+.warn { fill: #9a6700; }
+.ground { fill: #ffffff; }
+.app { fill: #f6f8fa; stroke: #59636e; stroke-width: 1.5; }
+.comp { fill: #ffffff; stroke: #0969da; stroke-width: 1.2; }
+.ext { fill: #fbf7ff; stroke: #8250df; stroke-width: 1.2; }
+.outside { fill: #ffffff; stroke: #818b98; stroke-dasharray: 3 2; }
+.port { fill: #ffffff; stroke: #0969da; stroke-width: 1.5; }
+.edge { fill: none; stroke: #1f2328; stroke-width: 1.2; }
+.send { stroke-dasharray: 5 3; }
+.cap { fill: none; stroke: #bc4c00; stroke-width: 1.4; }
+.node { fill: #ffffff; stroke: #1f2328; }
+.decide { fill: #fff8c5; stroke: #1f2328; }
+.term { fill: #ddf4ff; stroke: #1f2328; }
+.bar { fill: #1f2328; }
+.arrow { fill: #1f2328; }
+.arrow-cap { fill: #bc4c00; }
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow"/></marker>
+<marker id="arrow-cap" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow-cap"/></marker>
+</defs>
+<rect x="0" y="0" width="598" height="640" class="ground"/>
+<g data-id="PriceImport/fn:parse_price_list">
+<text x="16" y="20" class="title">parse_price_list</text>
+</g>
+<text x="16" y="36" class="doc opt-docs">Reads every row of a price list, or describes every invalid row, one per</text>
+<text x="16" y="52" class="doc opt-docs">line.</text>
+<rect x="16" y="68" width="542.4" height="24" rx="12" class="term"/>
+<text x="28" y="84" class="">parse_price_list</text>
+<text x="143.2" y="84" class="dim opt-signatures">(rows: &amp;[Row]) -&gt; Result&lt;Vec&lt;(String, Product)&gt;, String&gt;</text>
+<path d="M287.2,92 L287.2,114" class="edge" marker-end="url(#arrow)"/>
+<text x="143.2" y="126" class="kw">fork: let results = fork for row in rows</text>
+<rect x="143.2" y="136" width="288" height="5" rx="1" class="bar" data-id="PriceImport/fn:parse_price_list/0"/>
+<path d="M287.2,141 L287.2,167" class="edge" marker-end="url(#arrow)" data-id="PriceImport/fn:parse_price_list/0/body"/>
+<text x="291.2" y="159" class="dim">each</text>
+<rect x="226.8" y="167" width="120.8" height="24" rx="2" class="node" data-id="PriceImport/fn:parse_price_list/0/body/0"/>
+<text x="236.8" y="183" class="">parse_row(row)</text>
+<path d="M287.2,191 L287.2,213" class="edge" marker-end="url(#arrow)"/>
+<rect x="143.2" y="213" width="288" height="5" rx="1" class="bar"/>
+<text x="106.4" y="219" class="kw">join</text>
+<path d="M431.2,138.5 L443.2,138.5 L443.2,215.5 L431.2,215.5" class="edge" marker-end="url(#arrow)" data-id="PriceImport/fn:parse_price_list/0/skip"/>
+<text x="449.2" y="154" class="dim">none</text>
+<path d="M287.2,218 L287.2,240" class="edge" marker-end="url(#arrow)"/>
+<rect x="172.8" y="240" width="228.8" height="24" rx="2" class="node" data-id="PriceImport/fn:parse_price_list/1"/>
+<text x="182.8" y="256" class="">let mut products = Vec::new()</text>
+<path d="M287.2,264 L287.2,286" class="edge" marker-end="url(#arrow)"/>
+<rect x="169.2" y="286" width="236" height="24" rx="2" class="node" data-id="PriceImport/fn:parse_price_list/2"/>
+<text x="179.2" y="302" class="">let mut errors = String::new()</text>
+<path d="M287.2,310 L287.2,332" class="edge" marker-end="url(#arrow)"/>
+<polygon points="191.6,346 205.6,332 368.8,332 382.8,346 368.8,360 205.6,360" class="decide" data-id="PriceImport/fn:parse_price_list/3"/>
+<text x="211.6" y="350" class="">for result in results</text>
+<path d="M287.2,360 L287.2,394" class="edge" marker-end="url(#arrow)" data-id="PriceImport/fn:parse_price_list/3/body"/>
+<text x="291.2" y="386" class="dim">each</text>
+<polygon points="224,408 238,394 336.4,394 350.4,408 336.4,422 238,422" class="decide" data-id="PriceImport/fn:parse_price_list/3/body/0"/>
+<text x="244" y="412" class="">match result</text>
+<path d="M270.8,422 L270.8,432 L126.4,432 L126.4,456" class="edge" marker-end="url(#arrow)" data-id="PriceImport/fn:parse_price_list/3/body/0/b0"/>
+<text x="133.4" y="450" class="dim">Ok(product)</text>
+<rect x="37.2" y="456" width="178.4" height="24" rx="2" class="node" data-id="PriceImport/fn:parse_price_list/3/body/0/b0/0"/>
+<text x="47.2" y="472" class="">products.push(product)</text>
+<path d="M303.6,422 L303.6,432 L390.4,432 L390.4,456" class="edge" marker-end="url(#arrow)" data-id="PriceImport/fn:parse_price_list/3/body/0/b1"/>
+<text x="397.4" y="450" class="dim">Err(error)</text>
+<rect x="243.6" y="456" width="293.6" height="24" rx="2" class="node" data-id="PriceImport/fn:parse_price_list/3/body/0/b1/0"/>
+<text x="253.6" y="472" class="">errors.push_str(&amp;format!(&quot;{error}\n&quot;))</text>
+<path d="M126.4,480 L126.4,492 L287.2,492" class="edge"/>
+<path d="M390.4,480 L390.4,492 L287.2,492" class="edge"/>
+<path d="M287.2,492 L287.2,502 L29.2,502 L29.2,346 L191.6,346" class="edge" marker-end="url(#arrow)"/>
+<path d="M382.8,346 L547.2,346 L547.2,516 L287.2,516" class="edge" data-id="PriceImport/fn:parse_price_list/3/skip"/>
+<text x="553.2" y="362" class="dim">none</text>
+<path d="M287.2,516 L287.2,538" class="edge" marker-end="url(#arrow)"/>
+<polygon points="195.2,552 209.2,538 365.2,538 379.2,552 365.2,566 209.2,566" class="decide" data-id="PriceImport/fn:parse_price_list/4"/>
+<text x="215.2" y="556" class="">if errors.is_empty()</text>
+<path d="M261.2,566 L261.2,576 L223.6,576 L223.6,600" class="edge" marker-end="url(#arrow)" data-id="PriceImport/fn:parse_price_list/4/b0"/>
+<text x="230.6" y="594" class="dim">yes</text>
+<rect x="170.4" y="600" width="106.4" height="24" rx="12" class="term" data-id="PriceImport/fn:parse_price_list/4/b0/0"/>
+<text x="180.4" y="616" class="">Ok(products)</text>
+<path d="M313.2,566 L313.2,576 L354.4,576 L354.4,600" class="edge" marker-end="url(#arrow)" data-id="PriceImport/fn:parse_price_list/4/b1"/>
+<text x="361.4" y="594" class="dim">no</text>
+<rect x="304.8" y="600" width="99.2" height="24" rx="12" class="term" data-id="PriceImport/fn:parse_price_list/4/b1/0"/>
+<text x="314.8" y="616" class="">Err(errors)</text>
+</svg>
