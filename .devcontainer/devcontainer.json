@@ -1,0 +1,17 @@
+{
+  "name": "Inset",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "dev",
+  "mounts": [
+    "source=inset-cargo-registry,target=/home/dev/.cargo/registry,type=volume",
+    "source=inset-target,target=/home/dev/target,type=volume"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": ["rust-lang.rust-analyzer"]
+    }
+  }
+}

@@ -1,0 +1,9 @@
+# Local agent config and notes
+.claude/
+CLAUDE.local.md
+
+# Build output
+target/
+
+# Secrets
+.env*

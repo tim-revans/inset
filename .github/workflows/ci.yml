@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build dev container image
+        run: docker build -t inset-dev -f .devcontainer/Dockerfile .
+      # Root inside the container, because the checkout is owned by the runner's UID.
+      - name: cargo xtask ci
+        run: docker run --rm --user root -v "$PWD:/workspace" -w /workspace inset-dev cargo xtask ci
