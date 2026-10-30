@@ -1,10 +1,10 @@
-/// Tracks stock and raises reorders. Answers HTTP requests from warehouse staff.
+/// Answers HTTP requests from warehouse staff about stock and reorders.
 component Warehouse {
     http: HttpServer,
     items: Table<String, Item>,
 
-    start inventory: Inventory { items: move items };
     start reorders: Reorders { orders: Vec::new() };
+    start inventory: Inventory { items: move items, reorders: &reorders };
 
     /// Replies with the quantity on hand.
     #[get("/items/{sku}", via = http)]
@@ -21,14 +21,9 @@ component Warehouse {
     }
 
     /// Takes away stock that has been shipped, and replies with the new quantity on hand.
-    /// Raises a reorder if that leaves stock at or below its reorder level.
     #[post("/items/{sku}/shipments", via = http, body = quantity)]
     async fn ship(&self, sku: String, quantity: u32) -> Result<String, ShipError> {
         let item = self.inventory.ship(&sku, quantity).await?;
-        let order = Self::reorder_quantity(item.on_hand, item.reorder_level, item.target_level);
-        if order > 0 {
-            send self.reorders.raise(Reorder { sku, quantity: order });
-        }
         Ok(item.on_hand.to_string())
     }
 
@@ -41,20 +36,12 @@ component Warehouse {
         }
         text
     }
-
-    /// How many to reorder so that stock goes back up to its target level.
-    fn reorder_quantity(on_hand: u32, reorder_level: u32, target_level: u32) -> u32 {
-        if on_hand > reorder_level {
-            0
-        } else {
-            target_level.saturating_sub(on_hand)
-        }
-    }
 }
 
-/// Keeps the stock record of every item.
+/// Keeps the stock record of every item, and raises a reorder when stock runs low.
 component Inventory {
     items: Table<String, Item>,
+    reorders: &Reorders,
 
     /// The item with this SKU, if there is one.
     pub async fn item(&self, sku: &String) -> Option<Item> {
@@ -70,6 +57,7 @@ component Inventory {
     }
 
     /// Takes from an item's stock if it holds enough, and returns the item as it now stands.
+    /// Raises a reorder if that leaves stock at or below its reorder level.
     pub async fn ship(&mut self, sku: &String, quantity: u32) -> Result<Item, ShipError> {
         let Some(mut item) = self.items.get(sku).await else {
             return Err(ShipError::UnknownItem);
@@ -79,7 +67,20 @@ component Inventory {
         }
         item.on_hand -= quantity;
         self.items.insert(sku.clone(), item.clone()).await;
+        let order = Self::reorder_quantity(item.on_hand, item.reorder_level, item.target_level);
+        if order > 0 {
+            send self.reorders.raise(Reorder { sku: sku.clone(), quantity: order });
+        }
         Ok(item)
+    }
+
+    /// How many to reorder so that stock goes back up to its target level.
+    fn reorder_quantity(on_hand: u32, reorder_level: u32, target_level: u32) -> u32 {
+        if on_hand > reorder_level {
+            0
+        } else {
+            target_level.saturating_sub(on_hand)
+        }
     }
 }
 

@@ -25,15 +25,16 @@ The program is split across two files to show that all the files of a program sh
 | --- | --- |
 | Database capability | `grant items: Table<String, Item> { ... }` asks the host for a stored table |
 | Several actors | `Warehouse`, `Inventory` and `Reorders` each run as a component |
-| Nested components | `Warehouse` starts `Inventory` and `Reorders` with `start` statements |
+| Nested components | `Warehouse` starts `Reorders` and `Inventory` with `start` statements |
+| A sibling lent to a sibling | `start inventory: Inventory { ..., reorders: &reorders }`, so `Inventory` can raise reorders itself. `Inventory` declares the field as `reorders: &Reorders` |
 | Capability hand-down | The app moves `items` into `Warehouse`, which moves it on into `Inventory`. Only `Inventory` uses it |
 | Messages that wait for a reply | `self.inventory.ship(&sku, quantity).await` |
-| A message that does not wait | `send self.reorders.raise(...)` |
+| A message that does not wait | `send self.reorders.raise(...)`, from `Inventory` to its sibling |
 | Boundary notation | `move` for capabilities, `&sku` for a lent string, a bare `quantity` for a copied number, and `Reorder { ... }` for a value built in place |
 | Component state | `Reorders` holds its list of reorders in a field and changes it in `&mut self` handlers |
 | Request bodies | `body = quantity` reads the request body as a `u32` |
 | Error replies | `Option` replies `404 Not Found` for `None`. `ShipError` names a status on each variant |
-| Algorithm in a non-leaf component | `Warehouse::reorder_quantity`, which takes no `self` and so touches no capability |
+| Algorithm in a component | `Inventory::reorder_quantity`, which takes no `self` and so touches no capability |
 | Examples table | "Stock that falls to its reorder level...", one row per case of reordering, which covers every branch of `reorder_quantity` from outside |
 | Capability facts in tests | `given items["bolt-m6"] is Item { ... }` and `and items is empty` |
 | Several requests in one test | "A new reorder for an item replaces its earlier one" |
@@ -73,12 +74,17 @@ Sketches of what each review level should show. Stage 3 replaces them with `expe
  │     │                                                    ▼                │
  │     ├── item(&sku) ──────────────────────▶ ┌─────────────────┐   items    │
  │     ├── receive(&sku, quantity) ─────────▶ │    Inventory    │ ───────────┼──▶ ( stock.db )
- │     ├── ship(&sku, quantity) ────────────▶ └─────────────────┘            │
- │     │                                                                     │
- │     ├╌╌ send raise(Reorder) ╌╌╌╌╌╌╌╌╌╌╌╌╌▶ ┌─────────────────┐            │
+ │     ├── ship(&sku, quantity) ────────────▶ │                 │            │
+ │     │                                      │  algorithm:     │            │
+ │     │                                      │  reorder_       │            │
+ │     │                                      │  quantity       │            │
+ │     │                                      └─────────────────┘            │
+ │     │                                               ╎ send raise(Reorder) │
+ │     │                                               ▼                     │
+ │     │                                      ┌─────────────────┐            │
  │     └── pending() ───────────────────────▶ │    Reorders     │            │
  │                                            └─────────────────┘            │
- │  algorithm: reorder_quantity                                              │
+ │                                       lent to Inventory: &reorders        │
  └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -98,5 +104,6 @@ Sketches of what each review level should show. Stage 3 replaces them with `expe
 ```
 
 - `items` enters at the app, passes through `Warehouse` without being used, and is used only by `Inventory`. The reviewer sees exactly one component touching the database.
-- Messages only go from a parent to its children, so every arrow inside `Warehouse` points away from the routes.
+- Messages go from a parent to its children, or from a child to an earlier sibling its parent lent it. `Reorders` started first, so the arrow from `Inventory` to it cannot be part of a loop.
+- Moving the reorder decision from `Warehouse` into `Inventory` changed no requirement, because requirements only see the app's boundary.
 - The examples table reaches both branches of the flowchart through HTTP requests alone.

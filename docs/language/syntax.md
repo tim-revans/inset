@@ -19,7 +19,7 @@ An AI writes Inset source, and a human reviews the diagrams and requirement test
 - **Data flow is written down.** Every value or capability that crosses a component boundary says whether it is moved, lent or copied, so the diagram can label each arrow truthfully.
 - **Capabilities have one origin and one holder.** Capabilities enter the program only through the app's `grant` statements, reach components only by being moved down, and are held by one component at a time, so every external access appears as exactly one diagram edge.
 - **Requirements see only the outside.** A requirement tests what the program does through its boundary: HTTP requests and replies, and what its granted capabilities hold. How the program is built is the diagram's job.
-- **Structure is a tree.** Components nest, and a component sends messages only to the children it started. The diagram reads from the outside in, and no two components can end up waiting on each other.
+- **Structure is wired by the parent.** Components nest. A component sends messages to the children it started, and to earlier siblings its parent lent it. Every arrow is known from the source, and no two components can end up waiting on each other.
 
 ## Two dialects
 
@@ -129,8 +129,8 @@ component Warehouse {
     http: HttpServer,
     items: Table<String, Item>,
 
-    start inventory: Inventory { items: move items };
     start reorders: Reorders { orders: Vec::new() };
+    start inventory: Inventory { items: move items, reorders: &reorders };
     ...
 }
 ```
@@ -139,8 +139,15 @@ component Warehouse {
 - `start Component { handoffs };` starts a child that nothing sends messages to, such as one that only serves routes.
 - Each handoff supplies one field of the child, and says how its value crosses the boundary (see [Ownership and borrowing](#ownership-and-borrowing)).
 - In a component, a handoff can name the component's own fields. A field moved into a child belongs to the child, and the component's functions can no longer use it. `Warehouse` holds `items` only to hand it to `Inventory`.
+- A handoff can lend a child started earlier in the same body to a later one: `reorders: &reorders`. The later child declares the field with the child's type behind `&`, as `reorders: &Reorders`, and can send it messages. The parent still owns the lent child.
+- A child can only be lent to siblings started after it, never to itself or to its parent.
+- A component handle cannot be moved, copied, stored in data or sent in a message. The only handles a component holds are its own children and the siblings lent to it at `start`.
 - A component's children start before it handles anything, and stop after it stops.
 - A component started by a parent is nested inside the parent on the diagram. The app's children are the top-level components.
+
+*Why the parent wires its children:* who can message whom is then fixed in the source, so the diagram can draw every arrow. Hardware description languages such as Verilog wire submodules the same way, and the WebAssembly component model, which Inset compiles to, composes component instances in the same order. Actor languages such as Erlang and Akka instead let a handle travel in any message. Their diagrams cannot be drawn from the code, and two calls waiting on each other can deadlock.
+
+*Why lending only goes to later siblings:* a component that waits for a reply then waits only on its own children or on components started before it, which can never wait on it in turn. So the one-at-a-time rule cannot deadlock. The parent still owns the lent child and outlives the sibling it was lent to, so `&` keeps its Rust meaning.
 
 *Why `start name: Component { ... }`:* it reads like `grant name: Capability { ... }`, the other statement that brings something into being, and like a Rust struct literal for the handoffs. `start` marks it as new: a child is a running actor, not a value.
 
@@ -230,12 +237,10 @@ A component's `pub fn` functions are its messages. Its parent sends one by calli
 - Each call becomes a message arrow on the diagram, from the sender to the receiver. Arrows for `send` are drawn differently from those that wait.
 - A message is always awaited or sent with `send`, whether or not the receiving function is `async`.
 - Sending a message needs only `&self`. The receiver changes its own fields in its own handler, so its `&mut self` does not reach back to the sender.
-- A component can send messages only to children it started. Messages to a sibling or a parent are not possible. See [open question 1](open-questions.md).
-- Messages from one sender to one receiver arrive in the order they were sent. The Stock tracker relies on this: a reorder raised with `send` is in the list before a later `pending()` asks for it.
+- A component can send messages to the children it started and to the siblings lent to it (see [Starting components](#starting-components)). It cannot send messages to its parent or to a later sibling. See [open question 1](open-questions.md).
+- A message is in its receiver's mailbox before its sender carries on. So when one message leads to another, even through other components, the first arrives first. The Stock tracker relies on this: `Inventory` raises a reorder with `send` before it replies to `Warehouse`, so a `pending()` that `Warehouse` sends later finds the reorder already raised.
 
 *Why calls look like async method calls:* a message that waits for its reply behaves like an awaited async call, so the familiar syntax keeps its familiar meaning. `send` has no equivalent in Rust, so it gets a keyword.
-
-*Why messages only go down the tree:* the diagram then reads from the outside in, with every arrow pointing to a child. A component that waits for a reply waits only on its descendants, which never wait on it, so the one-at-a-time rule cannot deadlock.
 
 ### Ownership and borrowing
 
@@ -246,7 +251,7 @@ Inset uses Rust's ownership rules: every value has one owner, and a value can be
 | Notation | Meaning | Inside a component | Across a boundary |
 | --- | --- | --- | --- |
 | `move x` | Ownership passes to the receiver, and `x` can no longer be used | Implicit, as in Rust | Required for a value that is not `Copy` |
-| `&x` | The receiver may read `x` until it replies | As in Rust | Allowed only in a message that is awaited |
+| `&x` | The receiver may read `x` until it replies, or use the lent child `x` while it runs | As in Rust | Allowed in a message that is awaited, and for lending a child in `start` |
 | `x`, where `x` is `Copy` | The receiver gets a copy, and the sender keeps `x` | As in Rust | Allowed |
 | `&mut x` | The receiver may change `x` | As in Rust | Never allowed |
 
@@ -255,7 +260,7 @@ A boundary is any place a value leaves a component: a handoff in `start`, and an
 - A place, meaning a variable or a field, that crosses a boundary is written with `move` or `&`, or bare if its type is `Copy`. The compiler rejects a bare place of any other type.
 - Any other expression makes a new value, which simply moves. `Vec::new()`, `"Hello"` and `Reorder { sku, quantity: order }` need no notation.
 - A reply always moves its value, so it needs no notation.
-- `&x` across a boundary is allowed only when the sender awaits the reply, because the sender then outlives the borrow. `send` does not wait, so it can only move or copy.
+- `&x` in a message is allowed only when the sender awaits the reply, because the sender then outlives the borrow. `send` does not wait, so it can only move or copy. `&child` in `start` is allowed because the parent outlives its children.
 - Capabilities are never `Copy` and never lent, so handing one down is always a `move`.
 
 *Why `move` is written at boundaries when Rust leaves it implicit:* the boundary rule is what the diagrams depend on, so that is where a reader must see it. `move` in this position is not Rust syntax, which marks it as an Inset boundary rather than a familiar construct with a new meaning.
@@ -297,7 +302,7 @@ fn add_vat(net: Decimal) -> Decimal {
 ```
 
 - An algorithm at the top level can be called from anywhere, as in CSV import.
-- An algorithm inside a component can be called only by that component, as `Self::name(...)`. Its full name is `Component::name`, as with a Rust associated function. `Warehouse::reorder_quantity` lives in a component that has children, so algorithms are not limited to leaf components.
+- An algorithm inside a component can be called only by that component, as `Self::name(...)`. Its full name is `Component::name`, as with a Rust associated function. As in `Inventory::reorder_quantity`.
 - An algorithm is pure. With no `self`, it cannot reach a capability or a child, and it cannot be `async`. It can call other algorithms and use `fork`.
 
 *Why algorithms are pure:* the flowchart then shows the whole of what the algorithm does, with no effect hidden inside it. An algorithm that needs stored data is given it by the handler that calls it, so the capability edge stays on the component.
@@ -499,7 +504,7 @@ app          = "app" Ident "{" { grant | start } "}" ;
 grant        = "grant" ident ":" type "{" [ fields ] "}" ";" ;
 start        = "start" [ ident ":" ] Ident "{" [ handoffs ] "}" ";" ;
 handoffs     = handoff { "," handoff } [ "," ] ;
-handoff      = ident ":" ( "move" place | expr ) ;
+handoff      = ident ":" ( "move" place | "&" ident | expr ) ;
 
 component    = "component" Ident "{" [ field_decls ] { start } { { doc } function } "}" ;
 function     = [ route_attr ] [ "pub" ] [ "async" ] "fn" ident "(" fn_params ")" [ "->" type ] block ;
