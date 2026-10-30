@@ -9,9 +9,16 @@
     "source=inset-cargo-registry,target=/home/dev/.cargo/registry,type=volume",
     "source=inset-target,target=/home/dev/target,type=volume"
   ],
+  // Packages the Inset extension before VS Code installs the extensions below,
+  // so a new container shows highlighted Inset files straight away. The path
+  // below is where `cargo xtask editor` writes it, under CARGO_TARGET_DIR.
+  "onCreateCommand": "cargo xtask editor",
   "customizations": {
     "vscode": {
-      "extensions": ["rust-lang.rust-analyzer"]
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "/home/dev/target/vscode/inset.vsix"
+      ]
     }
   }
 }

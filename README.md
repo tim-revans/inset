@@ -26,7 +26,7 @@ cargo xtask ci        # format check, clippy, tests, editor grammar tests
 cargo xtask editor    # package the VS Code extension
 ```
 
-Or open the repo in its dev container (`.devcontainer/`), which any [Dev Container](https://containers.dev) client supports. CI runs `cargo xtask ci` in the same image.
+Or open the repo in its dev container (`.devcontainer/`), which any [Dev Container](https://containers.dev) client supports. In VS Code, a new dev container builds and installs the Inset extension, so Inset files are highlighted from the start. CI runs `cargo xtask ci` in the same image.
 
 See `AGENTS.md` for contribution rules.
 

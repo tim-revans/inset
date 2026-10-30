@@ -11,6 +11,8 @@ cargo xtask editor
 code --install-extension target/vscode/inset.vsix
 ```
 
+The repository's dev container does this for you when it is created. After changing the extension, run the two commands again and reload the window.
+
 `cargo xtask editor` needs Node.js and npm. It prints where it wrote the `.vsix`, which is under `$CARGO_TARGET_DIR` when that is set.
 
 ## What it highlights
