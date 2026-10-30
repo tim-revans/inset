@@ -50,7 +50,7 @@ No requirement names a component or an algorithm, yet every branch of the code i
 
 ## Expected diagrams
 
-Sketches of what each review level should show. Stage 3 replaces them with `expected/diagram.json` and rendered SVGs. Solid arrows are messages that wait for a reply. Dashed arrows are messages sent without waiting. A `○` on a box's edge is an outlet.
+Sketches of what each review level should show. Stage 3 replaces them with `expected/diagram.json` and rendered SVGs. Solid arrows are messages that wait for a reply. Dashed arrows are messages sent without waiting. A `○` on a box's edge is an outlet. To fit in text, capability edges are labelled with the field's name only. The default view also shows its type (see [diagrams.md](../../docs/language/diagrams.md)).
 
 **Component view.** `Warehouse` is collapsed, so the `items` edge leaves from it.
 

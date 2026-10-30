@@ -25,7 +25,7 @@ It covers the brief's Hello HTTP row: one component, one route, one requirement 
 
 ## Expected diagram
 
-A sketch of what the component view should show. Stage 3 replaces it with `expected/diagram.json` and a rendered SVG.
+A sketch of what the component view should show. Stage 3 replaces it with `expected/diagram.json` and a rendered SVG. To fit in text, capability edges are labelled with the field's name only. The default view also shows its type (see [diagrams.md](../../docs/language/diagrams.md)).
 
 ```
                      ┌─ HelloHttp ──────────────────────────────────────┐

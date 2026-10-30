@@ -7,7 +7,7 @@ Each construct is marked with its status:
 - **Used**: an example program uses it.
 - **Draft**: planned, but no example uses it yet, so expect it to change.
 
-Unresolved questions live in [`open-questions.md`](open-questions.md). The example programs are in [`examples/`](../../examples/): Hello HTTP, Stock tracker and CSV import.
+How the generated diagrams look is in [`diagrams.md`](diagrams.md). Unresolved questions live in [`open-questions.md`](open-questions.md). The example programs are in [`examples/`](../../examples/): Hello HTTP, Stock tracker and CSV import.
 
 ## Principles
 

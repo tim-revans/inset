@@ -40,7 +40,7 @@ The gross price property only holds for whole numbers of pence. For a net price 
 
 ## Expected diagrams
 
-Sketches of what each review level should show. Stage 3 replaces them with `expected/diagram.json` and rendered SVGs.
+Sketches of what each review level should show. Stage 3 replaces them with `expected/diagram.json` and rendered SVGs. To fit in text, capability edges are labelled with the field's name only. The default view also shows its type (see [diagrams.md](../../docs/language/diagrams.md)).
 
 **Component view.** `Importer` is small, so it is shown expanded. The double-lined box is external: the reviewer sees its interface and its capabilities, which are none, but not its code.
 
