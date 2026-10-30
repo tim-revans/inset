@@ -13,7 +13,7 @@ The compiler is written in Rust and emits Rust. That Rust builds to WebAssembly 
 The syntax is being designed through example programs. Nothing compiles yet.
 
 - [`docs/language/syntax.md`](docs/language/syntax.md) is the syntax reference.
-- [`docs/language/open-questions.md`](docs/language/open-questions.md) lists what is not settled.
+- [`docs/language/diagrams.md`](docs/language/diagrams.md) describes the generated diagrams.
 - [`examples/`](examples/) holds the example programs that pin the syntax down.
 
 ## Building
