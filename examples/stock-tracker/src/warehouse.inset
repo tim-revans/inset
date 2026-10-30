@@ -1,0 +1,105 @@
+/// Tracks stock and raises reorders. Answers HTTP requests from warehouse staff.
+component Warehouse {
+    http: HttpServer,
+    items: Table<String, Item>,
+
+    start inventory: Inventory { items: move items };
+    start reorders: Reorders { orders: Vec::new() };
+
+    /// Replies with the quantity on hand.
+    #[get("/items/{sku}", via = http)]
+    async fn stock(&self, sku: String) -> Option<String> {
+        let item = self.inventory.item(&sku).await?;
+        Some(item.on_hand.to_string())
+    }
+
+    /// Adds stock that has arrived, and replies with the new quantity on hand.
+    #[post("/items/{sku}/receipts", via = http, body = quantity)]
+    async fn receive(&self, sku: String, quantity: u32) -> Option<String> {
+        let item = self.inventory.receive(&sku, quantity).await?;
+        Some(item.on_hand.to_string())
+    }
+
+    /// Takes away stock that has been shipped, and replies with the new quantity on hand.
+    /// Raises a reorder if that leaves stock at or below its reorder level.
+    #[post("/items/{sku}/shipments", via = http, body = quantity)]
+    async fn ship(&self, sku: String, quantity: u32) -> Result<String, ShipError> {
+        let item = self.inventory.ship(&sku, quantity).await?;
+        let order = Self::reorder_quantity(item.on_hand, item.reorder_level, item.target_level);
+        if order > 0 {
+            send self.reorders.raise(Reorder { sku, quantity: order });
+        }
+        Ok(item.on_hand.to_string())
+    }
+
+    /// Lists the reorders waiting to be placed, one per line: the SKU, then the quantity.
+    #[get("/reorders", via = http)]
+    async fn pending_reorders(&self) -> String {
+        let mut text = String::new();
+        for order in self.reorders.pending().await {
+            text.push_str(&format!("{} {}\n", order.sku, order.quantity));
+        }
+        text
+    }
+
+    /// How many to reorder so that stock goes back up to its target level.
+    fn reorder_quantity(on_hand: u32, reorder_level: u32, target_level: u32) -> u32 {
+        if on_hand > reorder_level {
+            0
+        } else {
+            target_level.saturating_sub(on_hand)
+        }
+    }
+}
+
+/// Keeps the stock record of every item.
+component Inventory {
+    items: Table<String, Item>,
+
+    /// The item with this SKU, if there is one.
+    pub async fn item(&self, sku: &String) -> Option<Item> {
+        self.items.get(sku).await
+    }
+
+    /// Adds to an item's stock, and returns the item as it now stands.
+    pub async fn receive(&mut self, sku: &String, quantity: u32) -> Option<Item> {
+        let mut item = self.items.get(sku).await?;
+        item.on_hand += quantity;
+        self.items.insert(sku.clone(), item.clone()).await;
+        Some(item)
+    }
+
+    /// Takes from an item's stock if it holds enough, and returns the item as it now stands.
+    pub async fn ship(&mut self, sku: &String, quantity: u32) -> Result<Item, ShipError> {
+        let Some(mut item) = self.items.get(sku).await else {
+            return Err(ShipError::UnknownItem);
+        };
+        if item.on_hand < quantity {
+            return Err(ShipError::NotEnoughStock);
+        }
+        item.on_hand -= quantity;
+        self.items.insert(sku.clone(), item.clone()).await;
+        Ok(item)
+    }
+}
+
+/// Keeps the reorders waiting to be placed, at most one per item.
+component Reorders {
+    orders: Vec<Reorder>,
+
+    /// Records a reorder, replacing any earlier one for the same item.
+    pub fn raise(&mut self, order: Reorder) {
+        for pending in &mut self.orders {
+            if pending.sku == order.sku {
+                pending.quantity = order.quantity;
+                return;
+            }
+        }
+        self.orders.push(order);
+    }
+
+    /// Every reorder waiting to be placed, oldest first.
+    pub fn pending(&self) -> Vec<Reorder> {
+        self.orders.clone()
+    }
+}

@@ -1,0 +1,67 @@
+requirement "The stock level of an item is its quantity on hand"
+  component Warehouse
+  given items["bolt-m6"] is Item { on_hand: 40, reorder_level: 10, target_level: 50 }
+  when Warehouse receives GET /items/bolt-m6
+  then Warehouse replies OK with "40"
+
+requirement "An item that is not stocked is not found"
+  component Warehouse
+  given items is empty
+  when Warehouse receives GET /items/bolt-m6
+  then Warehouse replies NotFound
+  when Warehouse receives POST /items/bolt-m6/receipts with "20"
+  then Warehouse replies NotFound
+  when Warehouse receives POST /items/bolt-m6/shipments with "5"
+  then Warehouse replies NotFound
+  and items is empty
+
+requirement "Received stock is added to the quantity on hand"
+  component Warehouse
+  given items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
+  when Warehouse receives POST /items/bolt-m6/receipts with "20"
+  then Warehouse replies OK with "23"
+  and items["bolt-m6"] is Item { on_hand: 23, reorder_level: 10, target_level: 50 }
+
+requirement "Shipping takes the shipped quantity off the quantity on hand"
+  component Inventory
+  given items["bolt-m6"] is Item { on_hand: 40, reorder_level: 10, target_level: 50 }
+  when Inventory receives ship("bolt-m6", 5)
+  then Inventory replies Ok(Item { on_hand: 35, reorder_level: 10, target_level: 50 })
+  and items["bolt-m6"] is Item { on_hand: 35, reorder_level: 10, target_level: 50 }
+
+requirement "Shipping more than the quantity on hand is refused and changes nothing"
+  component Warehouse
+  given items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
+  when Warehouse receives POST /items/bolt-m6/shipments with "5"
+  then Warehouse replies Conflict
+  and items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
+
+requirement "Stock is reordered once it falls to its reorder level"
+  component Warehouse
+  given items["bolt-m6"] is Item { on_hand: 15, reorder_level: 10, target_level: 50 }
+  when Warehouse receives POST /items/bolt-m6/shipments with "4"
+  then Warehouse replies OK with "11"
+  when Warehouse receives GET /reorders
+  then Warehouse replies OK with ""
+  when Warehouse receives POST /items/bolt-m6/shipments with "1"
+  then Warehouse replies OK with "10"
+  when Warehouse receives GET /reorders
+  then Warehouse replies OK with "bolt-m6 40\n"
+
+requirement "A new reorder for an item replaces its earlier one"
+  component Warehouse
+  given items["bolt-m6"] is Item { on_hand: 12, reorder_level: 10, target_level: 50 }
+  when Warehouse receives POST /items/bolt-m6/shipments with "2"
+  then Warehouse replies OK with "10"
+  when Warehouse receives POST /items/bolt-m6/shipments with "4"
+  then Warehouse replies OK with "6"
+  when Warehouse receives GET /reorders
+  then Warehouse replies OK with "bolt-m6 44\n"
+
+requirement "Stock at or below its reorder level is topped up to its target level"
+  algorithm Warehouse::reorder_quantity
+  | on_hand | reorder_level | target_level | quantity to order |
+  | 11      | 10            | 50           | 0                 |
+  | 10      | 10            | 50           | 40                |
+  | 0       | 10            | 50           | 50                |
+  | 10      | 10            | 5            | 0                 |

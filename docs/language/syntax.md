@@ -7,7 +7,7 @@ Each construct is marked with its status:
 - **Used**: an example program uses it.
 - **Draft**: planned, but no example uses it yet, so expect it to change.
 
-Unresolved questions live in [`open-questions.md`](open-questions.md).
+Unresolved questions live in [`open-questions.md`](open-questions.md). The example programs are in [`examples/`](../../examples/): Hello HTTP, Stock tracker and CSV import.
 
 ## Principles
 
@@ -16,8 +16,9 @@ An AI writes Inset source, and a human reviews the diagrams and requirement test
 - **Lean on what models already know.** Code is shaped like Rust, which the compiler emits anyway and which language models have seen a great deal of. Requirement tests are shaped like Given/When/Then, which reads as English.
 - **Familiar syntax keeps its familiar meaning.** Anything that looks like Rust means what it means in Rust. A construct that looked like Rust but behaved differently would pull a model into Rust habits that are wrong here.
 - **New concepts look new.** Rust has no components, capabilities, apps or requirements, so these get their own keywords, which a model cannot mistake for Rust.
-- **Data flow is written down.** Every value or capability that crosses a component boundary says whether it is moved or lent, so the diagram can label each arrow truthfully.
-- **Capabilities have one origin.** Capabilities enter the program only through the app's `grant` statements, and reach components only by being handed down, so every external access appears as a diagram edge.
+- **Data flow is written down.** Every value or capability that crosses a component boundary says whether it is moved, lent or copied, so the diagram can label each arrow truthfully.
+- **Capabilities have one origin and one holder.** Capabilities enter the program only through the app's `grant` statements, reach components only by being moved down, and are held by one component at a time, so every external access appears as exactly one diagram edge.
+- **Structure is a tree.** Components nest, and a component sends messages only to the children it started. The diagram reads from the outside in, and no two components can end up waiting on each other.
 
 ## Two dialects
 
@@ -26,7 +27,7 @@ An AI writes Inset source, and a human reviews the diagrams and requirement test
 | Code | `*.inset` | Rust: braces, semicolons, Rust's types and expressions | The AI that writes it |
 | Requirements | `*.req.inset` | Given/When/Then: one step per line, indented under the requirement | The software engineer who reviews it |
 
-A program is a directory of UTF-8 files of both kinds. All the files form one namespace, with no imports. The file name decides the dialect, so the two block styles never mix in one file.
+A program is a directory of UTF-8 files of both kinds. All the files form one namespace, with no imports. The file name decides the dialect, so the two block styles never mix in one file. The Stock tracker splits its code across two files.
 
 *Why two dialects:* each one is matched to its reader. Braces suit code, where a model writes them reliably and whitespace mistakes cannot change the meaning. Prose suits requirements, which a person must be able to read without knowing the code.
 
@@ -36,23 +37,30 @@ A program is a directory of UTF-8 files of both kinds. All the files form one na
 
 The code dialect uses Rust's lexical rules: identifiers, integer and string literals, `//` line comments, `/* */` block comments, and `///` doc comments on the item below.
 
-- Doc comments become the descriptions shown on diagram elements.
+- Doc comments become the descriptions shown on diagram elements. They may go on items, fields, functions and enum variants.
 - String literals do not interpolate, as in Rust. Build text with `format!`.
-- Inset adds these keywords to Rust's: `app`, `component`, `grant`, `start`, `send`. *(`send` is Draft.)*
+- Inset adds these keywords to Rust's: `app`, `component`, `grant`, `start`, `send`, `fork`. It also gives Rust's `extern` a new use, in `extern component`.
+
+### What Inset keeps from Rust
+
+Inside a function body, Inset is Rust. The examples use `let`, `let ... else`, `if` and `else`, `match` with guards, `for` loops over a `Vec` or a borrowed `Vec`, `return`, the `?` operator, tuples, struct literals with field shorthand, indexing, compound assignment, and method calls on the standard types, such as `to_string`, `clone`, `push_str`, `parse::<Decimal>()` and `saturating_sub`.
 
 ### Rust features Inset leaves out
 
-Inset is not all of Rust. Where a model reaches for a Rust feature Inset does not have, the compiler rejects it with an error that names the Inset alternative. Some of these are:
+Where a model reaches for a Rust feature Inset does not have, the compiler rejects it with an error that names the Inset alternative.
 
-| Rust feature | Why Inset leaves it out |
-| --- | --- |
-| `unsafe` | Generated code must stay within what the diagrams can show |
-| Lifetimes | Borrows across boundaries are limited to cases the compiler can check without them |
-| `static`, global state | Shared state outside a component is an invisible data flow |
-| Macros, apart from `format!` and `dec!` | Code generated by a macro has no source the diagram can point to |
-| `std` I/O, threads and networking | All effects go through capabilities |
+| Rust feature | Inset alternative | Why Inset leaves it out |
+| --- | --- | --- |
+| `unsafe` | None | Generated code must stay within what the diagrams can show |
+| Lifetimes | Boundary notation (`move`, `&`) | Borrows across boundaries are limited to cases the compiler can check without them |
+| `static`, global state | A component's fields | Shared state outside a component is an invisible data flow |
+| Macros, apart from `format!` and `dec!` | Functions | Code generated by a macro has no source the diagram can point to |
+| `std` I/O, threads and networking | Capabilities, `fork` | All effects go through capabilities |
+| `impl` blocks and traits | Component functions, top-level algorithms | Every function has one place on the diagram: in a component, or at the top level. `#[derive]` supplies the standard traits |
+| Closures | `for` loops, named algorithms | A closure captures its surroundings without saying so, which is a data flow the diagram cannot label |
+| Generic items | Concrete types | Diagram arrows are labelled with concrete types. The standard generic types, such as `Vec<T>`, can still be used |
 
-The full list is settled as the examples grow. See [open question 6](open-questions.md).
+Iterator adaptors such as `map` and `filter` take closures, so they are out with them. The full list is settled as the examples grow. See [open question 5](open-questions.md).
 
 ### App
 
@@ -61,17 +69,18 @@ The full list is settled as the examples grow. See [open question 6](open-questi
 An app is the root of a program. It names the capabilities the host must grant, and it starts the top-level components. A program has exactly one app.
 
 ```rust
-app HelloHttp {
+app StockTracker {
     grant http: HttpServer { port: 8080 };
-    start Greeter { http: move http };
+    grant items: Table<String, Item> { file: "stock.db", name: "items" };
+    start Warehouse { http: move http, items: move items };
 }
 ```
 
 - `grant name: Capability { fields };` asks the host for a capability and binds it to `name`. The fields configure it, such as the port to listen on.
-- `start Component { fields };` starts a component and hands it what it holds. Each field says how its value crosses the boundary (see [Ownership and borrowing](#ownership-and-borrowing)). `let name = start Component { ... };` also binds the running component so the app can send it messages. *(Draft.)*
+- `start Component { handoffs };` starts a component and hands it its fields (see [Starting components](#starting-components)).
 - `grant` is the only way to create a capability. It may appear only in an app.
 
-*Why an app separate from components:* the security-relevant facts of a program, which is everything it can touch outside itself, sit in one short block that the diagram draws as the outer boundary.
+*Why an app separate from components:* the security-relevant facts of a program, which is everything it can touch outside itself, sit in one short block that the diagram draws as the outer boundary. All three examples keep the app to a few lines of grants and starts. An app has no functions, so it cannot grow logic that hides among the grants.
 
 ### Component
 
@@ -80,37 +89,85 @@ app HelloHttp {
 A component is an actor. It runs concurrently with other components, holds its own state, and talks to the outside only through messages and the capabilities it was handed.
 
 ```rust
-/// Greets visitors by name.
-component Greeter {
-    http: HttpServer,
+/// Keeps the reorders waiting to be placed, at most one per item.
+component Reorders {
+    orders: Vec<Reorder>,
 
-    /// Replies with a greeting for the name in the path.
-    #[get("/hello/{name}", via = http)]
-    fn hello(name: String) -> String {
-        format!("Hello, {name}!")
+    /// Records a reorder, replacing any earlier one for the same item.
+    pub fn raise(&mut self, order: Reorder) { ... }
+
+    /// Every reorder waiting to be placed, oldest first.
+    pub fn pending(&self) -> Vec<Reorder> {
+        self.orders.clone()
     }
 }
 ```
 
-- A component's fields come first, written like a Rust struct's fields. They hold the capabilities it was handed and its state. It holds nothing else.
-- Its functions come after the fields. Each function is one of:
-  - a **route handler**: a function with a route attribute (see [Routes](#routes));
-  - a **message handler**: a `pub fn`, which other components can call by sending a message *(Draft)*;
-  - an **algorithm**: any other function, which only this component can call, and whose body becomes a flowchart *(Draft)*.
-- Functions take `&self` or `&mut self` to read or change the component's fields, as Rust methods do. A function that touches no field takes neither.
-- Components nest to any depth. A parent starts its children and hands them capabilities it holds. *(Draft: Stage 2 settles where a parent's `start` statements go.)*
+A component's body has three parts, in this order:
 
-### Capability
+1. **Fields**, written like a Rust struct's fields. They hold the capabilities it was handed and its state. Whoever starts the component supplies every field.
+2. **`start` statements**, which start its children (see [Starting components](#starting-components)).
+3. **Functions.** Each one is exactly one of:
+   - a **route handler**: a function with a route attribute (see [Routes](#routes));
+   - a **message handler**: a `pub fn`, which the component's parent can call by sending a message (see [Messages](#messages-between-components));
+   - an **algorithm**: any other function, which takes no `self` (see [Algorithms](#algorithms)).
 
-**Status:** Used (`HttpServer`). Declaring new capability types is Draft.
+- Handlers take `&self` or `&mut self` to read or change the component's fields, as Rust methods do. A handler that touches no field takes neither, like Hello HTTP's `hello`.
+- A function without a route attribute or `pub` that takes `self` is an error. Code shared between handlers goes in an algorithm.
+- A handler that waits for anything, such as a message reply or a capability call, is an `async fn`, as in Rust.
+- A component handles one message or request at a time, in the order they arrive.
 
-A capability is an owned handle to something outside the program, such as a network listener or a database. Capabilities cannot be copied or cloned. A component can use only the capabilities in its fields.
+### Starting components
+
+**Status:** Used.
+
+A `start` statement starts a component and supplies each of its fields. It is the same in an app and in a component.
+
+```rust
+component Warehouse {
+    http: HttpServer,
+    items: Table<String, Item>,
+
+    start inventory: Inventory { items: move items };
+    start reorders: Reorders { orders: Vec::new() };
+    ...
+}
+```
+
+- `start name: Component { handoffs };` starts a child and binds it to `name`. Its functions reach the child as `self.name`, which is a handle for sending it messages.
+- `start Component { handoffs };` starts a child that nothing sends messages to, such as one that only serves routes.
+- Each handoff supplies one field of the child, and says how its value crosses the boundary (see [Ownership and borrowing](#ownership-and-borrowing)).
+- In a component, a handoff can name the component's own fields. A field moved into a child belongs to the child, and the component's functions can no longer use it. `Warehouse` holds `items` only to hand it to `Inventory`.
+- A component's children start before it handles anything, and stop after it stops.
+- A component started by a parent is nested inside the parent on the diagram. The app's children are the top-level components.
+
+*Why `start name: Component { ... }`:* it reads like `grant name: Capability { ... }`, the other statement that brings something into being, and like a Rust struct literal for the handoffs. `start` marks it as new: a child is a running actor, not a value.
+
+### Capabilities
+
+**Status:** Used.
+
+A capability is an owned handle to something outside the program, such as a network listener or a stored table. Capabilities cannot be copied, cloned or lent. A component can use only the capabilities in its fields.
 
 | Capability | Granted with | Gives the holder |
 | --- | --- | --- |
 | `HttpServer` | `HttpServer { port: u16 }` | Incoming HTTP requests on the port, answered by route handlers |
+| `Table<K, V>` | `Table<K, V> { file: String, name: String }` | A stored map from keys of type `K` to values of type `V`, kept in the table `name` of the database file `file` |
 
-The standard library and external components declare capability types. *(Draft: Stage 2 settles the declaration form, with the database capability.)*
+A program cannot declare its own capability types. A capability is something the host grants and enforces, so only the host can provide one. The standard library declares those above.
+
+**Calling a capability.** A capability's methods are async Rust methods, called with the usual Rust rules: `self.items.get(sku).await`. Their arguments are not component boundaries, so they need no boundary notation. The diagram shows one edge per capability, labelled with the operations used.
+
+| `Table<K, V>` method | Does |
+| --- | --- |
+| `get(&self, key: &K) -> Option<V>` | Reads the value stored under `key` |
+| `insert(&mut self, key: K, value: V)` | Stores `value` under `key`, replacing any value already there |
+| `remove(&mut self, key: &K) -> Option<V>` | Removes and returns the value under `key` *(Draft)* |
+| `entries(&self) -> Vec<(K, V)>` | Every key and value, in key order *(Draft)* |
+
+`K` and `V` must be data types: they cannot hold capabilities or component handles.
+
+*Why capabilities are never lent:* a lent capability would give two components the same database, and the diagram would show two edges to it with no way to say which writes what. With one holder, any component that needs the data asks the holder by message, so the holder is the single place to review all access to that system. In the Stock tracker, only `Inventory` touches `items`.
 
 ### Routes
 
@@ -119,79 +176,176 @@ The standard library and external components declare capability types. *(Draft: 
 A route attribute turns a component function into an HTTP route handler. The attribute style follows Rust web frameworks such as actix-web and Rocket.
 
 ```rust
-#[get("/hello/{name}", via = http)]
-fn hello(name: String) -> String {
-    format!("Hello, {name}!")
+#[post("/items/{sku}/shipments", via = http, body = quantity)]
+async fn ship(&self, sku: String, quantity: u32) -> Result<String, ShipError> {
+    ...
 }
 ```
 
 - The attributes are `get`, `post`, `put`, `patch` and `delete`, one for each HTTP method.
 - `via = field` names the `HttpServer` capability the requests arrive through. It is always required.
-- A path segment in `{` `}` is a path parameter. It binds to the function parameter of the same name, and takes that parameter's type. The compiler rejects a path parameter with no matching function parameter, and a function parameter that nothing supplies.
-- Each path segment is URL-decoded before it is converted to the parameter's type. A request whose path or parameter types match no route gets `404 Not Found` without reaching a handler.
-- The return type decides the response. `String` replies `200 OK` with a `text/plain; charset=utf-8` body. Other return types, status codes and JSON are settled in later stages.
+- A path segment in `{` `}` is a path parameter. It binds to the function parameter of the same name, and takes that parameter's type.
+- `body = name` binds the request body to the function parameter `name`. The body is read as UTF-8 text and converted to the parameter's type as a path segment is, so a `u32` body is the digits of the number.
+- The compiler rejects a path parameter or `body` with no matching function parameter, and a function parameter that nothing supplies.
+- Each path segment is URL-decoded before it is converted to the parameter's type. A request whose path or parameter types match no route gets `404 Not Found` without reaching a handler. A body that cannot be converted gets `400 Bad Request`.
 - The function's value is the reply, as with any Rust function: its final expression, or a `return`.
+
+The return type decides the response:
+
+| Return type | Response |
+| --- | --- |
+| `String` | `200 OK` with the string as a `text/plain; charset=utf-8` body |
+| `Option<String>` | `Some` as for `String`. `None` replies `404 Not Found` with an empty body |
+| `Result<String, E>` | `Ok` as for `String`. `Err` replies with the status named on the error's variant |
+
+The error type `E` is an enum whose every variant has a `#[status(Name)]` attribute, using the status names of the requirements dialect. A unit variant replies with an empty body. A variant holding one `String` replies with that string as the body.
+
+```rust
+enum ShipError {
+    #[status(NotFound)]
+    UnknownItem,
+    #[status(Conflict)]
+    NotEnoughStock,
+}
+```
+
+JSON bodies and headers are settled in later stages. See [open question 6](open-questions.md).
 
 *Why `via` is required:* the capability is the source of the diagram arrow, so it is always written down. It also lets a component hold two servers, such as a public one and an admin one.
 
+*Why statuses are attributes on the error type:* the same enum is often both a message's error and a route's, as `ShipError` is. The `?` operator then carries an error from a child straight to the HTTP reply, and the status sits next to the variant that means it.
+
 ### Messages between components
 
-**Status:** Draft. First used by the Stock tracker example.
+**Status:** Used.
 
-A component's `pub fn` functions are its messages. Calling one on another component sends that component a message.
+A component's `pub fn` functions are its messages. Its parent sends one by calling it through the child's handle.
 
 | Form | Meaning |
 | --- | --- |
-| `self.inventory.get_stock(&sku).await` | Send a message, wait for the reply, and evaluate to it |
-| `send self.log.record(move entry);` | Send a message and carry on without waiting. The function must return nothing |
+| `self.inventory.ship(&sku, quantity).await` | Send a message, wait for the reply, and evaluate to it |
+| `send self.reorders.raise(order);` | Send a message and carry on without waiting. The function must return nothing |
 
-Each call becomes a message arrow on the diagram, from the sender to the receiver.
+- Each call becomes a message arrow on the diagram, from the sender to the receiver. Arrows for `send` are drawn differently from those that wait.
+- A message is always awaited or sent with `send`, whether or not the receiving function is `async`.
+- Sending a message needs only `&self`. The receiver changes its own fields in its own handler, so its `&mut self` does not reach back to the sender.
+- A component can send messages only to children it started. Messages to a sibling or a parent are not possible. See [open question 1](open-questions.md).
+- Messages from one sender to one receiver arrive in the order they were sent. The Stock tracker relies on this: a reorder raised with `send` is in the list before a later `pending()` asks for it.
 
 *Why calls look like async method calls:* a message that waits for its reply behaves like an awaited async call, so the familiar syntax keeps its familiar meaning. `send` has no equivalent in Rust, so it gets a keyword.
 
+*Why messages only go down the tree:* the diagram then reads from the outside in, with every arrow pointing to a child. A component that waits for a reply waits only on its descendants, which never wait on it, so the one-at-a-time rule cannot deadlock.
+
 ### Ownership and borrowing
 
-**Status:** `move` is Used. `&` and `&mut` are Draft.
+**Status:** Used.
 
 Inset uses Rust's ownership rules: every value has one owner, and a value can be lent out by borrowing. Inside a component, the notation is Rust's and moves are implicit. At a boundary, the notation is required.
 
 | Notation | Meaning | Inside a component | Across a boundary |
 | --- | --- | --- | --- |
-| `move x` | Ownership passes to the receiver, and `x` can no longer be used | Implicit, as in Rust | Required |
+| `move x` | Ownership passes to the receiver, and `x` can no longer be used | Implicit, as in Rust | Required for a value that is not `Copy` |
 | `&x` | The receiver may read `x` until it replies | As in Rust | Allowed only in a message that is awaited |
+| `x`, where `x` is `Copy` | The receiver gets a copy, and the sender keeps `x` | As in Rust | Allowed |
 | `&mut x` | The receiver may change `x` | As in Rust | Never allowed |
 
-A boundary is any place a value leaves a component: a field of `start`, and an argument of a message to another component.
+A boundary is any place a value leaves a component: a handoff in `start`, and an argument of a message to another component.
 
-- Every value that crosses a boundary is written with `move` or `&`. The compiler rejects a bare name there.
+- A place, meaning a variable or a field, that crosses a boundary is written with `move` or `&`, or bare if its type is `Copy`. The compiler rejects a bare place of any other type.
+- Any other expression makes a new value, which simply moves. `Vec::new()`, `"Hello"` and `Reorder { sku, quantity: order }` need no notation.
 - A reply always moves its value, so it needs no notation.
-- Literals and values built in place, such as `"Hello"` or `Stock { quantity: 40 }`, are new values, so they need no notation.
-- `&x` across a boundary is allowed only when the sender awaits the reply, because the sender then outlives the borrow. `send` does not wait, so it can only move.
-- Capabilities cannot be copied, so handing one down is always a `move`.
+- `&x` across a boundary is allowed only when the sender awaits the reply, because the sender then outlives the borrow. `send` does not wait, so it can only move or copy.
+- Capabilities are never `Copy` and never lent, so handing one down is always a `move`.
 
 *Why `move` is written at boundaries when Rust leaves it implicit:* the boundary rule is what the diagrams depend on, so that is where a reader must see it. `move` in this position is not Rust syntax, which marks it as an Inset boundary rather than a familiar construct with a new meaning.
 
+*Why `Copy` values cross bare:* a copy shares nothing, so it cannot hide a data flow. Writing `move quantity` for a number the sender goes on using would be untrue, and Rust itself copies such values silently. The diagram labels the arrow as a copy. Whether a type is `Copy` is decided as in Rust, by `#[derive(Clone, Copy)]` on its own types.
+
 ### Types
 
-**Status:** `String` is Used. The rest is Draft.
+**Status:** Used.
 
-Inset uses Rust's names for the types it supports: `bool`, the integer types, `String`, `Option`, `Result`, `Vec`, `struct` and `enum`. It adds `Decimal`, an exact decimal number for money and quantities, written with the `dec!` macro as in the `rust_decimal` crate: `dec!(1.20)`.
-
-### Algorithms
-
-**Status:** Draft. First used by the Stock tracker example.
-
-An algorithm is a function, written as in Rust. It can live in a component or at the top level, and its body becomes a flowchart.
+Inset uses Rust's names for the types it supports: `bool`, the integer types, `String`, tuples, `Option`, `Result`, `Vec`, `struct` and `enum`. It adds `Decimal`, an exact decimal number for money and quantities, written with the `dec!` macro as in the `rust_decimal` crate: `dec!(1.20)`. Its methods are those of `rust_decimal`, such as `scale` and `round_dp`.
 
 ```rust
-fn add_vat(net: Decimal) -> Decimal {
-    net * dec!(1.20)
+/// A stocked item, stored under its SKU.
+#[derive(Clone, Debug, PartialEq)]
+struct Item {
+    /// How many the warehouse holds.
+    on_hand: u32,
+    ...
 }
 ```
 
+- `struct` and `enum` are declared at the top level, as in Rust.
+- `#[derive(...)]` may list `Clone`, `Copy`, `Debug`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash` and `Default`. These are the only traits a type can have.
+- A type compared in a requirement step must derive `PartialEq` and `Debug`, so that a failed test can show both values.
+- The compiler decides how a stored type is written to a `Table`. No derive is needed for it.
+
+### Algorithms
+
+**Status:** Used.
+
+An algorithm is a function that takes no `self`, written as in Rust. Its body becomes a flowchart.
+
+```rust
+/// Adds VAT at 20%, rounded to the nearest penny.
+fn add_vat(net: Decimal) -> Decimal {
+    (net * dec!(1.20)).round_dp(2)
+}
+```
+
+- An algorithm at the top level can be called from anywhere, as in CSV import.
+- An algorithm inside a component can be called only by that component, as `Self::name(...)`. Its full name is `Component::name`, as with a Rust associated function. `Warehouse::reorder_quantity` lives in a component that has children, so algorithms are not limited to leaf components.
+- An algorithm is pure. With no `self`, it cannot reach a capability or a child, and it cannot be `async`. It can call other algorithms and use `fork`.
+
+*Why algorithms are pure:* the flowchart then shows the whole of what the algorithm does, and table and property tests need no fake capabilities. An algorithm that needs stored data is given it by the handler that calls it, so the capability edge stays on the component.
+
+### Structured concurrency
+
+**Status:** `fork for` is Used. `fork { ... }` is Draft.
+
+`fork` runs work concurrently and waits for all of it to finish before going on. The fork and its join appear on the flowchart.
+
+```rust
+let results = fork for row in rows {
+    parse_row(row)
+};
+```
+
+- `fork for pattern in collection { body }` runs the body once for each element, concurrently, and evaluates to a `Vec` of the body's values in the order of the collection.
+- `fork { a, b, ... }` runs each expression concurrently and evaluates to a tuple of their values. *(Draft: first needed by a handler that awaits two children at once.)*
+- The branches follow Rust's rules for scoped threads: they may share borrowed data, but none may change data the others can see.
+- `fork` can be used in algorithms and in handlers. In a handler, its branches may await messages.
+
+*Why `fork` is a keyword:* Rust's structured concurrency, such as `std::thread::scope` and `join!`, uses closures and macros, which Inset leaves out. Concurrency is also what a reviewer most needs to see on a flowchart, so it gets syntax that looks new. `fork for` reads like the `for` loop it parallelises.
+
+### External components
+
+**Status:** Used for Rust crates. WebAssembly components are Draft.
+
+An external component is written in another language. Inset declares its messages and capabilities, and the diagram shows it as an opaque box with its interface.
+
+```rust
+/// Reads CSV text with the `csv` crate. Holds no capabilities, so it can only compute.
+#[rust(path = "csv_reader.rs", crates = ["csv@1.3"])]
+extern component CsvReader {
+    /// Reads every row after the header line, whatever number of fields it has.
+    pub fn read(&self, text: &String) -> Vec<Row>;
+}
+```
+
+- `extern component` declares a component with no Inset body. As in a Rust `extern` block, its functions are signatures ending in `;`.
+- Its fields are the capabilities it holds, as in any component. `CsvReader` has none. *(Draft: an external component with capabilities.)*
+- `#[rust(path = ..., crates = [...])]` names the Rust file that implements it, relative to the file declaring it, and the crates that file may use, as `name@version`.
+- The Rust file defines a type with the component's name and the declared functions. It may use the Inset types of the program, such as `Row`. The compiler checks it against the declaration. *(Draft: stage 13 fixes the exact Rust interface. See [open question 8](open-questions.md).)*
+- An external component is started, sent messages and tested like any component.
+
+*Why `extern`:* in Rust, `extern` declares something whose body is written elsewhere, which is what this is. `component` after it says what kind of thing is declared.
+
 ## Requirements dialect
 
-**Status:** The `when` / `then` form is Used. `given`, tables and properties are Draft.
+**Status:** Used.
 
 Each requirement is exactly one test. The test opens with the requirement as a sentence, then names its subject, then states the behaviour.
 
@@ -202,48 +356,99 @@ requirement "Visitors are greeted by the name in the web address"
   then Greeter replies OK with "Hello, Ada!"
 ```
 
-**Layout.** A requirement starts at the left margin. Its lines are indented under it by two spaces, one line per step. Tabs are an error. `//` starts a comment.
+**Layout.** A requirement starts at the left margin. Its lines are indented under it by two spaces, one line per step. A step continues onto following lines that are indented further, as in the `CsvReader` requirement. Tabs are an error. `//` starts a comment.
 
 **Name.** The text after `requirement` is the requirement. It is unique in the program, and it is what test reports show.
 
-**Subject.** The first line is either `component Name` or `algorithm name`. A component is tested as a black box: the test can only send it messages and requests, and observe what it replies and what it does through its capabilities. The test starts the component with fake capabilities.
+**Subject.** The first line is one of:
 
-**Steps.** The compiler resolves every step against the program, so a step that names an unknown message, route or capability is a compile error, not a test failure.
+- `component Name`. The component is tested as a black box: the test can only send it messages and requests, and observe what it replies and what its capabilities hold. The test starts it with a fake for each capability field. Its children start for real, from its own `start` statements, and receive the fakes it hands them. So a test of `Warehouse` also exercises `Inventory` and `Reorders`. An external component is tested the same way. A component with fields that are not capabilities cannot be a subject yet. See [open question 10](open-questions.md).
+- `algorithm name`, or `algorithm Component::name` for an algorithm inside a component. The body is then a table or a property.
 
-| Step | Meaning | Status |
-| --- | --- | --- |
-| `given <capability> <fact>` | Sets up the state of a fake capability before the test | Draft |
-| `when Component receives message(args)` | Delivers a message to the subject | Draft |
-| `when Component receives METHOD /path` | Delivers an HTTP request to the subject | Used |
-| `then Component replies value` | The subject's reply equals `value` | Draft |
-| `then Component replies Status with value` | The subject's HTTP response has the status, and its body equals `value` | Used |
-| `and ...` | Repeats the kind of the step before it | Draft |
+### Steps
 
-- The path in an HTTP step is written without quotes, as it would appear in a browser's address bar.
-- HTTP statuses are written with their standard names in `UpperCamelCase`, such as `OK`, `NotFound` and `BadRequest`.
+The compiler resolves every step against the program, so a step that names an unknown message, route or capability is a compile error, not a test failure.
+
+| Step | Meaning |
+| --- | --- |
+| `given <fact>` | Sets up the state of a fake capability before the test |
+| `when Component receives message(args)` | Delivers a message to the subject |
+| `when Component receives METHOD /path` | Delivers an HTTP request to the subject |
+| `when Component receives METHOD /path with body` | Delivers an HTTP request with a body |
+| `then Component replies value` | The subject's reply to the message equals `value` |
+| `then Component replies Status` | The subject's HTTP response has the status and an empty body |
+| `then Component replies Status with body` | The subject's HTTP response has the status, and its body equals `body` |
+| `then <fact>` | A fake capability holds this state now |
+| `and ...` | Repeats the kind of the step before it |
+
+- Steps run in order. A requirement may have several `when` steps, each followed by the `then` steps that check it, as in "Stock is reordered once it falls to its reorder level".
+- A fake capability starts empty, so `given items is empty` states the default. It is written when the empty state is part of the requirement.
+- When the subject holds more than one `HttpServer`, the `when` step names the one to use: `when Greeter receives GET /hello/Ada via http`. *(Draft.)*
+
+**Messages.** A message step names the message exactly as declared, with its arguments as values: `when Inventory receives ship("bolt-m6", 5)`. The test lends or moves each argument as the message's parameter types require.
+
+*Why message steps use the declared name:* reviewers are software engineers, and the step is resolved by the compiler. Any friendlier spelling, such as `GetStock`, would need a mapping that is glue code under another name. The plain-English part of a requirement is its sentence.
+
+**HTTP.** The path is written without quotes, as it would appear in a browser's address bar. Statuses are written with their standard names in `UpperCamelCase`, such as `OK`, `NotFound`, `Conflict` and `BadRequest`. A `then` after an HTTP request expects a status; a `then` after a message expects a value.
 
 *Why HTTP steps use HTTP terms:* requirements are reviewed by software engineers, so steps use the precise terms of the boundary they test. At an HTTP boundary, the method and the status are often the requirement itself, such as a missing item giving `NotFound`. Plain verbs such as "asks for" would hide them behind a vocabulary the reviewer has to learn anyway. The plain-English part of a requirement is its sentence, which is what test reports show.
-- Values in steps, such as `"Hello, Ada!"`, are written as Rust literals.
-- When the subject holds more than one `HttpServer`, the `when` step names the one to use: `when Greeter receives GET /hello/Ada via http`.
 
-**Tables.** *(Draft.)* A requirement with several cases lists them in a table. Each column named after a parameter is an input. The one remaining column is the expected result, and its heading is free text. Each row is one case.
+### Capability facts
+
+A fact states what a fake capability holds. The capability is named by the subject's field. Each capability type defines the facts that can be stated about it, in a fixed form, so no phrase needs glue code.
+
+| Capability | Fact | Meaning |
+| --- | --- | --- |
+| `Table<K, V>` | `name[key] is value` | The table holds `value` under `key` |
+| `Table<K, V>` | `name is empty` | The table holds nothing |
+| `HttpServer` | None | Its requests and replies are the `when` and `then` steps |
+
+The same fact sets up state after `given`, and checks it after `then`. Facts after `then` are how a requirement observes what the subject did through its capabilities, such as `and items["bolt-m6"] is Item { on_hand: 35, ... }`. A subject can send messages only to its own children, which run inside the test, so capabilities and replies are everything it can do that a test could observe.
+
+*Why facts look like indexing:* `items["bolt-m6"]` is how a Rust programmer reads one entry of a map, and `is` reads as a statement of fact both when setting up and when checking.
+
+### Values
+
+Values in steps, tables and facts are written as Rust literals and constructors: `"Hello, Ada!"`, `40`, `Some(12.50)`, `Ok(Item { ... })` and `[Row { ... }, ...]`.
+
+- A value takes the type the program expects in that place. `"M6 bolt"` is a `String` in a `String` field, `0.10` is a `Decimal` in a `Decimal` field, and `[...]` is a `Vec`.
+- An HTTP body is text. It is written as a string literal, or as a text block.
+
+**Text blocks.** A body that spans lines is written as a text block, after `with` at the end of the step's line. The block starts and ends with `"""` on lines of their own, indented under the step. Each line between them is one line of the text, ending in a newline, with the block's indentation removed. Text blocks come from Gherkin's doc strings.
 
 ```
-requirement "VAT is added at 20%"
+  when Importer receives POST /price-lists with
+    """
+    sku,name,net
+    bolt-m6,M6 bolt,0.10
+    """
+```
+
+### Tables
+
+A requirement with several cases lists them in a table. Each column named after a parameter is an input. The one remaining column is the expected result, and its heading is free text. Each row is one case, and the report shows each row's result.
+
+```
+requirement "Stock at or below its reorder level is topped up to its target level"
+  algorithm Warehouse::reorder_quantity
+  | on_hand | reorder_level | target_level | quantity to order |
+  | 11      | 10            | 50           | 0                 |
+  | 10      | 10            | 50           | 40                |
+```
+
+### Properties
+
+A rule that holds for every input is written with `for all`, and the compiler generates the inputs. The `where` condition limits the inputs, and the indented line below is the property itself. Both are Rust expressions, so they follow Rust's typing, as in `dec!(0)`.
+
+```
+requirement "The gross price of a whole number of pence is never below the net price"
   algorithm add_vat
-  | net    | gross  |
-  | 100.00 | 120.00 |
-  | 0.00   | 0.00   |
-```
-
-**Properties.** *(Draft.)* A rule that holds for every input is written with `for all`, and the compiler generates the inputs. The condition is a Rust expression.
-
-```
-requirement "Gross price is never below net price"
-  algorithm add_vat
-  for all net: Decimal where net >= 0
+  for all net: Decimal where net >= dec!(0) && net.scale() <= 2
     add_vat(net) >= net
 ```
+
+- `for all a: A, b: B where ...` generates several inputs. *(Draft.)*
+- A property that fails reports the smallest input it found that breaks it.
 
 ## Grammar of the used subset
 
@@ -253,42 +458,72 @@ Code dialect (`*.inset`):
 
 ```
 program      = { item } ;
-item         = { doc } ( app | component ) ;
+item         = { doc } ( app | component | extern_comp | struct | enum | algorithm ) ;
 
-app          = "app" Ident "{" { app_stmt } "}" ;
-app_stmt     = ( grant | start ) ";" ;
-grant        = "grant" ident ":" Ident "{" [ fields ] "}" ;
-start        = "start" Ident "{" [ handoffs ] "}" ;
-handoff      = ident ":" ( "move" | "&" ) ident ;
+app          = "app" Ident "{" { grant | start } "}" ;
+grant        = "grant" ident ":" type "{" [ fields ] "}" ";" ;
+start        = "start" [ ident ":" ] Ident "{" [ handoffs ] "}" ";" ;
+handoffs     = handoff { "," handoff } [ "," ] ;
+handoff      = ident ":" ( "move" place | expr ) ;
 
-component    = "component" Ident "{" [ field_decls ] { { doc } handler } "}" ;
+component    = "component" Ident "{" [ field_decls ] { start } { { doc } function } "}" ;
+function     = [ route_attr ] [ "pub" ] [ "async" ] "fn" ident "(" fn_params ")" [ "->" type ] block ;
+route_attr   = "#[" METHOD "(" STRING "," "via" "=" ident [ "," "body" "=" ident ] ")" "]" ;
+fn_params    = [ receiver [ "," ] ] [ params ] ;
+receiver     = "&self" | "&mut self" ;
+
+extern_comp  = rust_attr "extern" "component" Ident "{" [ field_decls ] { { doc } signature } "}" ;
+rust_attr    = "#[" "rust" "(" "path" "=" STRING "," "crates" "=" "[" STRING { "," STRING } "]" ")" "]" ;
+signature    = "pub" [ "async" ] "fn" ident "(" fn_params ")" [ "->" type ] ";" ;
+
+struct       = [ derive ] "struct" Ident "{" [ field_decls ] "}" ;
+enum         = [ derive ] "enum" Ident "{" variant { "," variant } [ "," ] "}" ;
+variant      = { doc } [ "#[" "status" "(" Ident ")" "]" ] Ident [ "(" type { "," type } ")" ] ;
+derive       = "#[" "derive" "(" Ident { "," Ident } ")" "]" ;
+
+algorithm    = "fn" ident "(" [ params ] ")" [ "->" type ] block ;
+
 field_decls  = field_decl { "," field_decl } [ "," ] ;
-field_decl   = ident ":" type ;
-handler      = route_attr "fn" ident "(" [ params ] ")" [ "->" type ] block ;
-route_attr   = "#[" METHOD "(" STRING "," "via" "=" ident ")" "]" ;
-params       = param { "," param } [ "," ] ;
-param        = ident ":" type ;
-block        = "{" expr "}" ;
-
+field_decl   = { doc } ident ":" type ;
 fields       = field { "," field } [ "," ] ;
 field        = ident ":" expr ;
-handoffs     = handoff { "," handoff } [ "," ] ;
-type         = Ident ;
-expr         = STRING | INT | ident | "format!" "(" STRING ")" ;
+params       = param { "," param } [ "," ] ;
+param        = ident ":" type ;
+type         = [ "&" ] Ident [ "<" type { "," type } ">" ] | "(" type { "," type } ")" ;
+place        = ident { "." ident } ;
+
+block        = a Rust block, using the features Inset keeps ;
+expr         = a Rust expression, using the features Inset keeps
+             | "send" expr
+             | "fork" "for" pattern "in" expr block ;
 ```
 
-`METHOD` is one of `get`, `post`, `put`, `patch` or `delete`. `Ident` is an `UpperCamelCase` identifier and `ident` a `lower_snake_case` one.
+`METHOD` is one of `get`, `post`, `put`, `patch` or `delete`. `Ident` is an `UpperCamelCase` identifier and `ident` a `lower_snake_case` one. An algorithm inside a component uses the `function` rule with no attribute, no `pub` and no receiver.
 
 Requirements dialect (`*.req.inset`):
 
 ```
 file         = { requirement } ;
-requirement  = "requirement" STRING NEWLINE INDENT subject { step } DEDENT ;
-subject      = "component" Ident NEWLINE ;
-step         = ( "when" Ident "receives" HTTP_METHOD path
-               | "then" Ident "replies" Ident "with" literal ) NEWLINE ;
+requirement  = "requirement" STRING NEWLINE INDENT subject body DEDENT ;
+subject      = ( "component" Ident | "algorithm" [ Ident "::" ] ident ) NEWLINE ;
+body         = { step } | table | property ;
+
+step         = ( "given" fact
+               | "when" Ident "receives" ( message | request )
+               | "then" ( Ident "replies" reply | fact )
+               | "and" step_rest ) NEWLINE ;
+fact         = ident "[" value "]" "is" value | ident "is" "empty" ;
+message      = ident "(" [ value { "," value } ] ")" ;
+request      = HTTP_METHOD path [ "with" text ] ;
+reply        = Ident [ "with" text ] | value ;
+text         = STRING | NEWLINE INDENT '"""' NEWLINE { LINE NEWLINE } '"""' DEDENT ;
 path         = "/" segment { "/" segment } ;
-literal      = STRING | INT ;
+
+table        = row row { row } ;
+row          = "|" CELL { "|" CELL } "|" NEWLINE ;
+property     = "for" "all" ident ":" type [ "where" EXPR ] NEWLINE INDENT EXPR NEWLINE DEDENT ;
+
+value        = a Rust literal, or a struct, enum or list built from values ;
 ```
 
-`HTTP_METHOD` is one of `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. A `segment` is one or more characters other than whitespace and `/`.
+`HTTP_METHOD` is one of `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. A `segment` is one or more characters other than whitespace and `/`. `step_rest` is the rest of a step of the same kind as the one before. In `reply`, an `Ident` is a status after an HTTP request; otherwise the reply is a value. A `CELL` is a value, or free text in the heading row. `EXPR` is a Rust expression.
