@@ -24,6 +24,7 @@ The program is split across two files to show that all the files of a program sh
 | Construct | Where |
 | --- | --- |
 | Database capability | `grant items: Table<String, Item> { ... }` asks the host for a stored table |
+| A fixed file and a setting | The stock database belongs to the tool alone, so its file is written in the grant. The port is a `setting` |
 | Several actors | `Warehouse`, `Inventory` and `Reorders` each run as a component |
 | Nested components | `Warehouse` starts `Reorders` and `Inventory` with `start` statements |
 | A sibling lent to a sibling | `start inventory: Inventory { ..., reorders: &reorders }`, so `Inventory` can raise reorders itself. `Inventory` declares the field as `reorders: &Reorders` |
@@ -52,8 +53,8 @@ Sketches of what each review level should show. Stage 3 replaces them with `expe
 ```
                      ┌─ StockTracker ──────────────────────────────────────┐
                      │                                                     │
-                     │  grant http: HttpServer (port 8080)                 │
-                     │  grant items: Table<String, Item> (stock.db)        │
+                     │  grant http: HttpServer (port: setting)             │
+                     │  grant items: Table<String, Item> (fixed: stock.db) │
                      │        │                                            │
                      │        │ move http, move items                      │
                      │        ▼                                            │

@@ -40,7 +40,7 @@ The code dialect uses Rust's lexical rules: identifiers, integer and string lite
 
 - Doc comments become the descriptions shown on diagram elements. They may go on items, fields, functions and enum variants.
 - String literals do not interpolate, as in Rust. Build text with `format!`.
-- Inset adds these keywords to Rust's: `app`, `component`, `grant`, `start`, `send`, `fork`. It also gives Rust's `extern` a new use, in `extern component`.
+- Inset adds these keywords to Rust's: `app`, `component`, `setting`, `grant`, `start`, `send`, `fork`. It also gives Rust's `extern` a new use, in `extern component`.
 
 ### What Inset keeps from Rust
 
@@ -61,25 +61,34 @@ Where a model reaches for a Rust feature Inset does not have, the compiler rejec
 | Closures | `for` loops, named algorithms | A closure captures its surroundings without saying so, which is a data flow the diagram cannot label |
 | Generic items | Concrete types | Diagram arrows are labelled with concrete types. The standard generic types, such as `Vec<T>`, can still be used |
 
-Iterator adaptors such as `map` and `filter` take closures, so they are out with them. The full list is settled as the examples grow. See [open question 5](open-questions.md).
+Iterator adaptors such as `map` and `filter` take closures, so they are out with them. The full list is settled as the examples grow. See [open question 4](open-questions.md).
 
 ### App
 
 **Status:** Used.
 
-An app is the root of a program. It names the capabilities the host must grant, and it starts the top-level components. A program has exactly one app.
+An app is the root of a program. It names the settings it can be run with and the capabilities the host must grant, and it starts the top-level components. A program has exactly one app.
 
 ```rust
-app StockTracker {
-    grant http: HttpServer { port: 8080 };
-    grant items: Table<String, Item> { file: "stock.db", name: "items" };
-    start Warehouse { http: move http, items: move items };
+app PriceImport {
+    /// The port to serve on.
+    setting port: u16 = 8080;
+    /// The catalogue database, which other tools also read.
+    setting catalogue: String = "catalogue.db";
+    grant http: HttpServer { port };
+    grant products: Table<String, Product> { file: catalogue, name: "products" };
+    start Importer { http: move http, products: move products };
 }
 ```
 
-- `grant name: Capability { fields };` asks the host for a capability and binds it to `name`. The fields configure it, such as the port to listen on.
+- `setting name: Type = default;` declares a value that whoever runs the program may choose, such as `inset run --set port=9090`. Without one, the default is used, and requirement tests always use the default.
+- `grant name: Capability { fields };` asks the host for a capability and binds it to `name`. The fields configure it, such as the port to listen on. Each field is a literal, fixed in the source, or the name of a setting.
 - `start Component { handoffs };` starts a component and hands it its fields (see [Starting components](#starting-components)).
-- `grant` is the only way to create a capability. It may appear only in an app.
+- `grant` is the only way to create a capability. `setting` and `grant` may appear only in an app.
+- Settings may be `bool`, an integer type, or `String`. Passing a setting to a component in `start` is Draft.
+- A relative file path in a grant is resolved by the host. *(Draft: stage 4 settles against what.)*
+
+*Why settings are declared:* some configuration is part of what the reviewer approves, and some belongs to whoever runs the program. The Stock tracker's database is its own, so its file is fixed in the grant. CSV import writes a catalogue that other tools read, so where it lives is a setting. Inset does not choose between the two. The source states which values can change at run time, and the diagram lists them with their defaults, so the reviewer can see exactly what the person running the program controls. A setting can only change a value in a grant. It cannot add a grant or change a capability's type.
 
 *Why an app separate from components:* the security-relevant facts of a program, which is everything it can touch outside itself, sit in one short block that the diagram draws as the outer boundary. All three examples keep the app to a few lines of grants and starts. An app has no functions, so it cannot grow logic that hides among the grants.
 
@@ -217,7 +226,7 @@ enum ShipError {
 }
 ```
 
-JSON bodies and headers are settled in later stages. See [open question 6](open-questions.md).
+JSON bodies and headers are settled in later stages. See [open question 5](open-questions.md).
 
 *Why `via` is required:* the capability is the source of the diagram arrow, so it is always written down. It also lets a component hold two servers, such as a public one and an admin one.
 
@@ -344,7 +353,7 @@ extern component CsvReader {
 - `extern component` declares a component with no Inset body. As in a Rust `extern` block, its functions are signatures ending in `;`.
 - Its fields are the capabilities it holds, as in any component. `CsvReader` has none. *(Draft: an external component with capabilities.)*
 - `#[rust(path = ..., crates = [...])]` names the Rust file that implements it, relative to the file declaring it, and the crates that file may use, as `name@version`.
-- The Rust file defines a type with the component's name and the declared functions. It may use the Inset types of the program, such as `Row`. The compiler checks it against the declaration. *(Draft: stage 13 fixes the exact Rust interface. See [open question 8](open-questions.md).)*
+- The Rust file defines a type with the component's name and the declared functions. It may use the Inset types of the program, such as `Row`. The compiler checks it against the declaration. *(Draft: stage 13 fixes the exact Rust interface. See [open question 7](open-questions.md).)*
 - An external component is started and sent messages like any component. Like any component, requirements reach it only through the app, as CSV import's "A field in quotes may contain commas" does.
 
 *Why `extern`:* in Rust, `extern` declares something whose body is written elsewhere, which is what this is. `component` after it says what kind of thing is declared.
@@ -500,7 +509,8 @@ Code dialect (`*.inset`):
 program      = { item } ;
 item         = { doc } ( app | component | extern_comp | struct | enum | algorithm ) ;
 
-app          = "app" Ident "{" { grant | start } "}" ;
+app          = "app" Ident "{" { { doc } setting | grant | start } "}" ;
+setting      = "setting" ident ":" type "=" literal ";" ;
 grant        = "grant" ident ":" type "{" [ fields ] "}" ";" ;
 start        = "start" [ ident ":" ] Ident "{" [ handoffs ] "}" ";" ;
 handoffs     = handoff { "," handoff } [ "," ] ;

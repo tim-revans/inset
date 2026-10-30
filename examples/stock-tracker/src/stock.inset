@@ -1,6 +1,9 @@
 /// Stock tracker: how many of each item the warehouse holds, and what to reorder.
 app StockTracker {
-    grant http: HttpServer { port: 8080 };
+    /// The port to serve on.
+    setting port: u16 = 8080;
+    grant http: HttpServer { port };
+    // The stock database belongs to this tool alone, so its file is fixed.
     grant items: Table<String, Item> { file: "stock.db", name: "items" };
     start Warehouse { http: move http, items: move items };
 }

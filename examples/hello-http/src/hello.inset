@@ -1,6 +1,8 @@
 /// Hello HTTP: the smallest Inset program that serves the web.
 app HelloHttp {
-    grant http: HttpServer { port: 8080 };
+    /// The port to serve on.
+    setting port: u16 = 8080;
+    grant http: HttpServer { port };
     start Greeter { http: move http };
 }
 

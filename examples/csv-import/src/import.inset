@@ -1,7 +1,11 @@
 /// Price import: stores a supplier's price list in the product catalogue.
 app PriceImport {
-    grant http: HttpServer { port: 8080 };
-    grant products: Table<String, Product> { file: "catalogue.db", name: "products" };
+    /// The port to serve on.
+    setting port: u16 = 8080;
+    /// The catalogue database, which other tools also read.
+    setting catalogue: String = "catalogue.db";
+    grant http: HttpServer { port };
+    grant products: Table<String, Product> { file: catalogue, name: "products" };
     start Importer { http: move http, products: move products };
 }
 
