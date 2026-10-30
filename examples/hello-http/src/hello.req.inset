@@ -1,0 +1,4 @@
+requirement "Visitors are greeted by the name in the web address"
+  component Greeter
+  when Greeter receives GET /hello/Ada
+  then Greeter replies OK with "Hello, Ada!"

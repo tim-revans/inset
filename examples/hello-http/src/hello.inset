@@ -1,0 +1,16 @@
+/// Hello HTTP: the smallest Inset program that serves the web.
+app HelloHttp {
+    grant http: HttpServer { port: 8080 };
+    start Greeter { http: move http };
+}
+
+/// Greets visitors by name.
+component Greeter {
+    http: HttpServer,
+
+    /// Replies with a greeting for the name in the path.
+    #[get("/hello/{name}", via = http)]
+    fn hello(name: String) -> String {
+        format!("Hello, {name}!")
+    }
+}
