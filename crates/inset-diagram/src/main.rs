@@ -14,7 +14,7 @@ render options:
   --expand-all              draw every component with its children inside
   --flowchart <function id> draw the function's flowchart instead
   --hide <label>            leave a kind of label off (repeatable)
-  --theme <dark|light>      the palette (default dark)
+  --theme <dark|light|auto> the palette (default dark); auto follows the reader's setting
   --transparent             leave the background off
   -o <file>                 write the SVG to a file instead of standard output";
 

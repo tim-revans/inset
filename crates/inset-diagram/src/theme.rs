@@ -15,6 +15,10 @@ pub enum Theme {
     #[default]
     Dark,
     Light,
+    /// Both palettes in one picture: light where the reader's system asks for
+    /// light, and dark everywhere else, including in renderers that ignore
+    /// the media query.
+    Auto,
 }
 
 impl std::str::FromStr for Theme {
@@ -24,7 +28,8 @@ impl std::str::FromStr for Theme {
         match s {
             "dark" => Ok(Theme::Dark),
             "light" => Ok(Theme::Light),
-            _ => Err(format!("unknown theme `{s}`; expected dark or light")),
+            "auto" => Ok(Theme::Auto),
+            _ => Err(format!("unknown theme `{s}`; expected dark, light or auto")),
         }
     }
 }
@@ -85,14 +90,24 @@ const RULES: &str = r#".inset-diagram text { font-family: ui-monospace, SFMono-R
 /// property, because some SVG renderers, such as image converters, do not
 /// support custom properties.
 pub(crate) fn style(theme: Theme) -> String {
+    match theme {
+        Theme::Dark => format!("<style>\n{}</style>\n", rules(Theme::Dark)),
+        Theme::Light => format!("<style>\n{}</style>\n", rules(Theme::Light)),
+        Theme::Auto => format!(
+            "<style>\n{}@media (prefers-color-scheme: light) {{\n{}}}\n</style>\n",
+            rules(Theme::Dark),
+            rules(Theme::Light)
+        ),
+    }
+}
+
+/// The rules with one palette's values in place of the tokens.
+fn rules(palette: Theme) -> String {
     let mut rules = RULES.to_string();
     for (name, dark, light) in TOKENS {
-        let value = match theme {
-            Theme::Dark => dark,
-            Theme::Light => light,
-        };
+        let value = if palette == Theme::Light { light } else { dark };
         rules = rules.replace(&format!("var(--{name})"), value);
     }
     debug_assert!(!rules.contains("var(--"), "every token is defined");
-    format!("<style>\n{rules}</style>\n")
+    rules
 }

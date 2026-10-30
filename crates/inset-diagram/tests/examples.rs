@@ -4,28 +4,33 @@
 
 use std::path::{Path, PathBuf};
 
-use inset_diagram::{Hide, View};
+use inset_diagram::{Hide, Theme, View};
 
 const EXAMPLES: [&str; 3] = ["hello-http", "stock-tracker", "csv-import"];
 
 /// Every committed SVG: the example, the file name, and the view it shows.
+/// They carry both palettes, so each follows its reader's light or dark setting.
 fn views() -> Vec<(&'static str, &'static str, View)> {
+    let auto = View {
+        theme: Theme::Auto,
+        ..View::default()
+    };
     let expand = |id: &str| View {
         expand: [id.to_string()].into(),
-        ..View::default()
+        ..auto.clone()
     };
     let flowchart = |id: &str| View {
         flowchart: Some(id.to_string()),
-        ..View::default()
+        ..auto.clone()
     };
     vec![
-        ("hello-http", "diagram.svg", View::default()),
+        ("hello-http", "diagram.svg", auto.clone()),
         (
             "hello-http",
             "hello.svg",
             flowchart("HelloHttp/Greeter/fn:hello"),
         ),
-        ("stock-tracker", "diagram.svg", View::default()),
+        ("stock-tracker", "diagram.svg", auto.clone()),
         (
             "stock-tracker",
             "warehouse.svg",
@@ -41,7 +46,7 @@ fn views() -> Vec<(&'static str, &'static str, View)> {
             "reorder_quantity.svg",
             flowchart("StockTracker/Warehouse/inventory/fn:reorder_quantity"),
         ),
-        ("csv-import", "diagram.svg", View::default()),
+        ("csv-import", "diagram.svg", auto.clone()),
         ("csv-import", "importer.svg", expand("PriceImport/Importer")),
         (
             "csv-import",
@@ -215,26 +220,47 @@ fn validation_reports_bad_ids_and_references() {
 fn themes_and_background_change_nothing_else() {
     let palette = |svg: &str| -> String {
         svg.lines()
-            .filter(|line| !line.starts_with(".inset-diagram "))
+            .filter(|line| {
+                !line.starts_with(".inset-diagram ") && !line.starts_with("@media") && *line != "}"
+            })
             .map(|line| format!("{line}\n"))
             .collect()
     };
     for (example, file, view) in views() {
-        let dark = inset_diagram::render(&diagram(example), &view).unwrap();
-        let light_view = View {
-            theme: inset_diagram::Theme::Light,
-            ..view.clone()
+        let render = |theme| {
+            let view = View {
+                theme,
+                ..view.clone()
+            };
+            inset_diagram::render(&diagram(example), &view).unwrap()
         };
-        let light = inset_diagram::render(&diagram(example), &light_view).unwrap();
+        let (auto, dark, light) = (
+            render(Theme::Auto),
+            render(Theme::Dark),
+            render(Theme::Light),
+        );
         assert_ne!(dark, light, "{example}/{file}");
         assert_eq!(palette(&dark), palette(&light), "{example}/{file}");
+        assert_eq!(palette(&auto), palette(&dark), "{example}/{file}");
+        let style = |svg: &str| {
+            svg[svg.find("<style>").unwrap()..svg.find("</style>").unwrap()].to_string()
+        };
+        assert!(
+            style(&auto).starts_with(&style(&dark)),
+            "{example}/{file}: auto starts dark"
+        );
+        assert!(
+            style(&auto).contains(&style(&light)["<style>\n".len()..]),
+            "{example}/{file}: auto holds light"
+        );
 
         let bare_view = View {
             transparent: true,
             ..view.clone()
         };
         let bare = inset_diagram::render(&diagram(example), &bare_view).unwrap();
-        let without_ground: String = dark
+        let full = inset_diagram::render(&diagram(example), &view).unwrap();
+        let without_ground: String = full
             .lines()
             .filter(|line| !line.contains(r#"class="ground""#))
             .map(|line| format!("{line}\n"))

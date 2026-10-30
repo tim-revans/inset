@@ -52,7 +52,7 @@ Rows inside a box are grouped under small headings: `fields`, `routes`, `message
 
 ### Colour
 
-Pictures are dark by default. `--theme light` draws them in the light palette, and `--transparent` leaves the background off, so a picture sits on whatever page holds it. Every role has one colour in each palette:
+Pictures are dark by default. `--theme light` draws them in the light palette, and `--theme auto` puts both palettes in one picture: light when the reader's system asks for light, and dark otherwise, including in renderers that ignore the setting. The examples' committed SVGs use `auto`. `--transparent` leaves the background off, so a picture sits on whatever page holds it. Every role has one colour in each palette:
 
 | Role | Used for | Dark | Light |
 | --- | --- | --- | --- |
@@ -65,7 +65,9 @@ Pictures are dark by default. `--theme light` draws them in the light palette, a
 
 Each colour was chosen by measurement against its palette's background. Every pair of role colours stays apart under simulated protanopia and deuteranopia, and with normal vision. Every role colour has at least 3:1 contrast with the background, and every text colour at least 4.5:1 on every box it sits on. Colour only repeats what the shape already says: an external component keeps its double box, `send` keeps its dashed line, and a failure arm keeps its text. So a reader who cannot tell two colours apart loses nothing. The full set of values is in `crates/inset-diagram/src/theme.rs`.
 
-*Why dark by default:* most readers of the pictures are developers, who mostly work in dark editors. A requirements reviewer who prefers light pages asks for `--theme light`.
+*Why dark by default:* most readers of the pictures are developers, who mostly work in dark editors. A requirements reviewer who prefers light pages gets them from `--theme light`, or from `auto` with a light system setting.
+
+An SVG shown as an image usually follows the reader's operating system or browser setting rather than a website's own theme switch, so on GitHub the committed pictures may not change with GitHub's own light or dark choice.
 
 ## Diagram data and views
 

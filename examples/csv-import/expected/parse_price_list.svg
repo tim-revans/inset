@@ -22,6 +22,30 @@
 .inset-diagram .bar { fill: #e7ecf0; }
 .inset-diagram .arrow { fill: #e7ecf0; }
 .inset-diagram .arrow-cap { fill: #eba566; }
+@media (prefers-color-scheme: light) {
+.inset-diagram text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; fill: #182029; white-space: pre; }
+.inset-diagram .title { font-weight: bold; }
+.inset-diagram .kw { fill: #1066f0; }
+.inset-diagram .dim { fill: #565f69; }
+.inset-diagram .doc { fill: #565f69; font-style: italic; }
+.inset-diagram .sec { fill: #565f69; font-size: 10px; letter-spacing: 0.05em; }
+.inset-diagram .warn { fill: #9c200b; font-weight: bold; }
+.inset-diagram .ground { fill: #fdfdfd; }
+.inset-diagram .app { fill: #f2f6fa; stroke: #6a7683; stroke-width: 1.5; }
+.inset-diagram .comp { fill: #ffffff; stroke: #196df7; stroke-width: 1.4; }
+.inset-diagram .ext { fill: #fef3fe; stroke: #a41faa; stroke-width: 1.3; }
+.inset-diagram .outside { fill: #ffffff; stroke: #78818c; stroke-dasharray: 3 2; }
+.inset-diagram .port { fill: #ffffff; stroke: #196df7; stroke-width: 1.6; }
+.inset-diagram .edge { fill: none; stroke: #182029; stroke-width: 1.2; }
+.inset-diagram .send { stroke-dasharray: 5 3; }
+.inset-diagram .cap { fill: none; stroke: #e2760f; stroke-width: 1.8; }
+.inset-diagram .node { fill: #ffffff; stroke: #182029; }
+.inset-diagram .decide { fill: #fff0e7; stroke: #182029; }
+.inset-diagram .term { fill: #e9f1fe; stroke: #182029; }
+.inset-diagram .bar { fill: #182029; }
+.inset-diagram .arrow { fill: #182029; }
+.inset-diagram .arrow-cap { fill: #e2760f; }
+}
 </style>
 <defs>
 <marker id="arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow"/></marker>
