@@ -1,6 +1,7 @@
 //! Hello HTTP: the smallest Inset program that serves the web.
 //!
-//! Emitted from `src/main.inset`. Every item keeps its doc comment, and each
+//! The Rust the compiler should emit for `examples/hello-http/src/main.inset`,
+//! written by hand until the compiler exists. Every item keeps its doc comment, and each
 //! Inset statement that is not plain Rust is written above what it became.
 
 use inset_runtime::prelude::*;

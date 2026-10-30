@@ -2,7 +2,7 @@
 
 How a built Inset program runs: the Rust the compiler emits, the runtime library linked into it, and the WebAssembly host that runs it with only the capabilities it is granted.
 
-The compiler does not exist yet, so the emitted Rust is written by hand. [`examples/hello-http/expected/rust/`](../../examples/hello-http/expected/rust/) is what the compiler must emit for Hello HTTP. [`crates/inset-host/tests/fixtures/spike/`](../../crates/inset-host/tests/fixtures/spike/) is a larger program in the same shape, with messages, a table and every kind of rollback. The decisions below come from building and measuring both. `cargo xtask e2e hello-spike` builds Hello HTTP, serves it with `inset-host run`, and asks it for a greeting over a real socket.
+The compiler does not exist yet, so the emitted Rust is written by hand. [`crates/inset-host/tests/fixtures/hello-http/`](../../crates/inset-host/tests/fixtures/hello-http/) is what the compiler must emit for Hello HTTP. It sits with the host's tests rather than in the example, because nobody reviewing a program reads its Rust; once the compiler exists, a snapshot test of its output replaces it. [`crates/inset-host/tests/fixtures/spike/`](../../crates/inset-host/tests/fixtures/spike/) is a larger program in the same shape, with messages, a table and every kind of rollback. The decisions below come from building and measuring both. `cargo xtask e2e hello-spike` builds Hello HTTP, serves it with `inset-host run`, and asks it for a greeting over a real socket.
 
 ## Pieces
 

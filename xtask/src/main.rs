@@ -93,11 +93,11 @@ fn hello_spike() -> Result<(), String> {
         "--target",
         "wasm32-wasip2",
         "-p",
-        "hello-http",
+        "fixture-hello-http",
     ])?;
     cargo(&["build", "-p", "inset-host"])?;
     let target = target_dir();
-    let component = target.join("wasm32-wasip2/release/hello_http.wasm");
+    let component = target.join("wasm32-wasip2/release/fixture_hello_http.wasm");
     let port = TcpListener::bind("127.0.0.1:0")
         .and_then(|l| l.local_addr())
         .map_err(|e| format!("find a free port ({e})"))?

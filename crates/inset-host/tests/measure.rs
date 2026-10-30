@@ -21,7 +21,7 @@ fn timed<T>(f: impl FnOnce() -> T) -> (T, Duration) {
 #[test]
 #[ignore]
 fn starting_a_built_program() {
-    let path = build("hello-http");
+    let path = build("fixture-hello-http");
     let (_, uncached) = timed(|| Program::load_uncached(&path).unwrap());
     let (_, warm) = timed(|| Program::load(&path).unwrap());
     let (program, cached) = timed(|| Program::load(&path).unwrap());

@@ -3,7 +3,6 @@ resolver = "3"
 members = [
     "crates/*",
     "crates/inset-host/tests/fixtures/*",
-    "examples/*/expected/rust",
     "xtask",
 ]
 
