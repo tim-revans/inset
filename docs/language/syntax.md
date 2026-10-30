@@ -551,11 +551,13 @@ Each requirement is exactly one test of what the program does, seen from outside
 
 ```inset-req
 requirement "Visitors are greeted by the name in the web address"
-  when HelloHttp receives GET /hello/Ada
-  then HelloHttp replies OK with "Hello, Ada!"
+    when HelloHttp receives GET /hello/Ada
+    then HelloHttp replies OK with "Hello, Ada!"
 ```
 
-**Layout.** A requirement starts at the left margin. Its lines are indented under it by two spaces, one line per step. A step continues onto following lines that are indented further. Tabs are an error. `//` starts a comment.
+**Layout.** A requirement starts at the left margin. Its lines are indented under it by four spaces, one line per step. A step continues onto following lines that are indented further. Tabs are an error. `//` starts a comment.
+
+*Why four spaces:* the code dialect indents by four, so both dialects look alike, and the deeper indent sets the requirement sentence clear of its steps.
 
 **Name.** The text after `requirement` is the requirement. It is unique in the program, and it is what test reports show.
 
@@ -618,11 +620,11 @@ Values in facts are written as Rust literals and constructors: `40`, `"M6 bolt"`
 **Text blocks.** A body that spans lines is written as a text block, after `with` at the end of the step's line. The block starts and ends with `"""` on lines of their own, indented under the step. Each line between them is one line of the text, ending in a newline, with the block's indentation removed. Text blocks come from Gherkin's doc strings.
 
 ```inset-req
-  when PriceImport receives POST /price-lists with
-    """
-    sku,name,net
-    bolt-m6,M6 bolt,0.10
-    """
+    when PriceImport receives POST /price-lists with
+        """
+        sku,name,net
+        bolt-m6,M6 bolt,0.10
+        """
 ```
 
 ### Examples
@@ -631,15 +633,15 @@ A requirement with several cases writes its steps once, with `<name>` placeholde
 
 ```inset-req
 requirement "Stock that falls to its reorder level or below is reordered up to its target level"
-  given items["bolt-m6"] is Item { on_hand: <on hand>, reorder_level: 10, target_level: <target level> }
-  when StockTracker receives POST /items/bolt-m6/shipments with "1"
-  then StockTracker replies OK with "<left>"
-  when StockTracker receives GET /reorders
-  then StockTracker replies OK with <reorders>
-  examples
-  | on hand | target level | left | reorders       |
-  | 12      | 50           | 11   | ""             |
-  | 11      | 50           | 10   | "bolt-m6 40\n" |
+    given items["bolt-m6"] is Item { on_hand: <on hand>, reorder_level: 10, target_level: <target level> }
+    when StockTracker receives POST /items/bolt-m6/shipments with "1"
+    then StockTracker replies OK with "<left>"
+    when StockTracker receives GET /reorders
+    then StockTracker replies OK with <reorders>
+    examples
+    | on hand | target level | left | reorders       |
+    | 12      | 50           | 11   | ""             |
+    | 11      | 50           | 10   | "bolt-m6 40\n" |
 ```
 
 - Only `<name>` where `name` is a heading counts as a placeholder, so `<` and `>` keep their Rust meaning elsewhere in a step.
@@ -653,15 +655,15 @@ A rule that holds for every input is written with `for all` before the steps, an
 
 ```inset-req
 requirement "The gross price is never below the net price"
-  for all net: Decimal where net >= dec!(0) && net.scale() <= 2
-  given products is empty
-  when PriceImport receives POST /price-lists with
-    """
-    sku,name,net
-    bolt-m6,M6 bolt,<net>
-    """
-  then PriceImport replies OK with "Products imported: 1"
-  and products["bolt-m6"].gross >= <net>
+    for all net: Decimal where net >= dec!(0) && net.scale() <= 2
+    given products is empty
+    when PriceImport receives POST /price-lists with
+        """
+        sku,name,net
+        bolt-m6,M6 bolt,<net>
+        """
+    then PriceImport replies OK with "Products imported: 1"
+    and products["bolt-m6"].gross >= <net>
 ```
 
 - `for all a: A, b: B where ...` generates several inputs. *(Draft.)*

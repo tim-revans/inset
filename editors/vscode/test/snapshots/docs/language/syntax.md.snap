@@ -694,38 +694,38 @@
 #            ^ meta.requirement.inset-req markup.heading.requirement.inset-req punctuation.definition.string.begin.inset-req
 #             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req markup.heading.requirement.inset-req
 #                                                                ^ meta.requirement.inset-req markup.heading.requirement.inset-req punctuation.definition.string.end.inset-req
->  when HelloHttp receives GET /hello/Ada
-#  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
-#       ^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                 ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                          ^^^ meta.requirement.inset-req constant.language.http-method.inset-req
-#                              ^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
->  then HelloHttp replies OK with "Hello, Ada!"
-#  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
-#       ^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                 ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                         ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
-#                            ^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                                 ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
-#                                  ^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
-#                                             ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
+>    when HelloHttp receives GET /hello/Ada
+#    ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#         ^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
+#                   ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                            ^^^ meta.requirement.inset-req constant.language.http-method.inset-req
+#                                ^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
+>    then HelloHttp replies OK with "Hello, Ada!"
+#    ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#         ^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
+#                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                           ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
+#                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                                   ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
+#                                    ^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
+#                                               ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 
 ## Values (inset-req)
->  when PriceImport receives POST /price-lists with
-#  ^^^^ keyword.control.step.inset-req
-#       ^^^^^^^^^^^ entity.name.type.app.inset-req
-#                   ^^^^^^^^ keyword.other.inset-req
-#                            ^^^^ constant.language.http-method.inset-req
-#                                 ^^^^^^^^^^^^ string.unquoted.path.inset-req
-#                                              ^^^^ keyword.other.inset-req
->    """
-#    ^^^ string.quoted.triple.inset-req punctuation.definition.string.begin.inset-req
->    sku,name,net
-#^^^^^^^^^^^^^^^^ string.quoted.triple.inset-req
->    bolt-m6,M6 bolt,0.10
-#^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.triple.inset-req
->    """
-#    ^^^ string.quoted.triple.inset-req punctuation.definition.string.end.inset-req
+>    when PriceImport receives POST /price-lists with
+#    ^^^^ keyword.control.step.inset-req
+#         ^^^^^^^^^^^ entity.name.type.app.inset-req
+#                     ^^^^^^^^ keyword.other.inset-req
+#                              ^^^^ constant.language.http-method.inset-req
+#                                   ^^^^^^^^^^^^ string.unquoted.path.inset-req
+#                                                ^^^^ keyword.other.inset-req
+>        """
+#        ^^^ string.quoted.triple.inset-req punctuation.definition.string.begin.inset-req
+>        sku,name,net
+#^^^^^^^^^^^^^^^^^^^^ string.quoted.triple.inset-req
+>        bolt-m6,M6 bolt,0.10
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.triple.inset-req
+>        """
+#        ^^^ string.quoted.triple.inset-req punctuation.definition.string.end.inset-req
 
 ## Examples (inset-req)
 >requirement "Stock that falls to its reorder level or below is reordered up to its target level"
@@ -733,97 +733,97 @@
 #            ^ meta.requirement.inset-req markup.heading.requirement.inset-req punctuation.definition.string.begin.inset-req
 #             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req markup.heading.requirement.inset-req
 #                                                                                               ^ meta.requirement.inset-req markup.heading.requirement.inset-req punctuation.definition.string.end.inset-req
->  given items["bolt-m6"] is Item { on_hand: <on hand>, reorder_level: 10, target_level: <target level> }
-#  ^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
-#        ^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#             ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#              ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
-#               ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
-#                      ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
-#                       ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                         ^^ meta.requirement.inset-req keyword.other.inset-req
-#                            ^^^^ meta.requirement.inset-req entity.name.type.inset
-#                                 ^ meta.requirement.inset-req punctuation.brackets.curly.inset
-#                                   ^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
-#                                          ^ meta.requirement.inset-req punctuation.separator.colon.inset-req
-#                                            ^^^^^^^^^ meta.requirement.inset-req variable.parameter.placeholder.inset-req
-#                                                     ^ meta.requirement.inset-req punctuation.separator.comma.inset
-#                                                       ^^^^^^^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
-#                                                                    ^ meta.requirement.inset-req punctuation.separator.colon.inset-req
-#                                                                      ^^ meta.requirement.inset-req constant.numeric.decimal.inset
-#                                                                        ^ meta.requirement.inset-req punctuation.separator.comma.inset
-#                                                                          ^^^^^^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
-#                                                                                      ^ meta.requirement.inset-req punctuation.separator.colon.inset-req
-#                                                                                        ^^^^^^^^^^^^^^ meta.requirement.inset-req variable.parameter.placeholder.inset-req
-#                                                                                                       ^ meta.requirement.inset-req punctuation.brackets.curly.inset
->  when StockTracker receives POST /items/bolt-m6/shipments with "1"
-#  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
-#       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                             ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
-#                                  ^^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                                           ^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                                                                ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
-#                                                                 ^ meta.requirement.inset-req string.quoted.double.inset-req
-#                                                                  ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
->  then StockTracker replies OK with "<left>"
-#  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
-#       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                            ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
-#                               ^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                                    ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
-#                                     ^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req variable.parameter.placeholder.inset-req
-#                                           ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
->  when StockTracker receives GET /reorders
-#  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
-#       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                             ^^^ meta.requirement.inset-req constant.language.http-method.inset-req
-#                                 ^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
->  then StockTracker replies OK with <reorders>
-#  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
-#       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                            ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
-#                               ^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                                    ^^^^^^^^^^ meta.requirement.inset-req variable.parameter.placeholder.inset-req
->  examples
-#  ^^^^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
->  | on hand | target level | left | reorders       |
-#  ^ meta.requirement.inset-req meta.table.inset-req punctuation.separator.table.inset-req
-#    ^^^^^^^ meta.requirement.inset-req meta.table.inset-req variable.parameter.placeholder.inset-req
-#            ^ meta.requirement.inset-req meta.table.inset-req punctuation.separator.table.inset-req
-#              ^^^^^^^^^^^^ meta.requirement.inset-req meta.table.inset-req variable.parameter.placeholder.inset-req
-#                           ^ meta.requirement.inset-req meta.table.inset-req punctuation.separator.table.inset-req
-#                             ^^^^ meta.requirement.inset-req meta.table.inset-req variable.parameter.placeholder.inset-req
-#                                  ^ meta.requirement.inset-req meta.table.inset-req punctuation.separator.table.inset-req
-#                                    ^^^^^^^^ meta.requirement.inset-req meta.table.inset-req variable.parameter.placeholder.inset-req
-#                                                   ^ meta.requirement.inset-req meta.table.inset-req punctuation.separator.table.inset-req
->  | 12      | 50           | 11   | ""             |
-#  ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
-#    ^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req constant.numeric.decimal.inset
-#            ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
-#              ^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req constant.numeric.decimal.inset
-#                           ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
-#                             ^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req constant.numeric.decimal.inset
-#                                  ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
-#                                    ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
-#                                     ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
-#                                                   ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
->  | 11      | 50           | 10   | "bolt-m6 40\n" |
-#  ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
-#    ^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req constant.numeric.decimal.inset
-#            ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
-#              ^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req constant.numeric.decimal.inset
-#                           ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
-#                             ^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req constant.numeric.decimal.inset
-#                                  ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
-#                                    ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
-#                                     ^^^^^^^^^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req string.quoted.double.inset-req
-#                                               ^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req string.quoted.double.inset-req constant.character.escape.inset-req
-#                                                 ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
-#                                                   ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
+>    given items["bolt-m6"] is Item { on_hand: <on hand>, reorder_level: 10, target_level: <target level> }
+#    ^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#          ^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
+#               ^ meta.requirement.inset-req punctuation.brackets.square.inset
+#                ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
+#                 ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
+#                        ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
+#                         ^ meta.requirement.inset-req punctuation.brackets.square.inset
+#                           ^^ meta.requirement.inset-req keyword.other.inset-req
+#                              ^^^^ meta.requirement.inset-req entity.name.type.inset
+#                                   ^ meta.requirement.inset-req punctuation.brackets.curly.inset
+#                                     ^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
+#                                            ^ meta.requirement.inset-req punctuation.separator.colon.inset-req
+#                                              ^^^^^^^^^ meta.requirement.inset-req variable.parameter.placeholder.inset-req
+#                                                       ^ meta.requirement.inset-req punctuation.separator.comma.inset
+#                                                         ^^^^^^^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
+#                                                                      ^ meta.requirement.inset-req punctuation.separator.colon.inset-req
+#                                                                        ^^ meta.requirement.inset-req constant.numeric.decimal.inset
+#                                                                          ^ meta.requirement.inset-req punctuation.separator.comma.inset
+#                                                                            ^^^^^^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
+#                                                                                        ^ meta.requirement.inset-req punctuation.separator.colon.inset-req
+#                                                                                          ^^^^^^^^^^^^^^ meta.requirement.inset-req variable.parameter.placeholder.inset-req
+#                                                                                                         ^ meta.requirement.inset-req punctuation.brackets.curly.inset
+>    when StockTracker receives POST /items/bolt-m6/shipments with "1"
+#    ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#         ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
+#                      ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                               ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
+#                                    ^^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
+#                                                             ^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                                                                  ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
+#                                                                   ^ meta.requirement.inset-req string.quoted.double.inset-req
+#                                                                    ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
+>    then StockTracker replies OK with "<left>"
+#    ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#         ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
+#                      ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                              ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
+#                                 ^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                                      ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
+#                                       ^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req variable.parameter.placeholder.inset-req
+#                                             ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
+>    when StockTracker receives GET /reorders
+#    ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#         ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
+#                      ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                               ^^^ meta.requirement.inset-req constant.language.http-method.inset-req
+#                                   ^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
+>    then StockTracker replies OK with <reorders>
+#    ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#         ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
+#                      ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                              ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
+#                                 ^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                                      ^^^^^^^^^^ meta.requirement.inset-req variable.parameter.placeholder.inset-req
+>    examples
+#    ^^^^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+>    | on hand | target level | left | reorders       |
+#    ^ meta.requirement.inset-req meta.table.inset-req punctuation.separator.table.inset-req
+#      ^^^^^^^ meta.requirement.inset-req meta.table.inset-req variable.parameter.placeholder.inset-req
+#              ^ meta.requirement.inset-req meta.table.inset-req punctuation.separator.table.inset-req
+#                ^^^^^^^^^^^^ meta.requirement.inset-req meta.table.inset-req variable.parameter.placeholder.inset-req
+#                             ^ meta.requirement.inset-req meta.table.inset-req punctuation.separator.table.inset-req
+#                               ^^^^ meta.requirement.inset-req meta.table.inset-req variable.parameter.placeholder.inset-req
+#                                    ^ meta.requirement.inset-req meta.table.inset-req punctuation.separator.table.inset-req
+#                                      ^^^^^^^^ meta.requirement.inset-req meta.table.inset-req variable.parameter.placeholder.inset-req
+#                                                     ^ meta.requirement.inset-req meta.table.inset-req punctuation.separator.table.inset-req
+>    | 12      | 50           | 11   | ""             |
+#    ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
+#      ^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req constant.numeric.decimal.inset
+#              ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
+#                ^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req constant.numeric.decimal.inset
+#                             ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
+#                               ^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req constant.numeric.decimal.inset
+#                                    ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
+#                                      ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
+#                                       ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
+#                                                     ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
+>    | 11      | 50           | 10   | "bolt-m6 40\n" |
+#    ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
+#      ^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req constant.numeric.decimal.inset
+#              ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
+#                ^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req constant.numeric.decimal.inset
+#                             ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
+#                               ^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req constant.numeric.decimal.inset
+#                                    ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
+#                                      ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
+#                                       ^^^^^^^^^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req string.quoted.double.inset-req
+#                                                 ^^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req string.quoted.double.inset-req constant.character.escape.inset-req
+#                                                   ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
+#                                                     ^ meta.requirement.inset-req meta.table.inset-req meta.table.rows.inset-req punctuation.separator.table.inset-req
 
 ## Properties (inset-req)
 >requirement "The gross price is never below the net price"
@@ -831,69 +831,69 @@
 #            ^ meta.requirement.inset-req markup.heading.requirement.inset-req punctuation.definition.string.begin.inset-req
 #             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req markup.heading.requirement.inset-req
 #                                                         ^ meta.requirement.inset-req markup.heading.requirement.inset-req punctuation.definition.string.end.inset-req
->  for all net: Decimal where net >= dec!(0) && net.scale() <= 2
-#  ^^^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
-#          ^^^ meta.requirement.inset-req variable.parameter.placeholder.inset-req
-#             ^ meta.requirement.inset-req punctuation.separator.colon.inset
-#               ^^^^^^^ meta.requirement.inset-req entity.name.type.inset
-#                       ^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                             ^^^ meta.requirement.inset-req variable.other.inset-req
-#                                 ^^ meta.requirement.inset-req keyword.operator.comparison.inset
-#                                    ^^^ meta.requirement.inset-req entity.name.function.macro.inset
-#                                       ^ meta.requirement.inset-req entity.name.function.macro.inset
-#                                        ^ meta.requirement.inset-req punctuation.brackets.round.inset
-#                                         ^ meta.requirement.inset-req constant.numeric.decimal.inset
+>    for all net: Decimal where net >= dec!(0) && net.scale() <= 2
+#    ^^^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#            ^^^ meta.requirement.inset-req variable.parameter.placeholder.inset-req
+#               ^ meta.requirement.inset-req punctuation.separator.colon.inset
+#                 ^^^^^^^ meta.requirement.inset-req entity.name.type.inset
+#                         ^^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                               ^^^ meta.requirement.inset-req variable.other.inset-req
+#                                   ^^ meta.requirement.inset-req keyword.operator.comparison.inset
+#                                      ^^^ meta.requirement.inset-req entity.name.function.macro.inset
+#                                         ^ meta.requirement.inset-req entity.name.function.macro.inset
 #                                          ^ meta.requirement.inset-req punctuation.brackets.round.inset
-#                                            ^^ meta.requirement.inset-req keyword.operator.logical.inset
-#                                               ^^^ meta.requirement.inset-req variable.other.inset-req
-#                                                  ^ meta.requirement.inset-req punctuation.accessor.dot.inset
-#                                                   ^^^^^ meta.requirement.inset-req entity.name.function.inset
-#                                                        ^ meta.requirement.inset-req punctuation.brackets.round.inset
-#                                                         ^ meta.requirement.inset-req punctuation.brackets.round.inset
-#                                                           ^^ meta.requirement.inset-req keyword.operator.comparison.inset
-#                                                              ^ meta.requirement.inset-req constant.numeric.decimal.inset
->  given products is empty
-#  ^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
-#        ^^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#                 ^^ meta.requirement.inset-req keyword.other.inset-req
-#                    ^^^^^ meta.requirement.inset-req keyword.other.inset-req
->  when PriceImport receives POST /price-lists with
-#  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
-#       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                            ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
-#                                 ^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
->    """
-#    ^^^ meta.requirement.inset-req string.quoted.triple.inset-req punctuation.definition.string.begin.inset-req
->    sku,name,net
-#^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.triple.inset-req
->    bolt-m6,M6 bolt,<net>
+#                                           ^ meta.requirement.inset-req constant.numeric.decimal.inset
+#                                            ^ meta.requirement.inset-req punctuation.brackets.round.inset
+#                                              ^^ meta.requirement.inset-req keyword.operator.logical.inset
+#                                                 ^^^ meta.requirement.inset-req variable.other.inset-req
+#                                                    ^ meta.requirement.inset-req punctuation.accessor.dot.inset
+#                                                     ^^^^^ meta.requirement.inset-req entity.name.function.inset
+#                                                          ^ meta.requirement.inset-req punctuation.brackets.round.inset
+#                                                           ^ meta.requirement.inset-req punctuation.brackets.round.inset
+#                                                             ^^ meta.requirement.inset-req keyword.operator.comparison.inset
+#                                                                ^ meta.requirement.inset-req constant.numeric.decimal.inset
+>    given products is empty
+#    ^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#          ^^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
+#                   ^^ meta.requirement.inset-req keyword.other.inset-req
+#                      ^^^^^ meta.requirement.inset-req keyword.other.inset-req
+>    when PriceImport receives POST /price-lists with
+#    ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#         ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
+#                     ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                              ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
+#                                   ^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
+#                                                ^^^^ meta.requirement.inset-req keyword.other.inset-req
+>        """
+#        ^^^ meta.requirement.inset-req string.quoted.triple.inset-req punctuation.definition.string.begin.inset-req
+>        sku,name,net
 #^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.triple.inset-req
-#                    ^^^^^ meta.requirement.inset-req string.quoted.triple.inset-req variable.parameter.placeholder.inset-req
->    """
-#    ^^^ meta.requirement.inset-req string.quoted.triple.inset-req punctuation.definition.string.end.inset-req
->  then PriceImport replies OK with "Products imported: 1"
-#  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
-#       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                           ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
-#                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                                   ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
-#                                    ^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
-#                                                        ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
->  and products["bolt-m6"].gross >= <net>
-#  ^^^ meta.requirement.inset-req keyword.control.step.inset-req
-#      ^^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#              ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#               ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
-#                ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
-#                       ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
-#                        ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                         ^ meta.requirement.inset-req punctuation.accessor.dot.inset
-#                          ^^^^^ meta.requirement.inset-req variable.other.inset-req
-#                                ^^ meta.requirement.inset-req keyword.operator.comparison.inset
-#                                   ^^^^^ meta.requirement.inset-req variable.parameter.placeholder.inset-req
+>        bolt-m6,M6 bolt,<net>
+#^^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.triple.inset-req
+#                        ^^^^^ meta.requirement.inset-req string.quoted.triple.inset-req variable.parameter.placeholder.inset-req
+>        """
+#        ^^^ meta.requirement.inset-req string.quoted.triple.inset-req punctuation.definition.string.end.inset-req
+>    then PriceImport replies OK with "Products imported: 1"
+#    ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#         ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
+#                     ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                             ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
+#                                ^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                                     ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
+#                                      ^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
+#                                                          ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
+>    and products["bolt-m6"].gross >= <net>
+#    ^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#        ^^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
+#                ^ meta.requirement.inset-req punctuation.brackets.square.inset
+#                 ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
+#                  ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
+#                         ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
+#                          ^ meta.requirement.inset-req punctuation.brackets.square.inset
+#                           ^ meta.requirement.inset-req punctuation.accessor.dot.inset
+#                            ^^^^^ meta.requirement.inset-req variable.other.inset-req
+#                                  ^^ meta.requirement.inset-req keyword.operator.comparison.inset
+#                                     ^^^^^ meta.requirement.inset-req variable.parameter.placeholder.inset-req
 
 ## Requirements and coverage (inset)
 >let Some(net) = parse_price(&fields[2]) else {

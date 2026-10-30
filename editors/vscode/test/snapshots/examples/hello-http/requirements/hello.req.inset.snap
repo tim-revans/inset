@@ -3,18 +3,18 @@
 #            ^ meta.requirement.inset-req markup.heading.requirement.inset-req punctuation.definition.string.begin.inset-req
 #             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req markup.heading.requirement.inset-req
 #                                                                ^ meta.requirement.inset-req markup.heading.requirement.inset-req punctuation.definition.string.end.inset-req
->  when HelloHttp receives GET /hello/Ada
-#  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
-#       ^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                 ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                          ^^^ meta.requirement.inset-req constant.language.http-method.inset-req
-#                              ^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
->  then HelloHttp replies OK with "Hello, Ada!"
-#  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
-#       ^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                 ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                         ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
-#                            ^^^^ meta.requirement.inset-req keyword.other.inset-req
-#                                 ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
-#                                  ^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
-#                                             ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
+>    when HelloHttp receives GET /hello/Ada
+#    ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#         ^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
+#                   ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                            ^^^ meta.requirement.inset-req constant.language.http-method.inset-req
+#                                ^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
+>    then HelloHttp replies OK with "Hello, Ada!"
+#    ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#         ^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
+#                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                           ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
+#                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                                   ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
+#                                    ^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
+#                                               ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
