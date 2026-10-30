@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: expected a `String`, found a `&str`
+    ╭─[ src/main.inset:12:9 ]
+    │
+ 12 │         "Hello!"
+    │         ────┬───  
+    │             ╰───── the reply of `hello` is a `String`
+    │ 
+    │ Help: make a `String` from it with `.to_string()`
+────╯

@@ -324,6 +324,9 @@ impl Parser<'_> {
                 let kw = *kw;
                 return Err(self.left_out(kw));
             }
+            T::Ident(name) if name == "macro_rules" && matches!(self.nth(1), T::Punct(P::Not)) => {
+                return Err(self.macro_rules());
+            }
             _ => {}
         }
         // An `if` or a block ends its statement without `;`, as in Rust.
@@ -661,13 +664,19 @@ impl Parser<'_> {
                 | Kw::Break
                 | Kw::Continue
                 | Kw::Let
-                | Kw::Async
-                | Kw::Move),
+                | Kw::Async),
             ) => {
                 let what = format!("`{}`", kw.as_str());
                 return Err(self.unsupported(&what, start));
             }
-            T::Punct(P::Or | P::OrOr) => return Err(self.unsupported("a closure", start)),
+            T::Punct(P::Or | P::OrOr) => return self.parse_closure(start, false, no_struct),
+            T::Keyword(Kw::Move) => {
+                self.bump();
+                if self.at(P::Or) || self.at(P::OrOr) {
+                    return self.parse_closure(start, true, no_struct);
+                }
+                ExprKind::Move(self.parse_place()?)
+            }
             T::Punct(P::DotDot | P::DotDotEq) => return Err(self.unsupported("a range", start)),
             T::Keyword(Kw::Unsafe) => return Err(self.left_out(Kw::Unsafe)),
             T::Keyword(kw) if kw.is_inset_only() => {
@@ -688,6 +697,66 @@ impl Parser<'_> {
         Ok(Expr {
             kind,
             span: start.to(self.prev_span()),
+        })
+    }
+
+    /// `|params| body`, from its first `|`, or `||` when it has none.
+    /// `start` is where it began, at `move` if it has one.
+    pub(super) fn parse_closure(
+        &mut self,
+        start: Span,
+        is_move: bool,
+        no_struct: bool,
+    ) -> PResult<Expr> {
+        let mut params = Vec::new();
+        if !self.eat(P::OrOr) {
+            self.bump();
+            while !self.at(P::Or) {
+                let pattern = self.parse_pattern()?;
+                let ty = if self.eat(P::Colon) {
+                    Some(self.parse_type()?)
+                } else {
+                    None
+                };
+                params.push(ClosureParam {
+                    span: pattern
+                        .span
+                        .to(ty.as_ref().map_or(pattern.span, |t| t.span)),
+                    pattern,
+                    ty,
+                });
+                if !self.eat(P::Comma) {
+                    break;
+                }
+            }
+            self.expect(P::Or, "the closure's parameters")?;
+        }
+        let ret = if self.eat(P::Arrow) {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+        // As in Rust, a closure with a return type has a block for its body.
+        let body = if ret.is_some() {
+            if !self.at(P::LBrace) {
+                return Err(self.expected("`{` to start the closure's body"));
+            }
+            let block = self.parse_block()?;
+            Expr {
+                span: block.span,
+                kind: ExprKind::Block(block),
+            }
+        } else {
+            self.parse_expr_bp(0, no_struct)?
+        };
+        Ok(Expr {
+            span: start.to(body.span),
+            kind: ExprKind::Closure(Closure {
+                is_move,
+                params,
+                ret,
+                body: Box::new(body),
+            }),
         })
     }
 

@@ -1,0 +1,11 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "requirement \"Visitors are greeted by the name in the web address\"\n    when HelloHttp receives GET /hello/Ada via\n    then HelloHttp replies OK with \"Hello, Ada!\"\n"
+---
+Error: expected the name of a server after `via`
+   ╭─[ hello.req.inset:2:44 ]
+   │
+ 2 │     when HelloHttp receives GET /hello/Ada via
+   │                                            ─┬─  
+   │                                             ╰─── nothing follows this
+───╯

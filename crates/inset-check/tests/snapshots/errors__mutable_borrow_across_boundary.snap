@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `&mut` cannot cross a component boundary
+    ╭─[ src/main.inset:16:29 ]
+    │
+ 16 │         send self.tally.add(&mut n);
+    │                             ───┬──  
+    │                                ╰──── this lends a value into `Tally` to change
+    │ 
+    │ Help: a component changes only its own fields: move the value across with `move` and use what comes back, or keep it in the other component and send that component messages
+────╯

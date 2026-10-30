@@ -18,12 +18,14 @@
 //!
 //! The grammar covers the part of "Grammar of the used subset" in
 //! `docs/language/syntax.md` that Hello HTTP needs, built so the rest slots
-//! in: apps, components with fields, `start` statements and functions,
-//! route and message attributes, and Rust's operators, calls, `let` and `if`.
-//! Other constructs in the spec, such as `match`, `failure` blocks, `struct`
-//! and requirement facts, are reported as "not supported yet" at the
-//! keyword, so an author learns it is the compiler's limit and not their
-//! mistake. They are added as the examples that use them are compiled.
+//! in: apps, components with fields, `start` statements, `failure` blocks
+//! and functions, route and message attributes, and Rust's operators,
+//! calls, closures, `let` and `if`. It also reads `move` in a message's
+//! arguments and `via` in a `when` step, which the checks in `inset-check`
+//! need. Other constructs in the spec, such as `match`, `struct` and
+//! requirement facts, are reported as "not supported yet" at the keyword,
+//! so an author learns it is the compiler's limit and not their mistake.
+//! They are added as the examples that use them are compiled.
 //!
 //! Spans are byte offsets into one file's source. Diagnostics are rendered
 //! with `ariadne`, and their wording is pinned by `insta` snapshot tests, as

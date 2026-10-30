@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: two requirements say the same thing
+   ╭─[ requirements/main.req.inset:5:13 ]
+   │
+ 5 │ requirement "Visitors are greeted by the name in the web address"
+   │             ──────────────────────────┬──────────────────────────  
+   │                                       ╰──────────────────────────── this repeats an earlier requirement's sentence
+   │ 
+   │ Help: the first is on line 1 of requirements/main.req.inset; each requirement is one test, so give each a sentence of its own, or merge the two
+───╯

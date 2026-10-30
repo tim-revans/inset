@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "component Greeter {\n    http: HttpServer,\n\n    failure {\n        /// A greeting that times out affects only its own request.\n        Timeout => rollback,\n    }\n}\n"
+---
+Error: unknown failure condition `Timeout`
+   ╭─[ main.inset:6:9 ]
+   │
+ 6 │         Timeout => rollback,
+   │         ───┬───  
+   │            ╰───── not a failure a component can respond to
+   │ 
+   │ Help: the conditions are `Panic`, `Overflow`, `Capability(field)`, `Message(child)`, `Child(child)` and `_`
+───╯

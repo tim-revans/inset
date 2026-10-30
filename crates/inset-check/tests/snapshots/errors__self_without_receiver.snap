@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `self` is not available here
+    ╭─[ src/main.inset:12:23 ]
+    │
+ 12 │         format!("{}", self.http)
+    │                       ──┬─  
+    │                         ╰─── `hello` takes no `self`
+    │ 
+    │ Help: take `&self` to read the component's fields, or `&mut self` to change them
+────╯

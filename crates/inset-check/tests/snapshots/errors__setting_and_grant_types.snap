@@ -1,0 +1,17 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `80800` does not fit in a `u16`
+   ╭─[ src/main.inset:2:25 ]
+   │
+ 2 │     setting port: u16 = 80800;
+   │                         ──┬──  
+   │                           ╰──── a `u16` holds 0 to 65535
+───╯
+Error: the setting `host` is a `String`, but `port` takes a `u16`
+   ╭─[ src/main.inset:4:36 ]
+   │
+ 4 │     grant http: HttpServer { port: host };
+   │                                    ──┬─  
+   │                                      ╰─── expected `u16`
+───╯

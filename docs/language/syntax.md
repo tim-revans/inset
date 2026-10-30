@@ -1,6 +1,6 @@
 # Inset syntax
 
-The living reference for Inset's syntax. It is a draft: the parser in [`crates/inset-syntax/`](../../crates/inset-syntax/) reads what Hello HTTP uses and reports the rest as not supported yet, and the syntax changes as each example program is compiled.
+The living reference for Inset's syntax. It is a draft: the parser in [`crates/inset-syntax/`](../../crates/inset-syntax/) and the checker in [`crates/inset-check/`](../../crates/inset-check/) cover what Hello HTTP uses, with closures, `failure` blocks, outlets and messages around it, and report the rest as not supported yet. The syntax changes as each example program is compiled.
 
 Each construct is marked with its status:
 
@@ -48,7 +48,7 @@ The code dialect uses Rust's lexical rules: identifiers, integer and string lite
 
 ### What Inset keeps from Rust
 
-Inside a function body, Inset is Rust, and it keeps what models use every day: control flow (`if`, `match`, `for`, `while`, `loop`, `let ... else`, `?`), closures and iterator adaptors, slices and `&str`, the standard collections (`Vec`, `HashMap`, `BTreeMap`, `HashSet`, `BTreeSet`), `impl` blocks on data types, generic functions and data types, lifetimes in algorithms and data types, and `#[derive]`. Data types may implement standard traits such as `Display`, `From`, `FromStr`, `Default` and `Ord`. The pure standard macros `vec!`, `format!`, `matches!`, `assert!` and `write!` are kept, along with `dec!` from `rust_decimal`.
+Inside a function body, Inset is Rust, and it keeps what models use every day: control flow (`if`, `match`, `for`, `while`, `loop`, `let ... else`, `?`), closures and iterator adaptors, slices and `&str`, the standard collections (`Vec`, `HashMap`, `BTreeMap`, `HashSet`, `BTreeSet`), `impl` blocks on data types, generic functions and data types, lifetimes in algorithms and data types, and `#[derive]`. Data types may implement standard traits such as `Display`, `From`, `FromStr`, `Default` and `Ord`. The pure standard macros `vec!`, `format!`, `matches!`, `assert!` and `write!` are kept, along with `panic!`, which raises a `Panic` failure (see [Failures](#failures)), and `dec!` from `rust_decimal`. Any other macro is an error.
 
 Some of these carry a restriction, so that every effect stays visible:
 
@@ -58,7 +58,7 @@ Some of these carry a restriction, so that every effect stays visible:
 
 ### Rust features Inset leaves out
 
-Inset leaves out only what would hide an effect, a data flow, or which code runs. The compiler rejects each with an error that names the Inset alternative. Stage 6 pins the wording.
+Inset leaves out only what would hide an effect, a data flow, or which code runs. The compiler rejects each with an error that names the Inset alternative.
 
 | Rust feature | Inset alternative | Why Inset leaves it out |
 | --- | --- | --- |
@@ -396,6 +396,7 @@ A boundary is any place a value leaves a component: a handoff in `start`, and an
 
 - A place, meaning a variable or a field, that crosses a boundary is written with `move` or `&`, or bare if its type is `Copy`. The compiler rejects a bare place of any other type.
 - Any other expression makes a new value, which simply moves. `Vec::new()`, `"Hello"` and `Reorder { sku, quantity: order }` need no notation.
+- In a message's arguments, a move is written as in a handoff: `send self.reorders.raise(move order)`. `move` anywhere else is an error, because nothing crosses a boundary there.
 - A reply always moves its value, so it needs no notation.
 - `&x` in a message is allowed only when the sender awaits the reply, because the sender then outlives the borrow. `send` does not wait, so it can only move or copy. `&child` in `start` is allowed because the parent outlives its children.
 - A value lent in a message reaches the receiver as a copy, and its handler gets `&T` to the copy. The type must therefore be `Clone`. The compiler rejects lending any other type, and its error says to derive `Clone`. For large values the runtime may share one immutable copy instead, which cannot be told apart.
@@ -586,8 +587,10 @@ The compiler resolves every step against the program, so a step that names an un
 - Steps run in order. A requirement may have several `when` steps, each followed by the `then` steps that check it, as in "A new reorder for an item replaces its earlier one". A `then ... replies` step checks the reply to the most recent `when`.
 - A fake capability starts empty, so `given items is empty` states the default. It is written when the empty state is part of the requirement.
 - The path is written without quotes, as it would appear in a browser's address bar.
-- Statuses are written with their standard names in `UpperCamelCase`, such as `OK`, `NotFound`, `Conflict`, `BadRequest` and `InternalServerError`.
-- When the app grants more than one `HttpServer`, the `when` step names the one to use: `when HelloHttp receives GET /hello/Ada via http`. *(Draft.)*
+- Statuses are written with their standard names from the HTTP specification (RFC 9110) in `UpperCamelCase`, such as `OK`, `NotFound`, `Conflict`, `BadRequest` and `InternalServerError`.
+- When the app grants more than one `HttpServer`, the `when` step names the one to use: `when HelloHttp receives GET /hello/Ada via http`. `via` comes before any `with`. *(Draft.)*
+- The request must match a route, with each path parameter converting to its type, so a requirement cannot ask for a path the program has no route for. A route that returns `Option<String>` is how a requirement tests `NotFound`.
+- The status must be one the route can reply: `OK` for a `String`, `OK` or `NotFound` for an `Option<String>`, `BadRequest` too when the route reads a body, and `InternalServerError` for any route, since a rolled-back failure replies with it.
 
 *Why steps use HTTP terms:* requirements are reviewed by software engineers, so steps use the precise terms of the boundary they test. At an HTTP boundary, the method and the status are often the requirement itself, such as a missing item giving `NotFound`. Plain verbs such as "asks for" would hide them behind a vocabulary the reviewer has to learn anyway. The plain-English part of a requirement is its sentence, which is what test reports show.
 
@@ -756,6 +759,7 @@ place        = ident { "." ident } ;
 block        = a Rust block, using the features Inset keeps ;
 expr         = a Rust expression, using the features Inset keeps
              | "send" expr
+             | "move" place, as an argument of a message
              | "fork" "for" pattern "in" expr block ;
 ```
 
@@ -769,7 +773,7 @@ requirement  = "requirement" STRING NEWLINE INDENT [ for_all ] step { step } [ e
 for_all      = "for" "all" ident ":" type [ "where" EXPR ] NEWLINE ;
 
 step         = ( "given" fact
-               | "when" Ident "receives" HTTP_METHOD path [ "with" text ]
+               | "when" Ident "receives" HTTP_METHOD path [ "via" ident ] [ "with" text ]
                | "then" ( Ident "replies" Ident [ "with" text ] | fact | EXPR )
                | "and" step_rest ) NEWLINE ;
 fact         = ident "[" value "]" "is" value | ident "is" "empty" | ident "fails" ;

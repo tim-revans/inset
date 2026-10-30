@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: nothing supplies the parameter `name`
+    ╭─[ src/main.inset:11:14 ]
+    │
+ 11 │     fn hello(name: String) -> String {
+    │              ──┬─  
+    │                ╰─── neither the path nor the body binds this
+    │ 
+    │ Help: name it in the path as `{name}`, or read the body into it with `body = name`
+────╯

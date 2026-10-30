@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `&http` lends a child, and `http` takes no handle
+   ╭─[ src/main.inset:4:21 ]
+   │
+ 4 │     start Greeter { http: &http };
+   │                     ─────┬─────  
+   │                          ╰─────── `&` in a `start` statement lends a child to a later sibling
+   │ 
+   │ Help: a capability is never lent, so it has one holder; write `http: move http`
+───╯

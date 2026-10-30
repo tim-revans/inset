@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: a closure cannot `await`
+    ╭─[ src/main.inset:16:52 ]
+    │
+ 16 │         let total: u32 = vec![1, 2].iter().map(|_| self.tally.total().await).sum();
+    │                                                    ────────────┬───────────  
+    │                                                                ╰───────────── this waits inside a closure
+    │ 
+    │ Help: await in the function's body, outside the closure, so the flowchart shows the call as a step of its own
+────╯

@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `send` does not wait, so it cannot take the reply of `Tally::total`
+    ╭─[ src/main.inset:15:14 ]
+    │
+ 15 │         send self.tally.total();
+    │              ─────────┬────────  
+    │                       ╰────────── this message replies with a `u32`
+    │ 
+    │ Help: await the message instead, with `.await`
+────╯

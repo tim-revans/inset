@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `Tally` starts itself
+    ╭─[ src/main.inset:24:18 ]
+    │
+ 24 │     start inner: Tally { total: 0 };
+    │                  ──┬──  
+    │                    ╰──── this `start` leads back to a component already starting
+    │ 
+    │ Help: the loop is `Tally` → `Tally`; a component cannot be among its own descendants
+────╯

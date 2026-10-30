@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: no route of `Counting` takes `GET /count/two`
+   ╭─[ requirements/main.req.inset:2:32 ]
+   │
+ 2 │     when Counting receives GET /count/two
+   │                                ─────┬────  
+   │                                     ╰────── no route matches this request
+   │ 
+   │ Help: the route `GET /count/{n}` takes this path, but `two` is not a `u32`
+───╯

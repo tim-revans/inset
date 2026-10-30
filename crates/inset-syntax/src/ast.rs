@@ -201,13 +201,57 @@ pub struct FieldInit {
     pub span: Span,
 }
 
-/// `component Name { fields, starts, functions }`
+/// `component Name { fields, starts, failure block, functions }`
 #[derive(Clone, Debug, PartialEq)]
 pub struct Component {
     pub name: Ident,
     pub fields: Vec<FieldDecl>,
     pub starts: Vec<Start>,
+    pub failure: Option<Failure>,
     pub functions: Vec<Function>,
+}
+
+/// `failure { arms }`: how a component responds to failures.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Failure {
+    pub arms: Vec<FailureArm>,
+    pub span: Span,
+}
+
+/// `/// reason` then `Condition => response,`
+#[derive(Clone, Debug, PartialEq)]
+pub struct FailureArm {
+    /// The reason for the response, which the diagram shows.
+    pub docs: Vec<Doc>,
+    pub condition: FailureCondition,
+    pub response: FailureResponse,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FailureCondition {
+    pub kind: FailureConditionKind,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum FailureConditionKind {
+    Panic,
+    Overflow,
+    /// `Capability(field)`
+    Capability(Ident),
+    /// `Message(child)`
+    Message(Ident),
+    /// `Child(child)`
+    Child(Ident),
+    /// `_`, any other failure.
+    Other,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FailureResponse {
+    Rollback,
+    Restart,
 }
 
 /// `name: Type` in a component.
@@ -412,6 +456,27 @@ pub enum ExprKind {
     Return(Option<Box<Expr>>),
     /// `send message`, which does not wait for the receiver.
     Send(Box<Expr>),
+    /// `move place`, a value moved across a component boundary in a
+    /// message's arguments.
+    Move(Place),
+    /// `|params| body`, or `move |params| body`.
+    Closure(Closure),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Closure {
+    pub is_move: bool,
+    pub params: Vec<ClosureParam>,
+    pub ret: Option<Type>,
+    pub body: Box<Expr>,
+}
+
+/// A closure's parameter, whose type may be left out.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClosureParam {
+    pub pattern: Pattern,
+    pub ty: Option<Type>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -494,11 +559,13 @@ pub enum StepKeyword {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum StepKind {
-    /// `when App receives METHOD /path [with body]`
+    /// `when App receives METHOD /path [via server] [with body]`
     Request {
         app: Ident,
         method: HttpMethod,
         path: Text,
+        /// The `HttpServer` grant the request arrives through.
+        via: Option<Ident>,
         body: Option<Text>,
     },
     /// `then App replies Status [with body]`

@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: the outlet `counted` of `Log` is not connected
+    ╭─[ src/main.inset:11:16 ]
+    │
+ 11 │     start log: Log { entries: Vec::new() };
+    │                ─┬─  
+    │                 ╰─── this `start` leaves `counted` unconnected
+    │ 
+    │ Help: connect it to a message that takes one `u32`, such as `counted: send child.message`
+────╯

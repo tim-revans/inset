@@ -1,0 +1,21 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `http` is marked `#[handed_down]` but no child receives it
+   ╭─[ src/main.inset:9:5 ]
+   │
+ 9 │     http: HttpServer,
+   │     ──┬─  
+   │       ╰─── nothing moves this field into a child
+   │ 
+   │ Help: move it into a child with `http: move http`, or remove `#[handed_down]`
+───╯
+Error: `http` is handed down, so `Greeter` does not keep it
+    ╭─[ src/main.inset:11:34 ]
+    │
+ 11 │     #[get("/hello/{name}", via = http)]
+    │                                  ──┬─  
+    │                                    ╰─── a `#[handed_down]` field is passed straight to a child
+    │ 
+    │ Help: use the field in the child it is moved into, or send that child a message
+────╯

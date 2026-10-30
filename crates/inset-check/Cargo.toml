@@ -1,0 +1,17 @@
+[package]
+name = "inset-check"
+version = "0.0.0"
+description = "Inset's semantic checks: names, types, capabilities, boundaries and requirement steps"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+inset-syntax = { path = "../inset-syntax" }
+
+[dev-dependencies]
+insta = "1.49"
+
+[lints]
+workspace = true

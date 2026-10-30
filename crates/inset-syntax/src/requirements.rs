@@ -301,11 +301,13 @@ impl<'a> ReqParser<'a> {
             self.expect_word(cursor, "receives", "after the app's name in a `when` step")?;
             let method = self.method(cursor)?;
             let path = self.path(cursor)?;
+            let via = self.via(cursor)?;
             let body = self.body(cursor, text_block, block_failed)?;
             StepKind::Request {
                 app,
                 method,
                 path,
+                via,
                 body,
             }
         } else {
@@ -465,6 +467,35 @@ impl<'a> ReqParser<'a> {
         }
     }
 
+    /// `via server`, naming the `HttpServer` grant a request arrives
+    /// through. `Some(None)` when there is no `via`.
+    fn via(&mut self, cursor: &mut Cursor<'a>) -> Option<Option<Ident>> {
+        match cursor.peek_word() {
+            Some(word) if word == "via" => {}
+            _ => return Some(None),
+        }
+        let (_, via) = cursor.word()?;
+        match cursor.word() {
+            Some((word, span)) if is_snake(&word) => Some(Some(Ident::new(word, span))),
+            Some((word, span)) => {
+                self.error(Diagnostic::new(
+                    format!("expected the name of a server after `via`, found `{word}`"),
+                    span,
+                    "the name of an `HttpServer` grant, such as `http`, goes here",
+                ));
+                None
+            }
+            None => {
+                self.error(Diagnostic::new(
+                    "expected the name of a server after `via`",
+                    via,
+                    "nothing follows this",
+                ));
+                None
+            }
+        }
+    }
+
     /// `with "text"`, or `with` at the end of the step and a text block
     /// below it. `Some(None)` when there is no `with`. `block_failed` says a
     /// text block was there but has already been reported.
@@ -476,11 +507,6 @@ impl<'a> ReqParser<'a> {
     ) -> Option<Option<Text>> {
         match cursor.peek_word() {
             Some(word) if word == "with" => {}
-            Some(word) if word == "via" => {
-                let span = cursor.here();
-                self.unsupported("`via`", span);
-                return None;
-            }
             _ => return Some(None),
         }
         let (_, with) = cursor.word()?;
@@ -699,6 +725,13 @@ impl<'a> Cursor<'a> {
             span: Span::new(start, self.pos),
         }))
     }
+}
+
+fn is_snake(word: &str) -> bool {
+    word.starts_with(|c: char| c.is_ascii_lowercase() || c == '_')
+        && word
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
 fn is_upper_camel(word: &str) -> bool {

@@ -1064,9 +1064,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "inset-check"
+version = "0.0.0"
+dependencies = [
+ "inset-syntax",
+ "insta",
+]
+
+[[package]]
 name = "inset-cli"
 version = "0.0.0"
 dependencies = [
+ "inset-check",
  "inset-syntax",
 ]
 

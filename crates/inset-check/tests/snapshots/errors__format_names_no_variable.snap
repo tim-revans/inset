@@ -1,0 +1,10 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: cannot find `nme` in this scope
+    ╭─[ src/main.inset:12:17 ]
+    │
+ 12 │         format!("Hello, {nme}!")
+    │                 ───────┬───────  
+    │                        ╰───────── `{nme}` in this format string names no variable
+────╯

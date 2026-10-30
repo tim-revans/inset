@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: no route of `HelloHttp` takes `GET /helo/Ada`
+   ╭─[ requirements/main.req.inset:2:33 ]
+   │
+ 2 │     when HelloHttp receives GET /helo/Ada
+   │                                 ────┬────  
+   │                                     ╰────── no route matches this request
+   │ 
+   │ Help: the routes of `HelloHttp` are `GET /hello/{name}`
+───╯

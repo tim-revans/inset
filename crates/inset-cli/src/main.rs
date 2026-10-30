@@ -1,16 +1,22 @@
 //! The `inset` command line.
 //!
+//! `inset check <dir>` checks the program in a directory: its code in
+//! `src/` and its requirements in `requirements/`. It prints nothing when
+//! the program is sound.
+//!
 //! `inset parse <file>` prints a file's syntax tree, for debugging the
 //! parser. The dialect follows from the file name: `*.req.inset` is
-//! requirements and any other file is code. Diagnostics go to standard
-//! error, and the command fails if there are any.
+//! requirements and any other file is code.
+//!
+//! Diagnostics go to standard error, and either command fails if there are any.
 
 use std::io::{IsTerminal, Write};
 use std::process::ExitCode;
 
+use inset_check::Program;
 use inset_syntax::{Diagnostic, is_requirements_file, parse_code, parse_requirements};
 
-const USAGE: &str = "usage: inset parse <file>";
+const USAGE: &str = "usage: inset check <dir>\n       inset parse <file>";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -20,11 +26,32 @@ fn main() -> ExitCode {
         .collect::<Vec<_>>()
         .as_slice()
     {
+        ["check", dir] => check(dir),
         ["parse", path] => parse(path),
         _ => {
             eprintln!("{USAGE}");
             ExitCode::FAILURE
         }
+    }
+}
+
+fn check(dir: &str) -> ExitCode {
+    let program = match Program::load(std::path::Path::new(dir)) {
+        Ok(program) => program,
+        Err(e) => {
+            eprintln!("inset: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let reports = inset_check::check(&program);
+    let color = std::io::stderr().is_terminal();
+    for report in &reports {
+        eprint!("{}", program.render(report, color));
+    }
+    if reports.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 

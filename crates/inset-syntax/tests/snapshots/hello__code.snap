@@ -142,6 +142,7 @@ Module {
                         },
                     ],
                     starts: [],
+                    failure: None,
                     functions: [
                         Function {
                             docs: [

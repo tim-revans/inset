@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: the outlet `counted` sends a `u32`, but `Tally::note` takes a `String`
+    ╭─[ src/main.inset:11:63 ]
+    │
+ 11 │     start log: Log { entries: Vec::new(), counted: send tally.note };
+    │                                                               ──┬─  
+    │                                                                 ╰─── this message takes a `String`
+    │ 
+    │ Help: connect `counted` to a message that takes one `u32`, or change the type of the outlet or the message
+────╯

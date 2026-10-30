@@ -38,6 +38,8 @@ enum List {
     Items,
     Members,
     Stmts,
+    /// The arms of a `failure` block.
+    Arms,
 }
 
 impl<'a> Parser<'a> {
@@ -282,6 +284,10 @@ impl<'a> Parser<'a> {
                     return;
                 }
                 T::Punct(P::RBrace | P::RParen | P::RBracket) => depth -= 1,
+                T::Punct(P::Comma) if depth == 0 && matches!(list, List::Arms) => {
+                    self.bump();
+                    return;
+                }
                 T::Punct(P::Semi) if depth == 0 => {
                     self.bump();
                     return;
@@ -329,5 +335,6 @@ fn starts_entry(kind: &T, list: List) -> bool {
                 )
         ),
         List::Stmts => matches!(kind, T::Keyword(Kw::Let)),
+        List::Arms => matches!(kind, T::Doc(_)),
     }
 }

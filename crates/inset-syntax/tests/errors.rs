@@ -301,3 +301,40 @@ requirement "Visitors with no name are greeted anyway"
 "#,
     );
 }
+
+#[test]
+fn macro_rules_left_out() {
+    code(
+        "macro_rules_left_out",
+        r#"macro_rules! greet {
+    () => { "Hello!" };
+}
+"#,
+    );
+}
+
+#[test]
+fn unknown_failure_condition() {
+    code(
+        "unknown_failure_condition",
+        r#"component Greeter {
+    http: HttpServer,
+
+    failure {
+        /// A greeting that times out affects only its own request.
+        Timeout => rollback,
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn via_without_server() {
+    requirements(
+        "via_without_server",
+        "requirement \"Visitors are greeted by the name in the web address\"\n\
+         \x20   when HelloHttp receives GET /hello/Ada via\n\
+         \x20   then HelloHttp replies OK with \"Hello, Ada!\"\n",
+    );
+}

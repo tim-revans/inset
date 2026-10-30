@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: the failure arm `Message(tally)` gives no reason
+    ╭─[ src/main.inset:14:9 ]
+    │
+ 14 │         Message(tally) => rollback,
+    │         ───────┬──────  
+    │                ╰──────── this response has no doc comment
+    │ 
+    │ Help: write why the program can go on after this failure as a `///` comment above the arm; the diagram shows it to the reviewer
+────╯

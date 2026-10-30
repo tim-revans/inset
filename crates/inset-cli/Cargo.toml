@@ -12,6 +12,7 @@ name = "inset"
 path = "src/main.rs"
 
 [dependencies]
+inset-check = { path = "../inset-check" }
 inset-syntax = { path = "../inset-syntax" }
 
 [lints]

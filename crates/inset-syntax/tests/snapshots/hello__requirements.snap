@@ -19,6 +19,7 @@ RequirementsFile {
                             value: "/hello/Ada",
                             span: 98..108,
                         },
+                        via: None,
                         body: None,
                     },
                     span: 70..108,

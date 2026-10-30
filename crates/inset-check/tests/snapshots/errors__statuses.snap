@@ -1,0 +1,21 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: unknown status `Ok`
+   ╭─[ requirements/main.req.inset:3:28 ]
+   │
+ 3 │     then HelloHttp replies Ok with "Hello, Ada!"
+   │                            ─┬  
+   │                             ╰── not an HTTP status
+   │ 
+   │ Help: the status is written `OK`
+───╯
+Error: the route `GET /hello/{name}` never replies `NotFound`
+   ╭─[ requirements/main.req.inset:7:28 ]
+   │
+ 7 │     then HelloHttp replies NotFound
+   │                            ────┬───  
+   │                                ╰───── this reply cannot happen
+   │ 
+   │ Help: the route replies `OK`, because it returns a `String`
+───╯

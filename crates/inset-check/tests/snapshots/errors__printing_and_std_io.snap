@@ -1,0 +1,21 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: Inset has no `println!`
+    ╭─[ src/main.inset:12:9 ]
+    │
+ 12 │         println!("{name}");
+    │         ───┬───  
+    │            ╰───── printing is an effect
+    │ 
+    │ Help: send output through a capability the app grants
+────╯
+Error: Inset has no `std::fs`
+    ╭─[ src/main.inset:13:17 ]
+    │
+ 13 │         let _ = std::fs::read_to_string(&name);
+    │                 ───┬───  
+    │                    ╰───── file access is an effect
+    │ 
+    │ Help: use a capability the app grants, so the diagram shows it and a test can fake it
+────╯

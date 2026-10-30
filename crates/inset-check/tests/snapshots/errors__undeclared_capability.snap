@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `Greeter` has no field or child `greetings`
+    ╭─[ src/main.inset:12:14 ]
+    │
+ 12 │         self.greetings.get(&name).await
+    │              ────┬────  
+    │                  ╰────── not a field or child of `Greeter`
+    │ 
+    │ Help: a component uses only what it is handed: declare `greetings` as a field of `Greeter`, and have whoever starts `Greeter` move a capability into it with `greetings: move ...`
+────╯

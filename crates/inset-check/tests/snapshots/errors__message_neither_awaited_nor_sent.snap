@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: a message is awaited or sent with `send`
+    ╭─[ src/main.inset:16:21 ]
+    │
+ 16 │         let total = self.tally.total();
+    │                     ─────────┬────────  
+    │                              ╰────────── this message is neither awaited nor sent
+    │ 
+    │ Help: add `.await` to wait for the reply, or write `send` before it if it replies with nothing
+────╯

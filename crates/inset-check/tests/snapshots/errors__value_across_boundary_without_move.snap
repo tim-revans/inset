@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `text` crosses into `Tally` without `move`
+    ╭─[ src/main.inset:16:30 ]
+    │
+ 16 │         send self.tally.note(text);
+    │                              ──┬─  
+    │                                ╰─── only a `Copy` value crosses a boundary bare
+    │ 
+    │ Help: write `move text` to hand it over
+────╯

@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `HelloHttp` has no capability `https`
+   ╭─[ requirements/main.req.inset:2:48 ]
+   │
+ 2 │     when HelloHttp receives GET /hello/Ada via https
+   │                                                ──┬──  
+   │                                                  ╰──── not a grant of the app
+   │ 
+   │ Help: the servers of `HelloHttp` are `http`
+───╯
