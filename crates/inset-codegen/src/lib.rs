@@ -31,6 +31,11 @@
 //! a program builds with the dependency versions and toolchain that Inset's
 //! own tests use. Its release profile keeps overflow checks, because Inset
 //! checks integer arithmetic in every build.
+//!
+//! Every generated project is a workspace root of its own, so Cargo gives
+//! two programs with the same app name the same fingerprints. In a target
+//! directory other projects share, Cargo could then take one program's
+//! build as the other's, so the package is cleaned before each build there.
 
 mod body;
 mod items;

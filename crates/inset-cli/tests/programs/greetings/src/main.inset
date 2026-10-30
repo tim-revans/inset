@@ -1,0 +1,31 @@
+/// A server whose requirements do not all hold, so `inset test` has
+/// failures to report.
+app Greetings {
+    setting port: u16 = 8080;
+    grant http: HttpServer { port };
+    start Greeter { http: move http };
+}
+
+component Greeter {
+    http: HttpServer,
+
+    #[get("/hello/{name}", via = http)]
+    fn hello(name: String) -> String {
+        format!("Hello, {name}!")
+    }
+
+    #[get("/find/{n}", via = http)]
+    fn find(n: i32) -> Option<String> {
+        if n > 0 {
+            Some(n.to_string())
+        } else {
+            None
+        }
+    }
+
+    #[post("/next", via = http, body = n)]
+    fn next(n: u8) -> String {
+        let next: u8 = n + 1;
+        next.to_string()
+    }
+}

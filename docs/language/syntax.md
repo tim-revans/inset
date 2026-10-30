@@ -585,6 +585,8 @@ The compiler resolves every step against the program, so a step that names an un
 
 - `App` is the name of the program's app, so the steps read as sentences about the program.
 - Steps run in order. A requirement may have several `when` steps, each followed by the `then` steps that check it, as in "A new reorder for an item replaces its earlier one". A `then ... replies` step checks the reply to the most recent `when`.
+- Each requirement runs against a freshly started program, with its settings at their defaults and every fake empty. No requirement depends on another having run first.
+- A requirement fails at the first step that does not hold. `inset test` reports the requirement's sentence, the failing step, and what happened instead: the actual reply, or the failure that stopped the program.
 - A fake capability starts empty, so `given items is empty` states the default. It is written when the empty state is part of the requirement.
 - The path is written without quotes, as it would appear in a browser's address bar.
 - Statuses are written with their standard names from the HTTP specification (RFC 9110) in `UpperCamelCase`, such as `OK`, `NotFound`, `Conflict`, `BadRequest` and `InternalServerError`.

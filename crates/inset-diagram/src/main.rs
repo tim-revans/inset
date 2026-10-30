@@ -1,22 +1,21 @@
-//! `inset-diagram`: checks and draws diagram data until the `inset` CLI exists.
+//! `inset-diagram`: checks and draws diagram data written by hand, such as
+//! the expected diagrams of the examples. `inset diagram` draws a program's.
 
 use std::process::ExitCode;
 
-use inset_diagram::{Hide, View};
+use inset_diagram::{VIEW_OPTIONS, View};
 
-const USAGE: &str = "usage:
+fn usage() -> String {
+    format!(
+        "usage:
   inset-diagram render <diagram.json> [options]   draw a view as SVG
   inset-diagram check <diagram.json>              check the data is valid
   inset-diagram schema                            print the JSON Schema
 
 render options:
-  --expand <component id>   draw the component with its children inside (repeatable)
-  --expand-all              draw every component with its children inside
-  --flowchart <function id> draw the function's flowchart instead
-  --hide <label>            leave a kind of label off (repeatable)
-  --theme <auto|dark|light> the palette; auto, the default, follows the reader's setting
-  --transparent             leave the background off
-  -o <file>                 write the SVG to a file instead of standard output";
+{VIEW_OPTIONS}"
+    )
+}
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -41,32 +40,14 @@ fn run(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         Some("check") => {
-            let path = args.get(1).ok_or(USAGE)?;
+            let path = args.get(1).ok_or_else(usage)?;
             read(path)?;
             Ok(())
         }
         Some("render") => {
-            let path = args.get(1).ok_or(USAGE)?;
-            let mut view = View::default();
-            let mut out = None;
-            let mut rest = args[2..].iter();
-            while let Some(arg) = rest.next() {
-                let mut value = || rest.next().cloned().ok_or(format!("{arg} needs a value"));
-                match arg.as_str() {
-                    "--expand" => {
-                        view.expand.insert(value()?);
-                    }
-                    "--expand-all" => view.expand_all = true,
-                    "--flowchart" => view.flowchart = Some(value()?),
-                    "--hide" => {
-                        view.hide.insert(value()?.parse::<Hide>()?);
-                    }
-                    "--theme" => view.theme = value()?.parse()?,
-                    "--transparent" => view.transparent = true,
-                    "-o" => out = Some(value()?),
-                    _ => return Err(format!("unknown option `{arg}`\n{USAGE}")),
-                }
-            }
+            let path = args.get(1).ok_or_else(usage)?;
+            let (view, out) =
+                View::from_args(&args[2..]).map_err(|e| format!("{e}\n{}", usage()))?;
             let diagram = read(path)?;
             let svg = inset_diagram::render(&diagram, &view)?;
             match out {
@@ -79,6 +60,6 @@ fn run(args: &[String]) -> Result<(), String> {
                 }
             }
         }
-        _ => Err(USAGE.into()),
+        _ => Err(usage()),
     }
 }

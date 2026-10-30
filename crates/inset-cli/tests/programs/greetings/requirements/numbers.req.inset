@@ -1,0 +1,3 @@
+requirement "The number after another is one more"
+    when Greetings receives POST /next with "41"
+    then Greetings replies OK with "42"

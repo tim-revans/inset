@@ -1,0 +1,73 @@
+/// Every shape of diagram the compiler draws so far.
+app Shapes {
+    /// The port to serve on.
+    setting port: u16 = 8080;
+    setting store: String = "shapes.db";
+    grant http: HttpServer { port };
+    /// Where counts are kept.
+    grant counts: Table<String, u32> { file: store, name: "counts" };
+    start front: Front { web: move http, counts: move counts };
+}
+
+/// Answers requests.
+component Front {
+    web: HttpServer,
+    #[handed_down]
+    counts: Table<String, u32>,
+
+    start tally: Tally { counts: move counts, total: 0 };
+
+    failure {
+        /// A broken store leaves nothing half written.
+        Message(tally) => rollback,
+        /// Start again from a known state.
+        Panic => restart,
+    }
+
+    /// Finds a number.
+    #[get("/find/{n}", via = web)]
+    fn find(n: i32) -> Option<String> {
+        let half = n.checked_div(2)?;
+        if half > 10 {
+            return Some(String::from("big"));
+        } else if half == 0 {
+            Some(String::from("zero"))
+        } else {
+            let text = describe(half);
+            Some(text)
+        }
+    }
+
+    #[post("/name/{label}", via = web, body = n)]
+    fn name(label: String, n: u64) -> String {
+        let Some(doubled) = n.checked_mul(2) else {
+            return String::from("too big");
+        };
+        let words: Vec<String> = label
+            .split(',')
+            .map(|w| describe(w.len() as i32))
+            .collect();
+        format!("{label}: {doubled} {}", Self::count(&words))
+    }
+
+    fn count(words: &[String]) -> usize {
+        words.len()
+    }
+}
+
+/// Keeps a running total.
+component Tally {
+    counts: Table<String, u32>,
+    total: u32,
+
+    /// Adds to the total.
+    #[message]
+    fn add(&mut self, n: u32) {
+        self.total += n;
+    }
+}
+
+/// Says what a number is.
+fn describe(n: i32) -> String {
+    format!("{n}")
+}

@@ -1094,10 +1094,12 @@ version = "0.0.0"
 dependencies = [
  "inset-check",
  "inset-codegen",
+ "inset-diagram",
  "inset-host",
  "inset-lsp",
  "inset-syntax",
  "insta",
+ "serde",
  "serde_json",
 ]
 
@@ -1119,6 +1121,9 @@ dependencies = [
 name = "inset-diagram"
 version = "0.0.0"
 dependencies = [
+ "inset-check",
+ "inset-syntax",
+ "insta",
  "jsonschema",
  "schemars",
  "serde",

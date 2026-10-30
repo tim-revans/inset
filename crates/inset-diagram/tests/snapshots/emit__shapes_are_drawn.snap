@@ -1,0 +1,386 @@
+---
+source: crates/inset-diagram/tests/emit.rs
+expression: json
+---
+{
+  "version": 1,
+  "app": {
+    "id": "Shapes",
+    "name": "Shapes",
+    "doc": "Every shape of diagram the compiler draws so far.",
+    "settings": [
+      {
+        "id": "Shapes/setting:port",
+        "name": "port",
+        "type": "u16",
+        "default": "8080",
+        "doc": "The port to serve on."
+      },
+      {
+        "id": "Shapes/setting:store",
+        "name": "store",
+        "type": "String",
+        "default": "\"shapes.db\""
+      }
+    ],
+    "grants": [
+      {
+        "id": "Shapes/grant:http",
+        "name": "http",
+        "type": "HttpServer",
+        "config": [
+          {
+            "from": "setting",
+            "name": "port",
+            "setting": "Shapes/setting:port"
+          }
+        ],
+        "outside": {
+          "kind": "clients",
+          "label": "HTTP clients"
+        }
+      },
+      {
+        "id": "Shapes/grant:counts",
+        "name": "counts",
+        "type": "Table<String, u32>",
+        "config": [
+          {
+            "from": "setting",
+            "name": "file",
+            "setting": "Shapes/setting:store"
+          },
+          {
+            "from": "fixed",
+            "name": "name",
+            "value": "\"counts\""
+          }
+        ],
+        "outside": {
+          "kind": "resource",
+          "label": "shapes.db",
+          "setting": "Shapes/setting:store"
+        },
+        "doc": "Where counts are kept."
+      }
+    ],
+    "components": [
+      {
+        "id": "Shapes/front",
+        "name": "front",
+        "type": "Front",
+        "definition": "crate::Front",
+        "doc": "Answers requests.",
+        "start": [
+          {
+            "pass": "move",
+            "field": "web",
+            "from": "Shapes/grant:http"
+          },
+          {
+            "pass": "move",
+            "field": "counts",
+            "from": "Shapes/grant:counts"
+          }
+        ],
+        "fields": [
+          {
+            "id": "Shapes/front/field:web",
+            "name": "web",
+            "type": "HttpServer",
+            "kind": "capability"
+          },
+          {
+            "id": "Shapes/front/field:counts",
+            "name": "counts",
+            "type": "Table<String, u32>",
+            "kind": "capability",
+            "handed_down": true
+          }
+        ],
+        "failure": [
+          {
+            "id": "Shapes/front/failure:message:tally",
+            "condition": {
+              "kind": "message",
+              "component": "Shapes/front/tally"
+            },
+            "response": "rollback",
+            "reason": "A broken store leaves nothing half written."
+          },
+          {
+            "id": "Shapes/front/failure:panic",
+            "condition": {
+              "kind": "panic"
+            },
+            "response": "restart",
+            "reason": "Start again from a known state."
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "path": "/find/{n}",
+            "via": "Shapes/front/field:web",
+            "handler": {
+              "id": "Shapes/front/fn:find",
+              "name": "find",
+              "doc": "Finds a number.",
+              "params": [
+                {
+                  "name": "n",
+                  "type": "i32"
+                }
+              ],
+              "returns": "Option<String>",
+              "body": [
+                {
+                  "kind": "action",
+                  "id": "Shapes/front/fn:find/0",
+                  "text": "let half = n.checked_div(2)?",
+                  "exit": {
+                    "id": "Shapes/front/fn:find/0/err",
+                    "text": "None"
+                  }
+                },
+                {
+                  "kind": "decision",
+                  "id": "Shapes/front/fn:find/1",
+                  "text": "if half > 10",
+                  "branches": [
+                    {
+                      "id": "Shapes/front/fn:find/1/b0",
+                      "label": "yes",
+                      "steps": [
+                        {
+                          "kind": "return",
+                          "id": "Shapes/front/fn:find/1/b0/0",
+                          "text": "Some(String::from(\"big\"))"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "Shapes/front/fn:find/1/b1",
+                      "label": "no",
+                      "steps": [
+                        {
+                          "kind": "decision",
+                          "id": "Shapes/front/fn:find/1/b1/0",
+                          "text": "if half == 0",
+                          "branches": [
+                            {
+                              "id": "Shapes/front/fn:find/1/b1/0/b0",
+                              "label": "yes",
+                              "steps": [
+                                {
+                                  "kind": "return",
+                                  "id": "Shapes/front/fn:find/1/b1/0/b0/0",
+                                  "text": "Some(String::from(\"zero\"))"
+                                }
+                              ]
+                            },
+                            {
+                              "id": "Shapes/front/fn:find/1/b1/0/b1",
+                              "label": "no",
+                              "steps": [
+                                {
+                                  "kind": "action",
+                                  "id": "Shapes/front/fn:find/1/b1/0/b1/0",
+                                  "text": "let text = describe(half)",
+                                  "links": [
+                                    "Shapes/fn:describe"
+                                  ]
+                                },
+                                {
+                                  "kind": "return",
+                                  "id": "Shapes/front/fn:find/1/b1/0/b1/1",
+                                  "text": "Some(text)"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "method": "POST",
+            "path": "/name/{label}",
+            "via": "Shapes/front/field:web",
+            "body": "n",
+            "handler": {
+              "id": "Shapes/front/fn:name",
+              "name": "name",
+              "params": [
+                {
+                  "name": "label",
+                  "type": "String"
+                },
+                {
+                  "name": "n",
+                  "type": "u64"
+                }
+              ],
+              "returns": "String",
+              "body": [
+                {
+                  "kind": "decision",
+                  "id": "Shapes/front/fn:name/0",
+                  "text": "let Some(doubled) = n.checked_mul(2) else",
+                  "branches": [
+                    {
+                      "id": "Shapes/front/fn:name/0/b0",
+                      "label": "Some(doubled)"
+                    },
+                    {
+                      "id": "Shapes/front/fn:name/0/b1",
+                      "label": "else",
+                      "steps": [
+                        {
+                          "kind": "return",
+                          "id": "Shapes/front/fn:name/0/b1/0",
+                          "text": "String::from(\"too big\")"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "kind": "action",
+                  "id": "Shapes/front/fn:name/1",
+                  "text": "let words: Vec<String> = label.split(',').map(|w| describe(w.len() as i32)).collect()",
+                  "links": [
+                    "Shapes/fn:describe"
+                  ]
+                },
+                {
+                  "kind": "return",
+                  "id": "Shapes/front/fn:name/2",
+                  "text": "format!(\"{label}: {doubled} {}\", Self::count(&words))",
+                  "links": [
+                    "Shapes/front/fn:count"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "algorithms": [
+          {
+            "id": "Shapes/front/fn:count",
+            "name": "count",
+            "params": [
+              {
+                "name": "words",
+                "type": "&[String]"
+              }
+            ],
+            "returns": "usize",
+            "body": [
+              {
+                "kind": "return",
+                "id": "Shapes/front/fn:count/0",
+                "text": "words.len()"
+              }
+            ]
+          }
+        ],
+        "components": [
+          {
+            "id": "Shapes/front/tally",
+            "name": "tally",
+            "type": "Tally",
+            "definition": "crate::Tally",
+            "doc": "Keeps a running total.",
+            "start": [
+              {
+                "pass": "move",
+                "field": "counts",
+                "from": "Shapes/front/field:counts"
+              },
+              {
+                "pass": "new",
+                "field": "total",
+                "text": "0"
+              }
+            ],
+            "fields": [
+              {
+                "id": "Shapes/front/tally/field:counts",
+                "name": "counts",
+                "type": "Table<String, u32>",
+                "kind": "capability"
+              },
+              {
+                "id": "Shapes/front/tally/field:total",
+                "name": "total",
+                "type": "u32",
+                "kind": "state"
+              }
+            ],
+            "messages": [
+              {
+                "id": "Shapes/front/tally/fn:add",
+                "name": "add",
+                "doc": "Adds to the total.",
+                "receiver": "mut",
+                "params": [
+                  {
+                    "name": "n",
+                    "type": "u32"
+                  }
+                ],
+                "body": [
+                  {
+                    "kind": "action",
+                    "id": "Shapes/front/tally/fn:add/0",
+                    "text": "self.total += n"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "algorithms": [
+    {
+      "id": "Shapes/fn:describe",
+      "name": "describe",
+      "doc": "Says what a number is.",
+      "params": [
+        {
+          "name": "n",
+          "type": "i32"
+        }
+      ],
+      "returns": "String",
+      "body": [
+        {
+          "kind": "return",
+          "id": "Shapes/fn:describe/0",
+          "text": "format!(\"{n}\")"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "kind": "capability",
+      "id": "Shapes/front/field:web->Shapes/grant:http",
+      "from": "Shapes/front/field:web",
+      "to": "Shapes/grant:http"
+    },
+    {
+      "kind": "capability",
+      "id": "Shapes/front/tally/field:counts->Shapes/grant:counts",
+      "from": "Shapes/front/tally/field:counts",
+      "to": "Shapes/grant:counts"
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&json)
+---
+{
+  "app": "Greetings",
+  "passed": 3,
+  "failed": 4,
+  "requirements": [
+    {
+      "sentence": "Visitors are greeted by name",
+      "file": "requirements/greetings.req.inset",
+      "line": 1,
+      "result": "pass"
+    },
+    {
+      "sentence": "Visitors are greeted politely",
+      "file": "requirements/greetings.req.inset",
+      "line": 5,
+      "result": "fail",
+      "failure": {
+        "line": 7,
+        "step": "then Greetings replies OK with \"Good day, Bo!\"",
+        "message": "but the reply was OK with \"Hello, Bo!\""
+      }
+    },
+    {
+      "sentence": "Zero is found as well",
+      "file": "requirements/greetings.req.inset",
+      "line": 9,
+      "result": "fail",
+      "failure": {
+        "line": 13,
+        "step": "then Greetings replies OK with \"0\"",
+        "message": "but the reply was NotFound with an empty body"
+      }
+    },
+    {
+      "sentence": "The number after the largest is refused",
+      "file": "requirements/greetings.req.inset",
+      "line": 15,
+      "result": "fail",
+      "failure": {
+        "line": 16,
+        "step": "when Greetings receives POST /next with \"255\"",
+        "message": "the program stopped before it replied: Greetings/Greeter failed with Overflow: attempt to add with overflow at src/lib.rs:N"
+      }
+    },
+    {
+      "sentence": "A body that is not a number is refused",
+      "file": "requirements/greetings.req.inset",
+      "line": 19,
+      "result": "pass"
+    },
+    {
+      "sentence": "A greeting spans two lines",
+      "file": "requirements/greetings.req.inset",
+      "line": 26,
+      "result": "fail",
+      "failure": {
+        "line": 28,
+        "step": "then Greetings replies OK with\n    \"\"\"\n    Hello,\n    Ada!\n    \"\"\"",
+        "message": "but the reply was OK with \"Hello, Ada!\""
+      }
+    },
+    {
+      "sentence": "The number after another is one more",
+      "file": "requirements/numbers.req.inset",
+      "line": 1,
+      "result": "pass"
+    }
+  ]
+}

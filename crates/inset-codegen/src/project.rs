@@ -61,18 +61,35 @@ pub fn build(
     write(&out_dir.join("Cargo.lock"), LOCK)?;
     write(&out_dir.join("src/lib.rs"), &generated.source)?;
 
-    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    let mut command = Command::new(cargo);
-    command
-        .args(["build", "--release", "--target", "wasm32-wasip2", "--quiet"])
-        .args(["--message-format", "json-render-diagnostics"])
-        .current_dir(out_dir);
-    if let Some(target_dir) = target_dir {
-        command.arg("--target-dir").arg(target_dir);
+    let cargo = |args: &[&str]| {
+        let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+        let mut command = Command::new(cargo);
+        command
+            .args(args)
+            .args(["--release", "--target", "wasm32-wasip2", "--quiet"])
+            .current_dir(out_dir);
+        if let Some(target_dir) = target_dir {
+            command.arg("--target-dir").arg(target_dir);
+        }
+        command
+            .output()
+            .map_err(|e| BuildError::Failed(format!("cannot run cargo: {e}")))
+    };
+    // Each generated project is the root of a workspace of its own, so Cargo
+    // gives two programs whose apps share a name the same fingerprint, and
+    // in a target directory they share it would take one's build as the
+    // other's. Cleaning the package first makes Cargo build it afresh.
+    if target_dir.is_some() || std::env::var_os("CARGO_TARGET_DIR").is_some() {
+        let cleaned = cargo(&["clean", "--package", &generated.package])?;
+        if !cleaned.status.success() {
+            return Err(BuildError::Failed(format!(
+                "cargo could not clean {}:\n\n{}",
+                generated.package,
+                String::from_utf8_lossy(&cleaned.stderr)
+            )));
+        }
     }
-    let output = command
-        .output()
-        .map_err(|e| BuildError::Failed(format!("cannot run cargo: {e}")))?;
+    let output = cargo(&["build", "--message-format", "json-render-diagnostics"])?;
     let warnings = String::from_utf8_lossy(&output.stderr).into_owned();
     if !output.status.success() {
         return Err(BuildError::Failed(format!(

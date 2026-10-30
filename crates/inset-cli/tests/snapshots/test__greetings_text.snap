@@ -1,0 +1,29 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&text)
+---
+pass  Visitors are greeted by name
+FAIL  Visitors are greeted politely
+      requirements/greetings.req.inset:7
+      then Greetings replies OK with "Good day, Bo!"
+      but the reply was OK with "Hello, Bo!"
+FAIL  Zero is found as well
+      requirements/greetings.req.inset:13
+      then Greetings replies OK with "0"
+      but the reply was NotFound with an empty body
+FAIL  The number after the largest is refused
+      requirements/greetings.req.inset:16
+      when Greetings receives POST /next with "255"
+      the program stopped before it replied: Greetings/Greeter failed with Overflow: attempt to add with overflow at src/lib.rs:N
+pass  A body that is not a number is refused
+FAIL  A greeting spans two lines
+      requirements/greetings.req.inset:28
+      then Greetings replies OK with
+          """
+          Hello,
+          Ada!
+          """
+      but the reply was OK with "Hello, Ada!"
+pass  The number after another is one more
+
+7 requirements: 3 passed, 4 failed

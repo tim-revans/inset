@@ -1,6 +1,9 @@
 //! Inset's diagram data: what the compiler emits about a program's structure,
 //! its JSON Schema, and a renderer that draws it as SVG.
 //!
+//! [`emit`] produces the data from a checked program, as `inset diagram`
+//! does. `emit/mod.rs` says what it covers so far.
+//!
 //! The data holds everything the source says, and a [`View`] chooses what a
 //! picture shows. `docs/language/diagrams.md` describes the format, the ID
 //! rules and the view options. The schema committed at
@@ -23,15 +26,17 @@ pub mod model;
 pub mod view;
 
 mod components;
+mod emit;
 mod flowchart;
 mod svg;
 mod theme;
 mod validate;
 
+pub use emit::emit;
 pub use model::Diagram;
 pub use theme::Theme;
 pub use validate::validate;
-pub use view::{Hide, View};
+pub use view::{Hide, VIEW_OPTIONS, View};
 
 /// The JSON Schema of the diagram format, as pretty-printed JSON.
 pub fn schema() -> String {

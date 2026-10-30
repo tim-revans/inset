@@ -1,0 +1,127 @@
+//! `inset test` runs a program's requirements against what it builds, and
+//! reports each by its sentence, as text or as JSON.
+
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+use std::sync::Mutex;
+
+fn repo() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// `inset` building in a target directory apart from the one `cargo test`
+/// holds locked, shared with the other tests that build programs.
+fn inset(args: &[&str], dir: &Path) -> Command {
+    let target = std::env::var_os("CARGO_TARGET_DIR")
+        .map_or_else(|| repo().join("target"), PathBuf::from)
+        .join("wasm-tests");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_inset"));
+    command.arg(args[0]).arg(dir).args(&args[1..]);
+    command.env("CARGO_TARGET_DIR", target);
+    command
+}
+
+/// A copy of the program in `dir`, relative to the repository, so building
+/// it writes nothing into the source tree.
+fn copy(dir: &str, name: &str) -> PathBuf {
+    let to = std::env::temp_dir().join(format!("inset-test-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&to);
+    for sub in ["src", "requirements"] {
+        let from = repo().join(dir).join(sub);
+        std::fs::create_dir_all(to.join(sub)).unwrap();
+        for entry in std::fs::read_dir(&from).unwrap() {
+            let path = entry.unwrap().path();
+            std::fs::copy(&path, to.join(sub).join(path.file_name().unwrap())).unwrap();
+        }
+    }
+    to
+}
+
+/// Runs `inset`, one at a time. Programs built from copies of one example
+/// share a package name, and so the file Cargo writes the component to.
+fn run(command: &mut Command) -> Output {
+    static BUILDING: Mutex<()> = Mutex::new(());
+    let _building = BUILDING.lock().unwrap_or_else(|e| e.into_inner());
+    command.output().expect("run inset")
+}
+
+/// Standard output, with each line number in the generated Rust that a
+/// panic reports replaced, so a change to the generated code does not
+/// change the snapshot.
+fn stdout(out: &Output) -> String {
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut parts = text.split("src/lib.rs:");
+    let mut cleaned = parts.next().unwrap_or_default().to_string();
+    for part in parts {
+        cleaned.push_str("src/lib.rs:N");
+        cleaned.push_str(part.trim_start_matches(|c: char| c.is_ascii_digit()));
+    }
+    cleaned
+}
+
+fn stderr(out: &Output) -> String {
+    String::from_utf8_lossy(&out.stderr).into_owned()
+}
+
+#[test]
+fn hello_http_meets_its_requirement() {
+    let dir = copy("examples/hello-http", "hello");
+    let out = run(&mut inset(&["test"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "pass  Visitors are greeted by the name in the web address\n\n1 requirement passed\n"
+    );
+}
+
+#[test]
+fn a_broken_hello_http_fails_its_requirement() {
+    let dir = copy("examples/hello-http", "broken-hello");
+    let main = dir.join("src/main.inset");
+    let source = std::fs::read_to_string(&main).unwrap();
+    std::fs::write(&main, source.replace("Hello, {name}!", "Hi, {name}!")).unwrap();
+    let out = run(&mut inset(&["test"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(!out.status.success(), "{}{}", stdout(&out), stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "\
+FAIL  Visitors are greeted by the name in the web address
+      requirements/hello.req.inset:3
+      then HelloHttp replies OK with \"Hello, Ada!\"
+      but the reply was OK with \"Hi, Ada!\"
+
+1 requirement failed
+"
+    );
+}
+
+#[test]
+fn failures_name_the_step_and_what_happened() {
+    let dir = copy("crates/inset-cli/tests/programs/greetings", "greetings");
+    let text = run(&mut inset(&["test"], &dir));
+    let json = run(&mut inset(&["test", "--json"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(text.status.code(), Some(1), "{}", stderr(&text));
+    assert_eq!(json.status.code(), Some(1), "{}", stderr(&json));
+    insta::assert_snapshot!("greetings_text", stdout(&text));
+    insta::assert_snapshot!("greetings_json", stdout(&json));
+}
+
+#[test]
+fn a_program_with_errors_is_not_tested() {
+    let dir = copy("examples/hello-http", "refused");
+    let path = dir.join("requirements/hello.req.inset");
+    let source = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(&path, source.replace("/hello/Ada", "/goodbye/Ada")).unwrap();
+    let out = run(&mut inset(&["test"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(!out.status.success());
+    assert!(out.stdout.is_empty());
+    assert!(
+        stderr(&out).contains("no route of `HelloHttp` takes `GET /goodbye/Ada`"),
+        "{}",
+        stderr(&out)
+    );
+}

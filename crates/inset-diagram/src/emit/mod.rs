@@ -1,0 +1,635 @@
+//! Diagram data emitted from a checked program, which `inset diagram` draws.
+//!
+//! [`emit`] checks the program with `inset-check`, parses its code again and
+//! walks the syntax tree in source order, so the same source always gives
+//! the same data. Every label is the source text of what it labels, because
+//! that is what the compiler knows to be true; text that spans lines is
+//! joined onto one.
+//!
+//! **What is covered.** The app's settings and grants, the components it
+//! starts and the children they start, with every field, `failure` arm,
+//! route, message handler and algorithm, capability edges with the
+//! operations called on each capability, and a flowchart for every function
+//! whose body uses statements, `let ... else`, `if`, `return` and `?` in a
+//! function that returns an `Option`. Anything else that `inset check`
+//! accepts gets a diagnostic saying it cannot be drawn yet, at the
+//! construct, rather than a diagram that leaves it out. Message and emit
+//! edges, which need `send` and `.await`, follow with the Stock tracker, as
+//! do `match`, `for` and modules, which the parser does not read yet.
+
+mod flow;
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use inset_check::{MAIN, Program, Report};
+use inset_syntax::ast::{
+    self, AttributeKind, ExprKind, FailureConditionKind, FailureResponse, HandoffValue, ItemKind,
+    LitKind, TypeKind,
+};
+use inset_syntax::{Diagnostic, Span, parse_code};
+
+use crate::model::{
+    App, Component, Condition, Config, Diagram, Edge, FailureArm, Field, FieldKind, Function,
+    Grant, Handoff, Method, Outside, OutsideKind, Param, Receiver, Response, Route, Setting,
+};
+
+/// Checks the program and emits its diagram data. The reports are the
+/// checker's, or else one for each construct that cannot be drawn yet.
+pub fn emit(program: &Program) -> Result<Diagram, Vec<Report>> {
+    let reports = inset_check::check(program);
+    if !reports.is_empty() {
+        return Err(reports);
+    }
+    let main = program
+        .files
+        .iter()
+        .position(|f| f.path == MAIN)
+        .expect("a checked program has its main file");
+    let source = &program.files[main].text;
+    let module = parse_code(source).ast;
+    let mut emitter = Emitter::new(source, &module);
+    let diagram = emitter.diagram();
+    if emitter.diagnostics.is_empty() {
+        Ok(diagram)
+    } else {
+        Err(emitter
+            .diagnostics
+            .into_iter()
+            .map(|diagnostic| Report {
+                file: main,
+                diagnostic,
+            })
+            .collect())
+    }
+}
+
+/// Walks the syntax tree, collecting what cannot be drawn yet.
+struct Emitter<'a> {
+    source: &'a str,
+    module: &'a ast::Module,
+    app: String,
+    /// The algorithms at the top level of the module.
+    algorithms: BTreeSet<&'a str>,
+    /// The names of the app's settings.
+    app_settings: BTreeSet<&'a str>,
+    /// For each capability field a component received, where it came from:
+    /// a grant, or a field of its parent.
+    moved_from: BTreeMap<String, String>,
+    /// The capability fields, by ID, with the methods called on each.
+    operations: BTreeMap<String, BTreeSet<String>>,
+    /// Capability fields that are used, in the order the components are drawn.
+    used_capabilities: Vec<String>,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl<'a> Emitter<'a> {
+    fn new(source: &'a str, module: &'a ast::Module) -> Emitter<'a> {
+        let algorithms = module
+            .items
+            .iter()
+            .filter_map(|item| match &item.kind {
+                ItemKind::Function(f) => Some(f.name.name.as_str()),
+                _ => None,
+            })
+            .collect();
+        Emitter {
+            source,
+            module,
+            app: String::new(),
+            algorithms,
+            app_settings: BTreeSet::new(),
+            moved_from: BTreeMap::new(),
+            operations: BTreeMap::new(),
+            used_capabilities: Vec::new(),
+            diagnostics: Vec::new(),
+        }
+    }
+
+    fn unsupported(&mut self, what: &str, span: Span, label: &str) {
+        self.diagnostics.push(
+            Diagnostic::new(format!("{what} cannot be drawn yet"), span, label).with_help(
+                "`inset check` accepts this, but the diagram generator does not draw it yet",
+            ),
+        );
+    }
+
+    /// The source text of a span, on one line.
+    fn text(&self, span: Span) -> String {
+        one_line(&self.source[span.start..span.end])
+    }
+
+    fn diagram(&mut self) -> Diagram {
+        let (item, app) = self
+            .module
+            .items
+            .iter()
+            .find_map(|item| match &item.kind {
+                ItemKind::App(app) => Some((item, app)),
+                _ => None,
+            })
+            .expect("a checked program has an app");
+        self.app = app.name.name.clone();
+        self.app_settings = app.settings.iter().map(|s| s.name.name.as_str()).collect();
+        let settings = app
+            .settings
+            .iter()
+            .map(|s| Setting {
+                id: format!("{}/setting:{}", self.app, s.name.name),
+                name: s.name.name.clone(),
+                ty: self.text(s.ty.span),
+                default: self.text(s.default.span),
+                doc: doc(&s.docs),
+            })
+            .collect();
+        let grants = app.grants.iter().map(|g| self.grant(app, g)).collect();
+        let app_id = self.app.clone();
+        let components = self.starts(&app_id, &app.starts, None);
+        let algorithms = self
+            .module
+            .items
+            .iter()
+            .filter_map(|item| match &item.kind {
+                ItemKind::Function(f) => Some((item, f)),
+                _ => None,
+            })
+            .map(|(item, f)| self.function(&app_id, f, &item.docs, None))
+            .collect();
+        let edges = self.capability_edges();
+        Diagram {
+            version: 1,
+            app: App {
+                id: app_id.clone(),
+                name: app_id,
+                doc: doc(&item.docs),
+                settings,
+                grants,
+                front_end: None,
+                components,
+            },
+            algorithms,
+            edges,
+            coverage: None,
+        }
+    }
+
+    fn grant(&mut self, app: &ast::App, grant: &ast::Grant) -> Grant {
+        let setting = |name: &str| app.settings.iter().find(|s| s.name.name == name);
+        let config: Vec<Config> = grant
+            .fields
+            .iter()
+            .map(|field| {
+                let name = field.name.name.clone();
+                let from_setting = match &field.value {
+                    None => Some(name.as_str()),
+                    Some(value) => match &value.kind {
+                        ExprKind::Path(p) if p.segments.len() == 1 => {
+                            Some(p.segments[0].ident.name.as_str())
+                        }
+                        _ => None,
+                    },
+                };
+                match from_setting.and_then(setting) {
+                    Some(s) => Config::Setting {
+                        name: name.clone(),
+                        setting: format!("{}/setting:{}", self.app, s.name.name),
+                    },
+                    None => Config::Fixed {
+                        value: field
+                            .value
+                            .as_ref()
+                            .map_or_else(String::new, |v| self.text(v.span)),
+                        name,
+                    },
+                }
+            })
+            .collect();
+        let capability = match &grant.ty.kind {
+            TypeKind::Path(p) => p.segments.last().map(|s| s.ident.name.as_str()),
+            _ => None,
+        };
+        let outside = match capability {
+            Some("HttpServer") => Outside {
+                kind: OutsideKind::Clients,
+                label: "HTTP clients".into(),
+                setting: None,
+            },
+            Some("Table") => {
+                // The file the table is stored in, or the default of the
+                // setting that chooses it.
+                let file = grant.fields.iter().find(|f| f.name.name == "file");
+                let literal = |expr: &ast::Expr| match &expr.kind {
+                    ExprKind::Lit(ast::Lit {
+                        kind: LitKind::Str(s),
+                        ..
+                    }) => Some(s.clone()),
+                    _ => None,
+                };
+                let chosen = config.iter().find_map(|c| match c {
+                    Config::Setting { name, setting } if name == "file" => Some(setting.clone()),
+                    _ => None,
+                });
+                let label = match &chosen {
+                    Some(id) => {
+                        let name = id.rsplit(':').next().unwrap_or_default();
+                        setting(name).and_then(|s| literal(&s.default))
+                    }
+                    None => file.and_then(|f| f.value.as_ref()).and_then(literal),
+                };
+                Outside {
+                    kind: OutsideKind::Resource,
+                    label: label.unwrap_or_else(|| grant.name.name.clone()),
+                    setting: chosen,
+                }
+            }
+            _ => {
+                self.unsupported("a grant of this capability", grant.ty.span, "granted here");
+                Outside {
+                    kind: OutsideKind::Resource,
+                    label: grant.name.name.clone(),
+                    setting: None,
+                }
+            }
+        };
+        Grant {
+            id: format!("{}/grant:{}", self.app, grant.name.name),
+            name: grant.name.name.clone(),
+            ty: self.text(grant.ty.span),
+            config,
+            outside,
+            doc: doc(&grant.docs),
+        }
+    }
+
+    /// The components started by `starts`, inside `parent`. `owner` is the
+    /// component whose `start` statements these are, or `None` for the app.
+    fn starts(
+        &mut self,
+        parent: &str,
+        starts: &'a [ast::Start],
+        owner: Option<&'a ast::Component>,
+    ) -> Vec<Component> {
+        let mut components = Vec::new();
+        for start in starts {
+            let Some((item, component)) = self.component_item(&start.component.name) else {
+                continue;
+            };
+            let segment = start
+                .binding
+                .as_ref()
+                .map_or(&start.component.name, |b| &b.name);
+            let id = format!("{parent}/{segment}");
+            let handoffs = start
+                .handoffs
+                .iter()
+                .filter_map(|h| self.handoff(parent, &id, h, owner))
+                .collect();
+            components.push(self.component(id, start, item, component, handoffs));
+        }
+        components
+    }
+
+    fn component_item(&self, name: &str) -> Option<(&'a ast::Item, &'a ast::Component)> {
+        self.module.items.iter().find_map(|item| match &item.kind {
+            ItemKind::Component(c) if c.name.name == name => Some((item, c)),
+            _ => None,
+        })
+    }
+
+    fn handoff(
+        &mut self,
+        parent: &str,
+        id: &str,
+        handoff: &ast::Handoff,
+        owner: Option<&ast::Component>,
+    ) -> Option<Handoff> {
+        let field = handoff.field.name.clone();
+        let target = format!("{id}/field:{field}");
+        match &handoff.value {
+            HandoffValue::Move(place) => {
+                let parts: Vec<&str> = place.parts.iter().map(|p| p.name.as_str()).collect();
+                let from = match (owner, parts.as_slice()) {
+                    (None, [grant]) => format!("{}/grant:{grant}", self.app),
+                    (Some(_), [name]) => format!("{parent}/field:{name}"),
+                    _ => {
+                        self.unsupported("this handoff", handoff.span, "handed off here");
+                        return None;
+                    }
+                };
+                self.moved_from.insert(target, from.clone());
+                Some(Handoff::Move { field, from })
+            }
+            HandoffValue::Lend(sibling) => Some(Handoff::Lend {
+                field,
+                from: format!("{parent}/{}", sibling.name),
+            }),
+            HandoffValue::Connect { target, message } => Some(Handoff::Connect {
+                field,
+                to: format!("{parent}/{}/fn:{}", target.name, message.name),
+            }),
+            HandoffValue::Expr(expr) => {
+                // A name alone is a field of the parent, or a setting of the
+                // app, whose value is copied. Anything else is a new value.
+                let copied = match &expr.kind {
+                    ExprKind::Path(p) if p.segments.len() == 1 => {
+                        let name = &p.segments[0].ident.name;
+                        match owner {
+                            Some(c) => c
+                                .fields
+                                .iter()
+                                .any(|f| &f.name.name == name)
+                                .then(|| format!("{parent}/field:{name}")),
+                            None => self
+                                .app_settings
+                                .contains(name.as_str())
+                                .then(|| format!("{}/setting:{name}", self.app)),
+                        }
+                    }
+                    _ => None,
+                };
+                Some(match copied {
+                    Some(from) => Handoff::Copy { field, from },
+                    None => Handoff::New {
+                        field,
+                        text: self.text(expr.span),
+                    },
+                })
+            }
+        }
+    }
+
+    fn component(
+        &mut self,
+        id: String,
+        start: &'a ast::Start,
+        item: &'a ast::Item,
+        component: &'a ast::Component,
+        start_handoffs: Vec<Handoff>,
+    ) -> Component {
+        let fields: Vec<Field> = component
+            .fields
+            .iter()
+            .map(|f| {
+                let kind = field_kind(&f.ty);
+                let handed_down = f
+                    .attrs
+                    .iter()
+                    .any(|a| matches!(a.kind, AttributeKind::HandedDown));
+                let field_id = format!("{id}/field:{}", f.name.name);
+                if kind == FieldKind::Capability && !handed_down {
+                    self.used_capabilities.push(field_id.clone());
+                    self.operations.entry(field_id.clone()).or_default();
+                }
+                Field {
+                    id: field_id,
+                    name: f.name.name.clone(),
+                    ty: self.text(f.ty.span),
+                    kind,
+                    handed_down,
+                    doc: doc(&f.docs),
+                }
+            })
+            .collect();
+        let failure = component
+            .failure
+            .iter()
+            .flat_map(|f| &f.arms)
+            .map(|arm| self.failure_arm(&id, component, &start_handoffs, arm))
+            .collect();
+        let children = self.starts(&id, &component.starts, Some(component));
+        let mut routes = Vec::new();
+        let mut messages = Vec::new();
+        let mut algorithms = Vec::new();
+        let scope = Scope {
+            component: &id,
+            definition: component,
+        };
+        for function in &component.functions {
+            let route = function.attrs.iter().find_map(|a| match &a.kind {
+                AttributeKind::Route(r) => Some(r),
+                _ => None,
+            });
+            let is_message = function
+                .attrs
+                .iter()
+                .any(|a| matches!(a.kind, AttributeKind::Message));
+            let handler = self.function(&id, function, &function.docs, Some(&scope));
+            if let Some(route) = route {
+                routes.push(Route {
+                    method: method(route.method),
+                    path: route.path.value.clone(),
+                    via: format!("{id}/field:{}", route.via.name),
+                    body: route.body.as_ref().map(|b| b.name.clone()),
+                    handler,
+                });
+            } else if is_message {
+                messages.push(handler);
+            } else {
+                algorithms.push(handler);
+            }
+        }
+        Component {
+            name: start.binding.as_ref().map(|b| b.name.clone()),
+            ty: component.name.name.clone(),
+            definition: format!("crate::{}", component.name.name),
+            doc: doc(&item.docs),
+            external: None,
+            start: start_handoffs,
+            fields,
+            failure,
+            routes,
+            messages,
+            algorithms,
+            components: children,
+            id,
+        }
+    }
+
+    fn failure_arm(
+        &mut self,
+        id: &str,
+        component: &ast::Component,
+        handoffs: &[Handoff],
+        arm: &ast::FailureArm,
+    ) -> FailureArm {
+        // A message failure names a child, or a sibling lent to a field.
+        let message_target = |name: &str| {
+            handoffs
+                .iter()
+                .find_map(|h| match h {
+                    Handoff::Lend { field, from } if field == name => Some(from.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| format!("{id}/{name}"))
+        };
+        let (condition, segment) = match &arm.condition.kind {
+            FailureConditionKind::Panic => (Condition::Panic, "panic".to_string()),
+            FailureConditionKind::Overflow => (Condition::Overflow, "overflow".to_string()),
+            FailureConditionKind::Capability(field) => (
+                Condition::Capability {
+                    field: format!("{id}/field:{}", field.name),
+                },
+                format!("capability:{}", field.name),
+            ),
+            FailureConditionKind::Message(name) => {
+                let is_child = component
+                    .starts
+                    .iter()
+                    .any(|s| s.binding.as_ref().is_some_and(|b| b.name == name.name));
+                let target = if is_child {
+                    format!("{id}/{}", name.name)
+                } else {
+                    message_target(&name.name)
+                };
+                (
+                    Condition::Message { component: target },
+                    format!("message:{}", name.name),
+                )
+            }
+            FailureConditionKind::Child(name) => (
+                Condition::Child {
+                    component: format!("{id}/{}", name.name),
+                },
+                format!("child:{}", name.name),
+            ),
+            FailureConditionKind::Other => (Condition::Any, "any".to_string()),
+        };
+        FailureArm {
+            id: format!("{id}/failure:{segment}"),
+            condition,
+            response: match arm.response {
+                FailureResponse::Rollback => Response::Rollback,
+                FailureResponse::Restart => Response::Restart,
+            },
+            reason: doc(&arm.docs).unwrap_or_default(),
+            defensive: None,
+        }
+    }
+
+    fn function(
+        &mut self,
+        owner: &str,
+        function: &'a ast::Function,
+        docs: &[ast::Doc],
+        scope: Option<&Scope<'_>>,
+    ) -> Function {
+        let id = format!("{owner}/fn:{}", function.name.name);
+        let returns = function.ret.as_ref().map(|t| self.text(t.span));
+        let body = self.flowchart(&id, function, scope);
+        Function {
+            name: function.name.name.clone(),
+            doc: doc(docs),
+            receiver: function.receiver.as_ref().map(|r| match r.mutable {
+                true => Receiver::Mut,
+                false => Receiver::Ref,
+            }),
+            is_async: function.is_async,
+            params: function
+                .params
+                .iter()
+                .map(|p| Param {
+                    name: self.text(p.pattern.span),
+                    ty: self.text(p.ty.span),
+                })
+                .collect(),
+            returns,
+            body: Some(body),
+            id,
+        }
+    }
+
+    /// An edge from each capability field a component uses to its grant,
+    /// in the order the components are drawn.
+    fn capability_edges(&mut self) -> Vec<Edge> {
+        let mut edges = Vec::new();
+        for field in &self.used_capabilities {
+            let mut from = field;
+            while let Some(next) = self.moved_from.get(from) {
+                from = next;
+            }
+            if !from.contains("/grant:") {
+                continue;
+            }
+            edges.push(Edge::Capability {
+                id: format!("{field}->{from}"),
+                from: field.clone(),
+                to: from.clone(),
+                operations: self.operations[field].iter().cloned().collect(),
+            });
+        }
+        edges
+    }
+}
+
+/// The component a function belongs to, for resolving its calls.
+struct Scope<'a> {
+    component: &'a str,
+    definition: &'a ast::Component,
+}
+
+fn doc(docs: &[ast::Doc]) -> Option<String> {
+    (!docs.is_empty()).then(|| {
+        docs.iter()
+            .map(|d| d.text.as_str())
+            .collect::<Vec<_>>()
+            .join("\n")
+    })
+}
+
+fn field_kind(ty: &ast::Type) -> FieldKind {
+    let last = |ty: &ast::Type| match &ty.kind {
+        TypeKind::Path(p) => p.segments.last().map(|s| s.ident.name.clone()),
+        _ => None,
+    };
+    match &ty.kind {
+        TypeKind::Ref { inner, .. } if last(inner).as_deref() == Some("Handle") => {
+            FieldKind::Handle
+        }
+        _ => match last(ty).as_deref() {
+            Some("HttpServer" | "Table") => FieldKind::Capability,
+            Some("Outlet") => FieldKind::Outlet,
+            _ => FieldKind::State,
+        },
+    }
+}
+
+fn method(method: ast::HttpMethod) -> Method {
+    match method {
+        ast::HttpMethod::Get => Method::Get,
+        ast::HttpMethod::Post => Method::Post,
+        ast::HttpMethod::Put => Method::Put,
+        ast::HttpMethod::Patch => Method::Patch,
+        ast::HttpMethod::Delete => Method::Delete,
+    }
+}
+
+/// Source text on one line: each line trimmed, and joined by a space, or by
+/// nothing where a method chain continues or a bracket opens or closes.
+fn one_line(text: &str) -> String {
+    let mut out = String::new();
+    for line in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        let glued =
+            out.is_empty() || out.ends_with(['(', '[']) || line.starts_with(['.', ')', ']', '?']);
+        if line.starts_with([')', ']']) && out.ends_with(',') {
+            out.pop();
+        }
+        if !glued {
+            out.push(' ');
+        }
+        out.push_str(line);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::one_line;
+
+    #[test]
+    fn source_text_is_joined_onto_one_line() {
+        assert_eq!(
+            one_line("a\n    .map(|w| {\n        w.len()\n    })\n    .collect()"),
+            "a.map(|w| { w.len() }).collect()"
+        );
+        assert_eq!(one_line("f(\n    a,\n    b,\n)"), "f(a, b)");
+    }
+}

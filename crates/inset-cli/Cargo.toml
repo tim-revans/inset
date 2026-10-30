@@ -14,13 +14,15 @@ path = "src/main.rs"
 [dependencies]
 inset-check = { path = "../inset-check" }
 inset-codegen = { path = "../inset-codegen" }
+inset-diagram = { path = "../inset-diagram" }
 inset-host = { path = "../inset-host" }
 inset-lsp = { path = "../inset-lsp" }
 inset-syntax = { path = "../inset-syntax" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [dev-dependencies]
 insta = "1.49"
-serde_json = "1"
 
 [lints]
 workspace = true

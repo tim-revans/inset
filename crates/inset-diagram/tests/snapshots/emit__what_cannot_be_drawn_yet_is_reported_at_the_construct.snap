@@ -1,0 +1,51 @@
+---
+source: crates/inset-diagram/tests/emit.rs
+expression: rendered
+---
+Error: `send` cannot be drawn yet
+    ╭─[ src/main.inset:14:9 ]
+    │
+ 14 │         send self.tally.add(n);
+    │         ───────────┬──────────  
+    │                    ╰──────────── sent here
+    │ 
+    │ Help: `inset check` accepts this, but the diagram generator does not draw it yet
+────╯
+Error: `.await` cannot be drawn yet
+    ╭─[ src/main.inset:15:21 ]
+    │
+ 15 │         let total = self.tally.total().await;
+    │                     ────────────┬───────────  
+    │                                 ╰───────────── awaited here
+    │ 
+    │ Help: `inset check` accepts this, but the diagram generator does not draw it yet
+────╯
+Error: an `if` inside an expression cannot be drawn yet
+    ╭─[ src/main.inset:21:28 ]
+    │
+ 21 │         let small = double(if n > 10 { 10 } else { n });
+    │                            ─────────────┬─────────────  
+    │                                         ╰─────────────── this `if`
+    │ 
+    │ Help: `inset check` accepts this, but the diagram generator does not draw it yet
+────╯
+Error: a block in a body cannot be drawn yet
+    ╭─[ src/main.inset:22:9 ]
+    │
+ 22 │ ╭─▶         {
+    ┆ ┆   
+ 24 │ ├─▶         }
+    │ │               
+    │ ╰─────────────── this block
+    │     
+    │     Help: `inset check` accepts this, but the diagram generator does not draw it yet
+────╯
+Error: `?` in a function that does not return an `Option` cannot be drawn yet
+    ╭─[ src/main.inset:48:5 ]
+    │
+ 48 │     let n: u32 = text.parse().map_err(|_| String::from("not a number"))?;
+    │     ──────────────────────────────────┬──────────────────────────────────  
+    │                                       ╰──────────────────────────────────── returns early here
+    │ 
+    │ Help: `inset check` accepts this, but the diagram generator does not draw it yet
+────╯

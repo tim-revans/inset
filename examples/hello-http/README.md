@@ -26,7 +26,7 @@ It covers the brief's Hello HTTP row: one component, one route, one requirement 
 
 ## Expected diagram
 
-`expected/diagram.json` is the diagram data the compiler must emit, written by hand. The SVGs are drawn from it with `inset-diagram render` (see [diagrams.md](../../docs/language/diagrams.md)).
+`expected/diagram.json` is the diagram data the compiler must emit, written by hand. The SVGs are drawn from it with `inset-diagram render` (see [diagrams.md](../../docs/language/diagrams.md)). A test compares this file with the output of `inset diagram --json`, and compares the SVGs with pictures drawn by `inset diagram`.
 
 **Component view** (`expected/diagram.svg`):
 

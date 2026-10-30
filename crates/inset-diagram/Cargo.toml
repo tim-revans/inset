@@ -1,18 +1,21 @@
 [package]
 name = "inset-diagram"
 version = "0.0.0"
-description = "The diagram data model emitted by the Inset compiler, its JSON Schema, and an SVG renderer"
+description = "The diagram data the Inset compiler emits from a checked program, its JSON Schema, and an SVG renderer"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
 
 [dependencies]
+inset-check = { path = "../inset-check" }
+inset-syntax = { path = "../inset-syntax" }
 schemars = "1.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [dev-dependencies]
+insta = "1.49"
 jsonschema = { version = "0.60", default-features = false }
 
 [lints]

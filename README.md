@@ -10,18 +10,32 @@ The compiler is written in Rust and emits Rust. That Rust builds to WebAssembly 
 
 ## Status
 
-The syntax is being designed through example programs, the diagram data format is defined, and the runtime that built programs run on exists. The compiler parses, checks and builds Hello HTTP, and runs it in the host.
+The syntax is being designed through example programs, the diagram data format is defined, and the runtime that built programs run on exists. The compiler parses, checks and builds Hello HTTP. The `inset` command also runs Hello HTTP in the host, tests the program against its requirement, and draws the program's diagram.
 
 - [`docs/language/syntax.md`](docs/language/syntax.md) is the syntax reference.
 - [`crates/inset-syntax/`](crates/inset-syntax/) parses both dialects into a syntax tree, with diagnostics for malformed input: `cargo run -p inset-cli -- parse examples/hello-http/src/main.inset` prints the tree.
 - [`crates/inset-check/`](crates/inset-check/) checks a program's names, types, capabilities, component boundaries and requirement steps: `cargo run -p inset-cli -- check examples/hello-http` reports any problem.
 - [`crates/inset-lsp/`](crates/inset-lsp/) is the language server, run as `inset lsp`. It shows the same problems in the editor as you type, with hover, go-to-definition, and an outline.
 - [`docs/language/diagrams.md`](docs/language/diagrams.md) describes the generated diagrams and their data format, whose JSON Schema is [`diagram.schema.json`](docs/language/diagram.schema.json).
-- [`crates/inset-diagram/`](crates/inset-diagram/) reads diagram data and draws it as SVG: `cargo run -p inset-diagram -- render examples/stock-tracker/expected/diagram.json`.
+- [`crates/inset-diagram/`](crates/inset-diagram/) emits a checked program's diagram data and draws it as SVG: `cargo run -p inset-cli -- diagram examples/hello-http`. It also draws hand-written data, such as `cargo run -p inset-diagram -- render examples/stock-tracker/expected/diagram.json`.
 - [`crates/inset-codegen/`](crates/inset-codegen/) turns a checked program into Rust and builds it to a WebAssembly component: `cargo run -p inset-cli -- build examples/hello-http`. So far it compiles what Hello HTTP uses.
-- [`docs/language/runtime.md`](docs/language/runtime.md) describes how a built program runs: the Rust the compiler emits, [`crates/inset-runtime/`](crates/inset-runtime/), which that Rust links, and [`crates/inset-host/`](crates/inset-host/), the WebAssembly host that runs it with only the capabilities it is granted. `cargo run -p inset-cli -- run examples/hello-http` serves Hello HTTP on port 8080, and `cargo xtask e2e hello` builds it, serves it and asks it for a greeting.
+- [`docs/language/runtime.md`](docs/language/runtime.md) describes how a built program runs: the Rust the compiler emits, [`crates/inset-runtime/`](crates/inset-runtime/), which that Rust links, and [`crates/inset-host/`](crates/inset-host/), the WebAssembly host that runs it with only the capabilities it is granted. `cargo run -p inset-cli -- run examples/hello-http` serves Hello HTTP on port 8080, and `cargo xtask e2e hello` builds it, serves it and asks it for a greeting. `cargo run -p inset-cli -- test examples/hello-http` runs its requirements in the host and reports each by its sentence.
 - [`examples/`](examples/) holds the example programs that pin the syntax down, each with its expected diagram data and pictures in `expected/`.
 - [`editors/vscode/`](editors/vscode/) is a VS Code extension that highlights Inset code and requirements and starts the language server. `cargo xtask editor` packages it.
+
+## Quickstart
+
+You need [rustup](https://rustup.rs). These five commands install the `inset` command and review Hello HTTP the way Inset intends: by its requirements and its diagram, not its source.
+
+```sh
+cargo install --path crates/inset-cli                # put `inset` on PATH
+inset check examples/hello-http                      # check the program; silent when it is sound
+inset test examples/hello-http                       # run its requirements and list each with pass or fail
+inset diagram examples/hello-http -o hello-http.svg  # draw its component diagram; open the SVG in a browser
+inset run examples/hello-http                        # serve it, then open http://localhost:8080/hello/Ada
+```
+
+`inset test --json` prints the test report as JSON. `inset diagram --json` prints the diagram data. `inset diagram --flowchart HelloHttp/Greeter/fn:hello` draws one function's flowchart instead.
 
 ## Building
 

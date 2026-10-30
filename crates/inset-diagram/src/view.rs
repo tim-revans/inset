@@ -102,7 +102,43 @@ pub struct View {
     pub transparent: bool,
 }
 
+/// The view options `inset diagram` and `inset-diagram render` take.
+pub const VIEW_OPTIONS: &str =
+    "  --expand <component id>   draw the component with its children inside (repeatable)
+  --expand-all              draw every component with its children inside
+  --flowchart <function id> draw the function's flowchart instead
+  --hide <label>            leave a kind of label off (repeatable)
+  --theme <auto|dark|light> the palette; auto, the default, follows the reader's setting
+  --transparent             leave the background off
+  -o <file>                 write the SVG to a file instead of standard output";
+
 impl View {
+    /// Reads the options in [`VIEW_OPTIONS`]: the view, and the file given
+    /// with `-o`, if any.
+    pub fn from_args(args: &[String]) -> Result<(View, Option<String>), String> {
+        let mut view = View::default();
+        let mut out = None;
+        let mut rest = args.iter();
+        while let Some(arg) = rest.next() {
+            let mut value = || rest.next().cloned().ok_or(format!("{arg} needs a value"));
+            match arg.as_str() {
+                "--expand" => {
+                    view.expand.insert(value()?);
+                }
+                "--expand-all" => view.expand_all = true,
+                "--flowchart" => view.flowchart = Some(value()?),
+                "--hide" => {
+                    view.hide.insert(value()?.parse::<Hide>()?);
+                }
+                "--theme" => view.theme = value()?.parse()?,
+                "--transparent" => view.transparent = true,
+                "-o" => out = Some(value()?),
+                _ => return Err(format!("unknown option `{arg}`")),
+            }
+        }
+        Ok((view, out))
+    }
+
     pub(crate) fn expands(&self, component: &str) -> bool {
         self.expand_all
             || self.expand.iter().any(|id| {

@@ -10,7 +10,7 @@ A reviewer starts at the outside and drills in:
 
 | Level | Shows | Drawn with |
 | --- | --- | --- |
-| Component view | The app, what it is granted, the components it starts, and what is outside: HTTP clients on the left, stored data on the right | `inset-diagram render diagram.json` |
+| Component view | The app, what it is granted, the components it starts, and what is outside: HTTP clients on the left, stored data on the right | `inset diagram <dir>` |
 | Inside a component | The same picture with one component expanded, its children drawn inside it, and the messages between them | `--expand <component id>` |
 | Flowchart | One function's body: its steps, decisions, loops and forks | `--flowchart <function id>` |
 | Coverage | The same pictures, with what no requirement reached marked | *(Draft: comes with the coverage overlay, with its own colours chosen against this palette)* |
@@ -74,7 +74,7 @@ An SVG shown as an image usually follows the reader's operating system or browse
 The compiler emits diagram data that holds everything the source says about the program's structure. A view is drawn from that data, and only the view chooses what to show.
 
 - Diagram data is complete and deterministic. It never leaves anything out to make a picture simpler.
-- `inset diagram` draws a view as SVG. Its options choose what the view shows. With no options it shows every label below. Until the `inset` command exists, `inset-diagram render` does the same.
+- `inset diagram` draws a view as SVG from a program's source, and `inset diagram --json` prints the program's diagram data. Its options choose what the view shows. With no options it shows every label below. `inset-diagram render` draws a view of hand-written data with the same options.
 - An interactive viewer offers the same choices as toggles, and draws from the same data. A static picture and an interactive one with the same choices are the same picture.
 - Hiding something never changes the layout's meaning: a hidden label is left off, and nothing is merged or moved to stand for it. The layout is measured with every label in place, so hiding one moves nothing else, and a test checks that each option only removes what it names.
 

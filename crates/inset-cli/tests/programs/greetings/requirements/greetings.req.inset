@@ -1,0 +1,32 @@
+requirement "Visitors are greeted by name"
+    when Greetings receives GET /hello/Ada
+    then Greetings replies OK with "Hello, Ada!"
+
+requirement "Visitors are greeted politely"
+    when Greetings receives GET /hello/Bo
+    then Greetings replies OK with "Good day, Bo!"
+
+requirement "Zero is found as well"
+    when Greetings receives GET /find/1
+    then Greetings replies OK with "1"
+    when Greetings receives GET /find/0
+    then Greetings replies OK with "0"
+
+requirement "The number after the largest is refused"
+    when Greetings receives POST /next with "255"
+    then Greetings replies BadRequest
+
+requirement "A body that is not a number is refused"
+    when Greetings receives POST /next with
+        """
+        twelve
+        """
+    then Greetings replies BadRequest
+
+requirement "A greeting spans two lines"
+    when Greetings receives GET /hello/Ada
+    then Greetings replies OK with
+        """
+        Hello,
+        Ada!
+        """
