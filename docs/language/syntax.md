@@ -14,7 +14,7 @@ Unresolved questions live in [`open-questions.md`](open-questions.md). The examp
 An AI writes Inset source, and a human reviews the diagrams and requirement tests generated from it. The syntax follows from both.
 
 - **Lean on what models already know.** Code is shaped like Rust, which the compiler emits anyway and which language models have seen a great deal of. Requirement tests are shaped like Given/When/Then, which reads as English.
-- **Familiar syntax keeps its familiar meaning.** Anything that looks like Rust means what it means in Rust. A construct that looked like Rust but behaved differently would pull a model into Rust habits that are wrong here.
+- **Familiar syntax keeps its familiar meaning.** Anything that looks like Rust means what it means in Rust, with no exceptions. Models that write Inset will bring their Rust knowledge with them, and should be right to. A construct that looked like Rust but behaved differently would turn that knowledge into bugs. Inset is a layer over Rust that relies on Rust for safety and abstracts away the implementation, so it never redefines a Rust keyword, attribute or rule. Where it needs something Rust lacks, it adds syntax that is not valid Rust.
 - **New concepts look new.** Rust has no components, capabilities, apps or requirements, so these get their own keywords, which a model cannot mistake for Rust.
 - **Data flow is written down.** Every value or capability that crosses a component boundary says whether it is moved, lent or copied, so the diagram can label each arrow truthfully.
 - **Capabilities have one origin and one holder.** Capabilities enter the program only through the app's `grant` statements, reach components only by being moved down, and are held by one component at a time, so every external access appears as exactly one diagram edge.
@@ -28,7 +28,7 @@ An AI writes Inset source, and a human reviews the diagrams and requirement test
 | Code | `*.inset` | Rust: braces, semicolons, Rust's types and expressions | The AI that writes it |
 | Requirements | `*.req.inset` | Given/When/Then: one step per line, indented under the requirement | The software engineer who reviews it |
 
-A program is a directory of UTF-8 files of both kinds: code in `src/` and requirements in `requirements/` (see [Requirements and coverage](#requirements-and-coverage)). All the files form one namespace, with no imports. The file name decides the dialect, so the two block styles never mix in one file. The Stock tracker splits its code across two files.
+A program is a directory of UTF-8 files of both kinds: code in `src/` and requirements in `requirements/` (see [Requirements and coverage](#requirements-and-coverage)). The code is organised in modules, exactly as in Rust (see [Modules](#modules)). The file name decides the dialect, so the two block styles never mix in one file. The Stock tracker splits its code across two files.
 
 *Why two dialects:* each one is matched to its reader. Braces suit code, where a model writes them reliably and whitespace mistakes cannot change the meaning. Prose suits requirements, which a person must be able to read without knowing the code.
 
@@ -41,6 +41,8 @@ The code dialect uses Rust's lexical rules: identifiers, integer and string lite
 - Doc comments become the descriptions shown on diagram elements. They may go on items, fields, functions and enum variants.
 - String literals do not interpolate, as in Rust. Build text with `format!`.
 - Inset adds these keywords to Rust's: `app`, `component`, `setting`, `grant`, `start`, `send`, `fork`. It also gives Rust's `extern` a new use, in `extern component`.
+- Inset adds these attributes: the route attributes `#[get]`, `#[post]`, `#[put]`, `#[patch]` and `#[delete]`, and `#[message]`, `#[handed_down]`, `#[status]`, `#[rust]` and `#[defensive]`. Attributes that change what an item does are familiar from Rust frameworks, so these keep Rust's meaning of an attribute.
+- Inset adds one standard type, `Handle<C>`, for a running component, alongside the capability types.
 
 ### What Inset keeps from Rust
 
@@ -61,7 +63,7 @@ Where a model reaches for a Rust feature Inset does not have, the compiler rejec
 | Closures | `for` loops, named algorithms | A closure captures its surroundings without saying so, which is a data flow the diagram cannot label |
 | Generic items | Concrete types | Diagram arrows are labelled with concrete types. The standard generic types, such as `Vec<T>`, can still be used |
 
-Iterator adaptors such as `map` and `filter` take closures, so they are out with them. The full list is settled as the examples grow. See [open question 4](open-questions.md).
+Iterator adaptors such as `map` and `filter` take closures, so they are out with them. The full list is settled as the examples grow. See [open question 3](open-questions.md).
 
 ### App
 
@@ -104,10 +106,12 @@ component Reorders {
     orders: Vec<Reorder>,
 
     /// Records a reorder, replacing any earlier one for the same item.
-    pub fn raise(&mut self, order: Reorder) { ... }
+    #[message]
+    fn raise(&mut self, order: Reorder) { ... }
 
     /// Every reorder waiting to be placed, oldest first.
-    pub fn pending(&self) -> Vec<Reorder> {
+    #[message]
+    fn pending(&self) -> Vec<Reorder> {
         self.orders.clone()
     }
 }
@@ -115,15 +119,18 @@ component Reorders {
 
 A component's body has three parts, in this order:
 
-1. **Fields**, written like a Rust struct's fields. They hold the capabilities it was handed and its state. Whoever starts the component supplies every field.
+1. **Fields**, written like a Rust struct's fields. They hold the capabilities it was handed, the handles of siblings lent to it, and its state. Whoever starts the component supplies every field.
 2. **`start` statements**, which start its children (see [Starting components](#starting-components)).
 3. **Functions.** Each one is exactly one of:
    - a **route handler**: a function with a route attribute (see [Routes](#routes));
-   - a **message handler**: a `pub fn`, which the component's parent can call by sending a message (see [Messages](#messages-between-components));
+   - a **message handler**: a function with `#[message]`, which other components send messages to (see [Messages](#messages-between-components));
    - an **algorithm**: any other function, which takes no `self` (see [Algorithms](#algorithms)).
 
 - Handlers take `&self` or `&mut self` to read or change the component's fields, as Rust methods do. A handler that touches no field takes neither, like Hello HTTP's `hello`.
-- A function without a route attribute or `pub` that takes `self` is an error. Code shared between handlers goes in an algorithm.
+- A function without a route attribute or `#[message]` that takes `self` is an error. Code shared between handlers goes in an algorithm.
+- `pub` on a component, and on its functions, means what it means in Rust: visible outside the module (see [Modules](#modules)).
+
+*Why `#[message]` and not `pub`:* in Rust, `pub` only changes where a name is visible. Using it to mark a message would give a familiar keyword a new meaning, and a model that made a function `pub` for visibility would silently create a message. An attribute marks a handler the same way the route attributes do.
 - A handler that waits for anything, such as a message reply or a capability call, is an `async fn`, as in Rust.
 - A component handles one message or request at a time, in the order they arrive.
 
@@ -134,8 +141,9 @@ A component's body has three parts, in this order:
 A `start` statement starts a component and supplies each of its fields. It is the same in an app and in a component.
 
 ```rust
-component Warehouse {
+pub component Warehouse {
     http: HttpServer,
+    #[handed_down]
     items: Table<String, Item>,
 
     start reorders: Reorders { orders: Vec::new() };
@@ -144,11 +152,13 @@ component Warehouse {
 }
 ```
 
-- `start name: Component { handoffs };` starts a child and binds it to `name`. Its functions reach the child as `self.name`, which is a handle for sending it messages.
+- `start name: Component { handoffs };` starts a child and binds it to `name`. Its functions reach the child as `self.name`, a `Handle<Component>` for sending it messages.
 - `start Component { handoffs };` starts a child that nothing sends messages to, such as one that only serves routes.
 - Each handoff supplies one field of the child, and says how its value crosses the boundary (see [Ownership and borrowing](#ownership-and-borrowing)).
-- In a component, a handoff can name the component's own fields. A field moved into a child belongs to the child, and the component's functions can no longer use it. `Warehouse` holds `items` only to hand it to `Inventory`.
-- A handoff can lend a child started earlier in the same body to a later one: `reorders: &reorders`. The later child declares the field with the child's type behind `&`, as `reorders: &Reorders`, and can send it messages. The parent still owns the lent child.
+- In a component, a handoff can name the component's own fields. A field that is moved into a child is marked `#[handed_down]`. It is supplied when the component starts, passed straight to the child, and is not kept, so the component's functions cannot use it. `Warehouse` holds `items` only to hand it to `Inventory`. The compiler requires the attribute on every field moved into a child, and only on those.
+
+  *Why `#[handed_down]`:* in Rust, every declared field of a struct exists for as long as the struct does. A field that is moved away at start would break that rule silently, so the attribute says, where the field is declared, that it is only passed through.
+- A handoff can lend a child started earlier in the same body to a later one: `reorders: &reorders`. The later child declares the field as a borrowed handle, `reorders: &Handle<Reorders>`, and can send it messages. Like all borrows across a boundary, it is written without a lifetime: the compiler knows the parent outlives both children. The parent still owns the lent child.
 - A child can only be lent to siblings started after it, never to itself or to its parent.
 - A component handle cannot be moved, copied, stored in data or sent in a message. The only handles a component holds are its own children and the siblings lent to it at `start`.
 - A component's children start before it handles anything, and stop after it stops.
@@ -226,7 +236,7 @@ enum ShipError {
 }
 ```
 
-JSON bodies and headers are settled in later stages. See [open question 5](open-questions.md).
+JSON bodies and headers are settled in later stages. See [open question 4](open-questions.md).
 
 *Why `via` is required:* the capability is the source of the diagram arrow, so it is always written down. It also lets a component hold two servers, such as a public one and an admin one.
 
@@ -236,7 +246,7 @@ JSON bodies and headers are settled in later stages. See [open question 5](open-
 
 **Status:** Used.
 
-A component's `pub fn` functions are its messages. Its parent sends one by calling it through the child's handle.
+A component's `#[message]` functions are its messages. Another component sends one by calling the method of the same name on a `Handle` to it.
 
 | Form | Meaning |
 | --- | --- |
@@ -245,7 +255,8 @@ A component's `pub fn` functions are its messages. Its parent sends one by calli
 
 - Each call becomes a message arrow on the diagram, from the sender to the receiver. Arrows for `send` are drawn differently from those that wait.
 - A message is always awaited or sent with `send`, whether or not the receiving function is `async`.
-- Sending a message needs only `&self`. The receiver changes its own fields in its own handler, so its `&mut self` does not reach back to the sender.
+- `Handle<C>` has one async method for each message of `C`, with the same parameters and reply, taking `&self`. So sending a message needs only `&self`, and the receiver's `&mut self` applies in its own handler, on its own task. This is the actor-handle pattern from Rust's async ecosystem, so a call on a handle means what it would in Rust.
+- A message function's visibility follows Rust: the handle's method can be called wherever the function is visible.
 - A component can send messages to the children it started and to the siblings lent to it (see [Starting components](#starting-components)). It cannot send messages to its parent or to a later sibling. See [open question 1](open-questions.md).
 - A message is in its receiver's mailbox before its sender carries on. So when one message leads to another, even through other components, the first arrives first. The Stock tracker relies on this: `Inventory` raises a reorder with `send` before it replies to `Warehouse`, so a `pending()` that `Warehouse` sends later finds the reorder already raised.
 
@@ -275,6 +286,27 @@ A boundary is any place a value leaves a component: a handoff in `start`, and an
 *Why `move` is written at boundaries when Rust leaves it implicit:* the boundary rule is what the diagrams depend on, so that is where a reader must see it. `move` in this position is not Rust syntax, which marks it as an Inset boundary rather than a familiar construct with a new meaning.
 
 *Why `Copy` values cross bare:* a copy shares nothing, so it cannot hide a data flow. Writing `move quantity` for a number the sender goes on using would be untrue, and Rust itself copies such values silently. The diagram labels the arrow as a copy. Whether a type is `Copy` is decided as in Rust, by `#[derive(Clone, Copy)]` on its own types.
+
+### Modules
+
+**Status:** Used.
+
+Inset's modules are Rust's, with `.inset` in place of `.rs`.
+
+```rust
+// src/main.inset
+mod warehouse;
+
+use warehouse::Warehouse;
+```
+
+- The root module is `src/main.inset`, which holds the app.
+- `mod name;` declares a module, found where Rust would find it: `src/name.inset`, or `src/name/mod.inset`.
+- `use` brings names into scope, with Rust's paths: `crate::`, `super::` and `self::`.
+- `pub`, `pub(crate)` and `pub(super)` mean what they mean in Rust. An item without `pub` is visible in its own module and the modules inside it, so the Stock tracker's `warehouse` module can `use crate::{Item, Reorder, ShipError}`.
+- Modules organise the source. They do not appear on the diagrams, which show components.
+
+*Why Rust's modules exactly:* every model that writes Rust writes `mod`, `use` and `pub` without thinking. Any other module system would be one more thing to get wrong, and a look-alike with different rules would be worse.
 
 ### Types
 
@@ -310,8 +342,8 @@ fn add_vat(net: Decimal) -> Decimal {
 }
 ```
 
-- An algorithm at the top level can be called from anywhere, as in CSV import.
-- An algorithm inside a component can be called only by that component, as `Self::name(...)`. Its full name is `Component::name`, as with a Rust associated function. As in `Inventory::reorder_quantity`.
+- An algorithm at the top level of a module is a Rust function, as in CSV import. An algorithm inside a component is a Rust associated function: the component calls it as `Self::name(...)`, as `Inventory` calls `Self::reorder_quantity`.
+- Where an algorithm can be called from follows Rust's visibility rules, with `pub` to call it from outside its module.
 - An algorithm is pure. With no `self`, it cannot reach a capability or a child, and it cannot be `async`. It can call other algorithms and use `fork`.
 
 *Why algorithms are pure:* the flowchart then shows the whole of what the algorithm does, with no effect hidden inside it. An algorithm that needs stored data is given it by the handler that calls it, so the capability edge stays on the component.
@@ -346,14 +378,15 @@ An external component is written in another language. Inset declares its message
 #[rust(path = "csv_reader.rs", crates = ["csv@1.3"])]
 extern component CsvReader {
     /// Reads every row after the header line, whatever number of fields it has.
-    pub fn read(&self, text: &String) -> Vec<Row>;
+    #[message]
+    fn read(&self, text: &String) -> Vec<Row>;
 }
 ```
 
 - `extern component` declares a component with no Inset body. As in a Rust `extern` block, its functions are signatures ending in `;`.
 - Its fields are the capabilities it holds, as in any component. `CsvReader` has none. *(Draft: an external component with capabilities.)*
 - `#[rust(path = ..., crates = [...])]` names the Rust file that implements it, relative to the file declaring it, and the crates that file may use, as `name@version`.
-- The Rust file defines a type with the component's name and the declared functions. It may use the Inset types of the program, such as `Row`. The compiler checks it against the declaration. *(Draft: stage 13 fixes the exact Rust interface. See [open question 7](open-questions.md).)*
+- The Rust file defines a type with the component's name and the declared functions. It may use the Inset types of the program by their module paths, such as `crate::Row`. The compiler checks it against the declaration. *(Draft: stage 13 fixes the exact Rust interface. See [open question 6](open-questions.md).)*
 - An external component is started and sent messages like any component. Like any component, requirements reach it only through the app, as CSV import's "A field in quotes may contain commas" does.
 
 *Why `extern`:* in Rust, `extern` declares something whose body is written elsewhere, which is what this is. `component` after it says what kind of thing is declared.
@@ -374,7 +407,7 @@ requirement "Visitors are greeted by the name in the web address"
 
 **Name.** The text after `requirement` is the requirement. It is unique in the program, and it is what test reports show.
 
-**What a requirement can see.** A requirement tests the app as a black box. It can send the app HTTP requests, set up what the app's granted capabilities hold, and observe the replies and what the capabilities hold afterwards. It cannot name a component, a message or an algorithm. The test starts the app with a fake for each `grant`, and every component starts for real.
+**What a requirement can see.** A requirement tests the app as a black box. Names in its values, such as `Item`, resolve as they would in `src/main.inset`. It can send the app HTTP requests, set up what the app's granted capabilities hold, and observe the replies and what the capabilities hold afterwards. It cannot name a component, a message or an algorithm. The test starts the app with a fake for each `grant`, and every component starts for real.
 
 *Why requirements see only the outside:* review splits into jobs. The diagrams show how the program is built, and the requirements state what it must do. A requirement that named `Inventory` or `reorder_quantity` would write the AI's own design into the statement of intent, which is where a hidden assumption does the most harm, because the reviewer approves it as a requirement. A requirement written against the outside also survives any restructuring of the inside. The cost is that a failure names the behaviour that broke, not the code that broke it. The diagram and the coverage overlay show where to look.
 
@@ -481,7 +514,7 @@ requirement "The gross price is never below the net price"
 
 **Status:** The layout is Used. `#[defensive]` is Draft.
 
-A program's directory holds its code in `src/` and its requirements in `requirements/`. Together they are one program and one namespace. The compiler rejects a `*.req.inset` file in `src/` and a `*.inset` code file in `requirements/`.
+A program's directory holds its code in `src/` and its requirements in `requirements/`. Together they are one program. The compiler rejects a `*.req.inset` file in `src/` and a `*.inset` code file in `requirements/`.
 
 *Why requirements have their own directory:* the requirements are the statement of intent, which the reviewer reads and approves, and `src/` is what the diagram is drawn from, which the reviewer never reads. Separate directories make a change of intent visible in any diff, let a repository require a human to approve changes under `requirements/`, and guard against an AI quietly changing a requirement to match what it built. They also let requirements be agreed before the code exists.
 
@@ -506,8 +539,11 @@ Informal EBNF for the constructs marked Used. Code-dialect tokens follow Rust's 
 Code dialect (`*.inset`):
 
 ```
-program      = { item } ;
-item         = { doc } ( app | component | extern_comp | struct | enum | algorithm ) ;
+program      = module ;
+module       = { use_decl | mod_decl | item } ;
+use_decl     = a Rust `use` declaration ;
+mod_decl     = [ "pub" ] "mod" ident ";" ;
+item         = { doc } [ "pub" ] ( app | component | extern_comp | struct | enum | algorithm ) ;
 
 app          = "app" Ident "{" { { doc } setting | grant | start } "}" ;
 setting      = "setting" ident ":" type "=" literal ";" ;
@@ -517,14 +553,15 @@ handoffs     = handoff { "," handoff } [ "," ] ;
 handoff      = ident ":" ( "move" place | "&" ident | expr ) ;
 
 component    = "component" Ident "{" [ field_decls ] { start } { { doc } function } "}" ;
-function     = [ route_attr ] [ "pub" ] [ "async" ] "fn" ident "(" fn_params ")" [ "->" type ] block ;
+field_decl   = { doc } [ "#[handed_down]" ] ident ":" type ;
+function     = [ route_attr | "#[message]" ] [ "pub" ] [ "async" ] "fn" ident "(" fn_params ")" [ "->" type ] block ;
 route_attr   = "#[" METHOD "(" STRING "," "via" "=" ident [ "," "body" "=" ident ] ")" "]" ;
 fn_params    = [ receiver [ "," ] ] [ params ] ;
 receiver     = "&self" | "&mut self" ;
 
 extern_comp  = rust_attr "extern" "component" Ident "{" [ field_decls ] { { doc } signature } "}" ;
 rust_attr    = "#[" "rust" "(" "path" "=" STRING "," "crates" "=" "[" STRING { "," STRING } "]" ")" "]" ;
-signature    = "pub" [ "async" ] "fn" ident "(" fn_params ")" [ "->" type ] ";" ;
+signature    = "#[message]" [ "pub" ] [ "async" ] "fn" ident "(" fn_params ")" [ "->" type ] ";" ;
 
 struct       = [ derive ] "struct" Ident "{" [ field_decls ] "}" ;
 enum         = [ derive ] "enum" Ident "{" variant { "," variant } [ "," ] "}" ;
@@ -534,7 +571,6 @@ derive       = "#[" "derive" "(" Ident { "," Ident } ")" "]" ;
 algorithm    = "fn" ident "(" [ params ] ")" [ "->" type ] block ;
 
 field_decls  = field_decl { "," field_decl } [ "," ] ;
-field_decl   = { doc } ident ":" type ;
 fields       = field { "," field } [ "," ] ;
 field        = ident ":" expr ;
 params       = param { "," param } [ "," ] ;
@@ -548,7 +584,7 @@ expr         = a Rust expression, using the features Inset keeps
              | "fork" "for" pattern "in" expr block ;
 ```
 
-`METHOD` is one of `get`, `post`, `put`, `patch` or `delete`. `Ident` is an `UpperCamelCase` identifier and `ident` a `lower_snake_case` one. An algorithm inside a component uses the `function` rule with no attribute, no `pub` and no receiver.
+`METHOD` is one of `get`, `post`, `put`, `patch` or `delete`. `Ident` is an `UpperCamelCase` identifier and `ident` a `lower_snake_case` one. An algorithm inside a component uses the `function` rule with no attribute and no receiver.
 
 Requirements dialect (`*.req.inset`):
 

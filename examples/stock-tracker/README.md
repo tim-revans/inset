@@ -13,11 +13,11 @@ Tracks how many of each item a warehouse holds. Staff record stock that arrives 
 
 | File | Contents |
 | --- | --- |
-| `src/stock.inset` | The app, which is granted the network and the stock table, and the data types |
-| `src/warehouse.inset` | `Warehouse` and the two components nested in it, `Inventory` and `Reorders` |
+| `src/main.inset` | The root module: the app, which is granted the network and the stock table, and the data types |
+| `src/warehouse.inset` | The `warehouse` module: `Warehouse` and the two components nested in it, `Inventory` and `Reorders` |
 | `requirements/stock.req.inset` | The requirement tests, written against the app's HTTP boundary |
 
-The program is split across two files to show that all the files of a program share one namespace.
+The program is split into two modules to show that Inset's modules are Rust's: `mod warehouse;` and `use warehouse::Warehouse;` in `main.inset`, `use crate::{Item, Reorder, ShipError};` and `pub component Warehouse` in `warehouse.inset`.
 
 ## What it exercises
 
@@ -27,9 +27,10 @@ The program is split across two files to show that all the files of a program sh
 | A fixed file and a setting | The stock database belongs to the tool alone, so its file is written in the grant. The port is a `setting` |
 | Several actors | `Warehouse`, `Inventory` and `Reorders` each run as a component |
 | Nested components | `Warehouse` starts `Reorders` and `Inventory` with `start` statements |
-| A sibling lent to a sibling | `start inventory: Inventory { ..., reorders: &reorders }`, so `Inventory` can raise reorders itself. `Inventory` declares the field as `reorders: &Reorders` |
-| Capability hand-down | The app moves `items` into `Warehouse`, which moves it on into `Inventory`. Only `Inventory` uses it |
-| Messages that wait for a reply | `self.inventory.ship(&sku, quantity).await` |
+| A sibling lent to a sibling | `start inventory: Inventory { ..., reorders: &reorders }`, so `Inventory` can raise reorders itself. `Inventory` declares the field as `reorders: &Handle<Reorders>` |
+| Capability hand-down | The app moves `items` into `Warehouse`, which marks the field `#[handed_down]` and moves it on into `Inventory`. Only `Inventory` uses it |
+| Message handlers | `#[message]` on the functions of `Inventory` and `Reorders` |
+| Messages that wait for a reply | `self.inventory.ship(&sku, quantity).await`, a call on a `Handle<Inventory>` |
 | A message that does not wait | `send self.reorders.raise(...)`, from `Inventory` to its sibling |
 | Boundary notation | `move` for capabilities, `&sku` for a lent string, a bare `quantity` for a copied number, and `Reorder { ... }` for a value built in place |
 | Component state | `Reorders` holds its list of reorders in a field and changes it in `&mut self` handlers |

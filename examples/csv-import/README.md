@@ -12,7 +12,7 @@ nut-m6,M6 nut,0.05
 
 | File | Contents |
 | --- | --- |
-| `src/import.inset` | The app, the data types, the `CsvReader` declaration, the `Importer` component, and the algorithms |
+| `src/main.inset` | The app, the data types, the `CsvReader` declaration, the `Importer` component, and the algorithms |
 | `src/csv_reader.rs` | The Rust that implements `CsvReader` with the `csv` crate |
 | `requirements/import.req.inset` | The requirement tests, written against the app's HTTP boundary |
 
@@ -21,7 +21,7 @@ nut-m6,M6 nut,0.05
 | Construct | Where |
 | --- | --- |
 | A file chosen at run time | `setting catalogue` lets whoever runs the import point it at the catalogue that other tools read. Compare the Stock tracker's fixed file |
-| External Rust crate | `extern component CsvReader` declares the messages and capabilities of a component written in Rust. `#[rust(...)]` names the file and the crate |
+| External Rust crate | `extern component CsvReader` declares the messages (`#[message] fn read`) and capabilities of a component written in Rust. `#[rust(...)]` names the file and the crate |
 | Declared capabilities | `CsvReader` has no fields, so it holds no capabilities and can only compute |
 | External component as a child | `Importer` starts it with `start csv: CsvReader {}` and sends it messages like any component |
 | Structured concurrency | `fork for row in rows { ... }` in `parse_price_list` reads every row concurrently and joins the results in order |

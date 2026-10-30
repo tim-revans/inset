@@ -6,7 +6,7 @@ A web server with one address. A request for `/hello/Ada` gets the text reply `H
 
 | File | Contents |
 | --- | --- |
-| `src/hello.inset` | The app, which receives the network capability from the host, and the `Greeter` component it starts |
+| `src/main.inset` | The app, which receives the network capability from the host, and the `Greeter` component it starts |
 | `requirements/hello.req.inset` | The one requirement test |
 
 ## What it exercises

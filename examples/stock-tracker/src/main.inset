@@ -1,3 +1,7 @@
+mod warehouse;
+
+use warehouse::Warehouse;
+
 /// Stock tracker: how many of each item the warehouse holds, and what to reorder.
 app StockTracker {
     /// The port to serve on.

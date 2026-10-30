@@ -1,6 +1,9 @@
+use crate::{Item, Reorder, ShipError};
+
 /// Answers HTTP requests from warehouse staff about stock and reorders.
-component Warehouse {
+pub component Warehouse {
     http: HttpServer,
+    #[handed_down]
     items: Table<String, Item>,
 
     start reorders: Reorders { orders: Vec::new() };
@@ -41,15 +44,17 @@ component Warehouse {
 /// Keeps the stock record of every item, and raises a reorder when stock runs low.
 component Inventory {
     items: Table<String, Item>,
-    reorders: &Reorders,
+    reorders: &Handle<Reorders>,
 
     /// The item with this SKU, if there is one.
-    pub async fn item(&self, sku: &String) -> Option<Item> {
+    #[message]
+    async fn item(&self, sku: &String) -> Option<Item> {
         self.items.get(sku).await
     }
 
     /// Adds to an item's stock, and returns the item as it now stands.
-    pub async fn receive(&mut self, sku: &String, quantity: u32) -> Option<Item> {
+    #[message]
+    async fn receive(&mut self, sku: &String, quantity: u32) -> Option<Item> {
         let mut item = self.items.get(sku).await?;
         item.on_hand += quantity;
         self.items.insert(sku.clone(), item.clone()).await;
@@ -58,7 +63,8 @@ component Inventory {
 
     /// Takes from an item's stock if it holds enough, and returns the item as it now stands.
     /// Raises a reorder if that leaves stock at or below its reorder level.
-    pub async fn ship(&mut self, sku: &String, quantity: u32) -> Result<Item, ShipError> {
+    #[message]
+    async fn ship(&mut self, sku: &String, quantity: u32) -> Result<Item, ShipError> {
         let Some(mut item) = self.items.get(sku).await else {
             return Err(ShipError::UnknownItem);
         };
@@ -89,7 +95,8 @@ component Reorders {
     orders: Vec<Reorder>,
 
     /// Records a reorder, replacing any earlier one for the same item.
-    pub fn raise(&mut self, order: Reorder) {
+    #[message]
+    fn raise(&mut self, order: Reorder) {
         for pending in &mut self.orders {
             if pending.sku == order.sku {
                 pending.quantity = order.quantity;
@@ -100,7 +107,8 @@ component Reorders {
     }
 
     /// Every reorder waiting to be placed, oldest first.
-    pub fn pending(&self) -> Vec<Reorder> {
+    #[message]
+    fn pending(&self) -> Vec<Reorder> {
         self.orders.clone()
     }
 }

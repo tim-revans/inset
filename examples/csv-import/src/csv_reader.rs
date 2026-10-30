@@ -1,6 +1,6 @@
 //! The `CsvReader` external component, written in Rust with the `csv` crate.
 //!
-//! `import.inset` declares its interface. The compiler checks that this file
+//! `main.inset` declares its interface. The compiler checks that this file
 //! provides it, and the diagram shows it as an opaque box.
 
 use crate::Row;

@@ -39,7 +39,8 @@ enum ImportError {
 #[rust(path = "csv_reader.rs", crates = ["csv@1.3"])]
 extern component CsvReader {
     /// Reads every row after the header line, whatever number of fields it has.
-    pub fn read(&self, text: &String) -> Vec<Row>;
+    #[message]
+    fn read(&self, text: &String) -> Vec<Row>;
 }
 
 /// Accepts price lists over HTTP and stores their products.
