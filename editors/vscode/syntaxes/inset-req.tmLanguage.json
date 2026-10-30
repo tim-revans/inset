@@ -1,0 +1,305 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Inset requirements",
+  "scopeName": "source.inset-req",
+  "fileTypes": [
+    "req.inset"
+  ],
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#requirement"
+    },
+    {
+      "include": "#requirement-body"
+    }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.double-slash.inset-req",
+      "match": "(//).*$",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.comment.inset-req"
+        }
+      }
+    },
+    "requirement": {
+      "comment": "A requirement runs from its sentence to the next line that starts at the left margin.",
+      "name": "meta.requirement.inset-req",
+      "begin": "^(requirement)\\s+((\\\")((?:[^\\\"\\\\]|\\\\.)*)(\\\"))",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.requirement.inset-req"
+        },
+        "2": {
+          "name": "markup.heading.requirement.inset-req"
+        },
+        "3": {
+          "name": "punctuation.definition.string.begin.inset-req"
+        },
+        "5": {
+          "name": "punctuation.definition.string.end.inset-req"
+        }
+      },
+      "end": "^(?=\\S)",
+      "patterns": [
+        {
+          "include": "#requirement-body"
+        }
+      ]
+    },
+    "requirement-body": {
+      "comment": "Also matched outside a requirement, so a fragment of one is highlighted too.",
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "include": "#text-block"
+        },
+        {
+          "include": "#examples"
+        },
+        {
+          "include": "#for-all"
+        },
+        {
+          "include": "#step"
+        },
+        {
+          "include": "#request"
+        },
+        {
+          "include": "#reply"
+        },
+        {
+          "include": "#values"
+        }
+      ]
+    },
+    "for-all": {
+      "comment": "The generated value is used as a placeholder in the steps, so it is scoped as one.",
+      "match": "^\\s+(for\\s+all)\\s+([a-z_]\\w*)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.step.inset-req"
+        },
+        "2": {
+          "name": "variable.parameter.placeholder.inset-req"
+        }
+      }
+    },
+    "step": {
+      "patterns": [
+        {
+          "comment": "A fact or check names a granted capability first.",
+          "match": "^\\s+(given|then|and)\\s+([a-z_]\\w*)(?=\\s*\\[|\\s*\\.|\\s+is\\b|\\s+fails\\b)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.step.inset-req"
+            },
+            "2": {
+              "name": "variable.other.capability.inset-req"
+            }
+          }
+        },
+        {
+          "match": "^\\s+(given|when|then|and)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.step.inset-req"
+            }
+          }
+        }
+      ]
+    },
+    "request": {
+      "match": "\\b([A-Z]\\w*)\\s+(receives)\\s+(GET|POST|PUT|PATCH|DELETE)\\s+((?:<[^<>|\\s](?:[^<>|]*[^<>|\\s])?>|[^\\s<])+)",
+      "captures": {
+        "1": {
+          "name": "entity.name.type.app.inset-req"
+        },
+        "2": {
+          "name": "keyword.operator.word.inset-req"
+        },
+        "3": {
+          "name": "constant.language.http-method.inset-req"
+        },
+        "4": {
+          "name": "string.unquoted.path.inset-req",
+          "patterns": [
+            {
+              "include": "#placeholder"
+            }
+          ]
+        }
+      }
+    },
+    "reply": {
+      "match": "\\b([A-Z]\\w*)\\s+(replies)\\s+([A-Z]\\w*)",
+      "captures": {
+        "1": {
+          "name": "entity.name.type.app.inset-req"
+        },
+        "2": {
+          "name": "keyword.operator.word.inset-req"
+        },
+        "3": {
+          "name": "constant.other.status.inset-req"
+        }
+      }
+    },
+    "placeholder": {
+      "name": "variable.parameter.placeholder.inset-req",
+      "match": "<[^<>|\\s](?:[^<>|]*[^<>|\\s])?>"
+    },
+    "text-block": {
+      "name": "string.quoted.triple.inset-req",
+      "begin": "^\\s*(\\\"\\\"\\\")\\s*$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.begin.inset-req"
+        }
+      },
+      "end": "^\\s*(\\\"\\\"\\\")\\s*$",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.end.inset-req"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#placeholder"
+        }
+      ]
+    },
+    "string": {
+      "name": "string.quoted.double.inset-req",
+      "begin": "\"",
+      "end": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.inset-req"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.inset-req"
+        }
+      },
+      "patterns": [
+        {
+          "match": "\\\\(?:[nrt0\\\\'\\\"]|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F_]{1,6}\\})",
+          "name": "constant.character.escape.inset-req"
+        },
+        {
+          "include": "#placeholder"
+        }
+      ]
+    },
+    "examples": {
+      "comment": "The heading row names placeholders. The rows after it are cases.",
+      "begin": "^\\s+(examples)\\s*$",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.step.inset-req"
+        }
+      },
+      "end": "^(?!\\s*\\|)",
+      "patterns": [
+        {
+          "name": "meta.table.inset-req",
+          "begin": "^\\s*(?=\\|)",
+          "end": "^(?!\\s*\\|)",
+          "patterns": [
+            {
+              "include": "#cell-separator"
+            },
+            {
+              "match": "[^|\\s](?:[^|]*[^|\\s])?",
+              "name": "variable.parameter.placeholder.inset-req"
+            },
+            {
+              "name": "meta.table.rows.inset-req",
+              "begin": "(?<=\\|)\\s*$",
+              "end": "^(?!\\s*\\|)",
+              "patterns": [
+                {
+                  "include": "#cell-separator"
+                },
+                {
+                  "include": "#values"
+                },
+                {
+                  "match": "[^|\\s]+",
+                  "name": "string.unquoted.cell.inset-req"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "cell-separator": {
+      "match": "\\|",
+      "name": "punctuation.separator.table.inset-req"
+    },
+    "values": {
+      "patterns": [
+        {
+          "include": "#string"
+        },
+        {
+          "include": "#placeholder"
+        },
+        {
+          "include": "source.inset#numbers"
+        },
+        {
+          "include": "source.inset#chars"
+        },
+        {
+          "match": "\\b(with|is|empty|fails|via|where)\\b",
+          "name": "keyword.operator.word.inset-req"
+        },
+        {
+          "match": "\\b(true|false)\\b",
+          "name": "constant.language.bool.inset-req"
+        },
+        {
+          "include": "source.inset#macros"
+        },
+        {
+          "include": "source.inset#functions"
+        },
+        {
+          "include": "source.inset#types"
+        },
+        {
+          "match": "\\b([a-z_]\\w*)\\s*(:)(?!:)",
+          "captures": {
+            "1": {
+              "name": "variable.other.member.inset-req"
+            },
+            "2": {
+              "name": "punctuation.separator.colon.inset-req"
+            }
+          }
+        },
+        {
+          "match": "\\b[a-z_]\\w*\\b",
+          "name": "variable.other.inset-req"
+        },
+        {
+          "include": "source.inset#operators"
+        },
+        {
+          "include": "source.inset#punctuation"
+        }
+      ]
+    }
+  }
+}

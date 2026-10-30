@@ -1,0 +1,936 @@
+>use crate::{Item, Reorder, ShipError};
+#^^^ keyword.other.inset
+#    ^^^^^ keyword.other.inset
+#         ^^ punctuation.separator.namespace.inset
+#           ^ punctuation.brackets.curly.inset
+#            ^^^^ entity.name.type.inset
+#                ^ punctuation.separator.comma.inset
+#                  ^^^^^^^ entity.name.type.inset
+#                         ^ punctuation.separator.comma.inset
+#                           ^^^^^^^^^ entity.name.type.inset
+#                                    ^ punctuation.brackets.curly.inset
+#                                     ^ punctuation.terminator.statement.inset
+>
+>/// Answers HTTP requests from warehouse staff about stock and reorders.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>pub component Warehouse {
+#^^^ storage.modifier.inset
+#    ^^^^^^^^^ storage.type.component.inset
+#              ^^^^^^^^^ entity.name.type.component.inset
+#                        ^ punctuation.brackets.curly.inset
+>    http: HttpServer,
+#    ^^^^ variable.other.inset
+#        ^ punctuation.separator.colon.inset
+#          ^^^^^^^^^^ support.type.capability.inset
+#                    ^ punctuation.separator.comma.inset
+>    #[handed_down]
+#    ^ meta.attribute.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#      ^^^^^^^^^^^ meta.attribute.inset keyword.other.attribute.inset
+#                 ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>    items: Table<String, Item>,
+#    ^^^^^ variable.other.inset
+#         ^ punctuation.separator.colon.inset
+#           ^^^^^ support.type.capability.inset
+#                ^ punctuation.brackets.angle.inset
+#                 ^^^^^^ entity.name.type.inset
+#                       ^ punctuation.separator.comma.inset
+#                         ^^^^ entity.name.type.inset
+#                             ^ punctuation.brackets.angle.inset
+#                              ^ punctuation.separator.comma.inset
+>
+>    start reorders: Reorders { orders: Vec::new() };
+#    ^^^^^ meta.start.inset storage.type.start.inset
+#          ^^^^^^^^ meta.start.inset variable.other.component.inset
+#                  ^ meta.start.inset punctuation.separator.colon.inset
+#                    ^^^^^^^^ meta.start.inset entity.name.type.component.inset
+#                             ^ meta.start.inset punctuation.brackets.curly.inset
+#                               ^^^^^^ meta.start.inset variable.other.member.inset
+#                                     ^ meta.start.inset punctuation.separator.colon.inset
+#                                       ^^^ meta.start.inset entity.name.type.inset
+#                                          ^^ meta.start.inset punctuation.separator.namespace.inset
+#                                            ^^^ meta.start.inset entity.name.function.inset
+#                                               ^ meta.start.inset punctuation.brackets.round.inset
+#                                                ^ meta.start.inset punctuation.brackets.round.inset
+#                                                  ^ meta.start.inset punctuation.brackets.curly.inset
+#                                                   ^ punctuation.terminator.statement.inset
+>    start inventory: Inventory { items: move items, low_stock: send reorders.raise };
+#    ^^^^^ meta.start.inset storage.type.start.inset
+#          ^^^^^^^^^ meta.start.inset variable.other.component.inset
+#                   ^ meta.start.inset punctuation.separator.colon.inset
+#                     ^^^^^^^^^ meta.start.inset entity.name.type.component.inset
+#                               ^ meta.start.inset punctuation.brackets.curly.inset
+#                                 ^^^^^ meta.start.inset variable.other.member.inset
+#                                      ^ meta.start.inset punctuation.separator.colon.inset
+#                                        ^^^^ meta.start.inset storage.modifier.boundary.move.inset
+#                                             ^^^^^ meta.start.inset variable.other.inset
+#                                                  ^ meta.start.inset punctuation.separator.comma.inset
+#                                                    ^^^^^^^^^ meta.start.inset variable.other.member.inset
+#                                                             ^ meta.start.inset punctuation.separator.colon.inset
+#                                                               ^^^^ meta.start.inset keyword.control.send.inset
+#                                                                    ^^^^^^^^ meta.start.inset variable.other.component.inset
+#                                                                            ^ meta.start.inset punctuation.accessor.dot.inset
+#                                                                             ^^^^^ meta.start.inset entity.name.function.message.inset
+#                                                                                   ^ meta.start.inset punctuation.brackets.curly.inset
+#                                                                                    ^ punctuation.terminator.statement.inset
+>
+>    failure {
+#    ^^^^^^^ meta.failure.inset keyword.control.failure.inset
+#            ^ meta.failure.inset punctuation.brackets.curly.inset
+>        /// Inventory rolls back a request whose database call fails, so this request fails too.
+#        ^^^ meta.failure.inset comment.line.documentation.inset punctuation.definition.comment.inset
+#           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.failure.inset comment.line.documentation.inset
+>        Message(inventory) => rollback,
+#        ^^^^^^^ meta.failure.inset support.constant.failure.inset
+#               ^ meta.failure.inset punctuation.brackets.round.inset
+#                ^^^^^^^^^ meta.failure.inset variable.other.inset
+#                         ^ meta.failure.inset punctuation.brackets.round.inset
+#                           ^^ meta.failure.inset keyword.operator.arrow.fat.inset
+#                              ^^^^^^^^ meta.failure.inset keyword.control.failure.inset
+#                                      ^ meta.failure.inset punctuation.separator.comma.inset
+>    }
+#    ^ meta.failure.inset punctuation.brackets.curly.inset
+>
+>    /// Replies with the quantity on hand.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[get("/items/{sku}", via = http)]
+#    ^ meta.attribute.route.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+#      ^^^ meta.attribute.route.inset constant.language.http-method.inset
+#         ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#          ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.begin.inset
+#           ^^^^^^^ meta.attribute.route.inset string.quoted.double.route.inset
+#                  ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.begin.inset
+#                   ^^^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset variable.parameter.route.inset
+#                      ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.end.inset
+#                       ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.end.inset
+#                        ^ meta.attribute.route.inset punctuation.separator.comma.inset
+#                          ^^^ meta.attribute.route.inset keyword.other.route-option.inset
+#                              ^ meta.attribute.route.inset keyword.operator.assignment.inset
+#                                ^^^^ meta.attribute.route.inset variable.other.capability.inset
+#                                    ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#                                     ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+>    async fn stock(&self, sku: String) -> Option<String> {
+#    ^^^^^ storage.modifier.inset
+#          ^^ storage.type.function.inset
+#             ^^^^^ entity.name.function.inset
+#                  ^ punctuation.brackets.round.inset
+#                   ^ keyword.operator.borrow.inset
+#                    ^^^^ variable.language.self.inset
+#                        ^ punctuation.separator.comma.inset
+#                          ^^^ variable.other.inset
+#                             ^ punctuation.separator.colon.inset
+#                               ^^^^^^ entity.name.type.inset
+#                                     ^ punctuation.brackets.round.inset
+#                                       ^^ keyword.operator.arrow.skinny.inset
+#                                          ^^^^^^ entity.name.type.inset
+#                                                ^ punctuation.brackets.angle.inset
+#                                                 ^^^^^^ entity.name.type.inset
+#                                                       ^ punctuation.brackets.angle.inset
+#                                                         ^ punctuation.brackets.curly.inset
+>        let item = self.inventory.item(&sku).await?;
+#        ^^^ storage.type.inset
+#            ^^^^ variable.other.inset
+#                 ^ keyword.operator.assignment.inset
+#                   ^^^^ variable.language.self.inset
+#                       ^ punctuation.accessor.dot.inset
+#                        ^^^^^^^^^ variable.other.inset
+#                                 ^ punctuation.accessor.dot.inset
+#                                  ^^^^ entity.name.function.inset
+#                                      ^ punctuation.brackets.round.inset
+#                                       ^ keyword.operator.borrow.inset
+#                                        ^^^ variable.other.inset
+#                                           ^ punctuation.brackets.round.inset
+#                                            ^ punctuation.accessor.dot.inset
+#                                             ^^^^^ keyword.control.inset
+#                                                  ^ keyword.operator.question.inset
+#                                                   ^ punctuation.terminator.statement.inset
+>        Some(item.on_hand.to_string())
+#        ^^^^ entity.name.type.inset
+#            ^ punctuation.brackets.round.inset
+#             ^^^^ variable.other.inset
+#                 ^ punctuation.accessor.dot.inset
+#                  ^^^^^^^ variable.other.inset
+#                         ^ punctuation.accessor.dot.inset
+#                          ^^^^^^^^^ entity.name.function.inset
+#                                   ^ punctuation.brackets.round.inset
+#                                    ^ punctuation.brackets.round.inset
+#                                     ^ punctuation.brackets.round.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>
+>    /// Adds stock that has arrived, and replies with the new quantity on hand.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[post("/items/{sku}/receipts", via = http, body = quantity)]
+#    ^ meta.attribute.route.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+#      ^^^^ meta.attribute.route.inset constant.language.http-method.inset
+#          ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#           ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.begin.inset
+#            ^^^^^^^ meta.attribute.route.inset string.quoted.double.route.inset
+#                   ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.begin.inset
+#                    ^^^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset variable.parameter.route.inset
+#                       ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.end.inset
+#                        ^^^^^^^^^ meta.attribute.route.inset string.quoted.double.route.inset
+#                                 ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.end.inset
+#                                  ^ meta.attribute.route.inset punctuation.separator.comma.inset
+#                                    ^^^ meta.attribute.route.inset keyword.other.route-option.inset
+#                                        ^ meta.attribute.route.inset keyword.operator.assignment.inset
+#                                          ^^^^ meta.attribute.route.inset variable.other.capability.inset
+#                                              ^ meta.attribute.route.inset punctuation.separator.comma.inset
+#                                                ^^^^ meta.attribute.route.inset keyword.other.route-option.inset
+#                                                     ^ meta.attribute.route.inset keyword.operator.assignment.inset
+#                                                       ^^^^^^^^ meta.attribute.route.inset variable.parameter.inset
+#                                                               ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#                                                                ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+>    async fn receive(&self, sku: String, quantity: u32) -> Option<String> {
+#    ^^^^^ storage.modifier.inset
+#          ^^ storage.type.function.inset
+#             ^^^^^^^ entity.name.function.inset
+#                    ^ punctuation.brackets.round.inset
+#                     ^ keyword.operator.borrow.inset
+#                      ^^^^ variable.language.self.inset
+#                          ^ punctuation.separator.comma.inset
+#                            ^^^ variable.other.inset
+#                               ^ punctuation.separator.colon.inset
+#                                 ^^^^^^ entity.name.type.inset
+#                                       ^ punctuation.separator.comma.inset
+#                                         ^^^^^^^^ variable.other.inset
+#                                                 ^ punctuation.separator.colon.inset
+#                                                   ^^^ entity.name.type.primitive.inset
+#                                                      ^ punctuation.brackets.round.inset
+#                                                        ^^ keyword.operator.arrow.skinny.inset
+#                                                           ^^^^^^ entity.name.type.inset
+#                                                                 ^ punctuation.brackets.angle.inset
+#                                                                  ^^^^^^ entity.name.type.inset
+#                                                                        ^ punctuation.brackets.angle.inset
+#                                                                          ^ punctuation.brackets.curly.inset
+>        let item = self.inventory.receive(&sku, quantity).await?;
+#        ^^^ storage.type.inset
+#            ^^^^ variable.other.inset
+#                 ^ keyword.operator.assignment.inset
+#                   ^^^^ variable.language.self.inset
+#                       ^ punctuation.accessor.dot.inset
+#                        ^^^^^^^^^ variable.other.inset
+#                                 ^ punctuation.accessor.dot.inset
+#                                  ^^^^^^^ entity.name.function.inset
+#                                         ^ punctuation.brackets.round.inset
+#                                          ^ keyword.operator.borrow.inset
+#                                           ^^^ variable.other.inset
+#                                              ^ punctuation.separator.comma.inset
+#                                                ^^^^^^^^ variable.other.inset
+#                                                        ^ punctuation.brackets.round.inset
+#                                                         ^ punctuation.accessor.dot.inset
+#                                                          ^^^^^ keyword.control.inset
+#                                                               ^ keyword.operator.question.inset
+#                                                                ^ punctuation.terminator.statement.inset
+>        Some(item.on_hand.to_string())
+#        ^^^^ entity.name.type.inset
+#            ^ punctuation.brackets.round.inset
+#             ^^^^ variable.other.inset
+#                 ^ punctuation.accessor.dot.inset
+#                  ^^^^^^^ variable.other.inset
+#                         ^ punctuation.accessor.dot.inset
+#                          ^^^^^^^^^ entity.name.function.inset
+#                                   ^ punctuation.brackets.round.inset
+#                                    ^ punctuation.brackets.round.inset
+#                                     ^ punctuation.brackets.round.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>
+>    /// Takes away stock that has been shipped, and replies with the new quantity on hand.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[post("/items/{sku}/shipments", via = http, body = quantity)]
+#    ^ meta.attribute.route.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+#      ^^^^ meta.attribute.route.inset constant.language.http-method.inset
+#          ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#           ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.begin.inset
+#            ^^^^^^^ meta.attribute.route.inset string.quoted.double.route.inset
+#                   ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.begin.inset
+#                    ^^^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset variable.parameter.route.inset
+#                       ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.end.inset
+#                        ^^^^^^^^^^ meta.attribute.route.inset string.quoted.double.route.inset
+#                                  ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.end.inset
+#                                   ^ meta.attribute.route.inset punctuation.separator.comma.inset
+#                                     ^^^ meta.attribute.route.inset keyword.other.route-option.inset
+#                                         ^ meta.attribute.route.inset keyword.operator.assignment.inset
+#                                           ^^^^ meta.attribute.route.inset variable.other.capability.inset
+#                                               ^ meta.attribute.route.inset punctuation.separator.comma.inset
+#                                                 ^^^^ meta.attribute.route.inset keyword.other.route-option.inset
+#                                                      ^ meta.attribute.route.inset keyword.operator.assignment.inset
+#                                                        ^^^^^^^^ meta.attribute.route.inset variable.parameter.inset
+#                                                                ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#                                                                 ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+>    async fn ship(&self, sku: String, quantity: u32) -> Result<String, ShipError> {
+#    ^^^^^ storage.modifier.inset
+#          ^^ storage.type.function.inset
+#             ^^^^ entity.name.function.inset
+#                 ^ punctuation.brackets.round.inset
+#                  ^ keyword.operator.borrow.inset
+#                   ^^^^ variable.language.self.inset
+#                       ^ punctuation.separator.comma.inset
+#                         ^^^ variable.other.inset
+#                            ^ punctuation.separator.colon.inset
+#                              ^^^^^^ entity.name.type.inset
+#                                    ^ punctuation.separator.comma.inset
+#                                      ^^^^^^^^ variable.other.inset
+#                                              ^ punctuation.separator.colon.inset
+#                                                ^^^ entity.name.type.primitive.inset
+#                                                   ^ punctuation.brackets.round.inset
+#                                                     ^^ keyword.operator.arrow.skinny.inset
+#                                                        ^^^^^^ entity.name.type.inset
+#                                                              ^ punctuation.brackets.angle.inset
+#                                                               ^^^^^^ entity.name.type.inset
+#                                                                     ^ punctuation.separator.comma.inset
+#                                                                       ^^^^^^^^^ entity.name.type.inset
+#                                                                                ^ punctuation.brackets.angle.inset
+#                                                                                  ^ punctuation.brackets.curly.inset
+>        let item = self.inventory.ship(&sku, quantity).await?;
+#        ^^^ storage.type.inset
+#            ^^^^ variable.other.inset
+#                 ^ keyword.operator.assignment.inset
+#                   ^^^^ variable.language.self.inset
+#                       ^ punctuation.accessor.dot.inset
+#                        ^^^^^^^^^ variable.other.inset
+#                                 ^ punctuation.accessor.dot.inset
+#                                  ^^^^ entity.name.function.inset
+#                                      ^ punctuation.brackets.round.inset
+#                                       ^ keyword.operator.borrow.inset
+#                                        ^^^ variable.other.inset
+#                                           ^ punctuation.separator.comma.inset
+#                                             ^^^^^^^^ variable.other.inset
+#                                                     ^ punctuation.brackets.round.inset
+#                                                      ^ punctuation.accessor.dot.inset
+#                                                       ^^^^^ keyword.control.inset
+#                                                            ^ keyword.operator.question.inset
+#                                                             ^ punctuation.terminator.statement.inset
+>        Ok(item.on_hand.to_string())
+#        ^^ entity.name.type.inset
+#          ^ punctuation.brackets.round.inset
+#           ^^^^ variable.other.inset
+#               ^ punctuation.accessor.dot.inset
+#                ^^^^^^^ variable.other.inset
+#                       ^ punctuation.accessor.dot.inset
+#                        ^^^^^^^^^ entity.name.function.inset
+#                                 ^ punctuation.brackets.round.inset
+#                                  ^ punctuation.brackets.round.inset
+#                                   ^ punctuation.brackets.round.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>
+>    /// Lists the reorders waiting to be placed, one per line: the SKU, then the quantity.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[get("/reorders", via = http)]
+#    ^ meta.attribute.route.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+#      ^^^ meta.attribute.route.inset constant.language.http-method.inset
+#         ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#          ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.begin.inset
+#           ^^^^^^^^^ meta.attribute.route.inset string.quoted.double.route.inset
+#                    ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.end.inset
+#                     ^ meta.attribute.route.inset punctuation.separator.comma.inset
+#                       ^^^ meta.attribute.route.inset keyword.other.route-option.inset
+#                           ^ meta.attribute.route.inset keyword.operator.assignment.inset
+#                             ^^^^ meta.attribute.route.inset variable.other.capability.inset
+#                                 ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#                                  ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+>    async fn pending_reorders(&self) -> String {
+#    ^^^^^ storage.modifier.inset
+#          ^^ storage.type.function.inset
+#             ^^^^^^^^^^^^^^^^ entity.name.function.inset
+#                             ^ punctuation.brackets.round.inset
+#                              ^ keyword.operator.borrow.inset
+#                               ^^^^ variable.language.self.inset
+#                                   ^ punctuation.brackets.round.inset
+#                                     ^^ keyword.operator.arrow.skinny.inset
+#                                        ^^^^^^ entity.name.type.inset
+#                                               ^ punctuation.brackets.curly.inset
+>        let orders = self.reorders.pending().await;
+#        ^^^ storage.type.inset
+#            ^^^^^^ variable.other.inset
+#                   ^ keyword.operator.assignment.inset
+#                     ^^^^ variable.language.self.inset
+#                         ^ punctuation.accessor.dot.inset
+#                          ^^^^^^^^ variable.other.inset
+#                                  ^ punctuation.accessor.dot.inset
+#                                   ^^^^^^^ entity.name.function.inset
+#                                          ^ punctuation.brackets.round.inset
+#                                           ^ punctuation.brackets.round.inset
+#                                            ^ punctuation.accessor.dot.inset
+#                                             ^^^^^ keyword.control.inset
+#                                                  ^ punctuation.terminator.statement.inset
+>        orders.iter().map(|order| format!("{} {}\n", order.sku, order.quantity)).collect()
+#        ^^^^^^ variable.other.inset
+#              ^ punctuation.accessor.dot.inset
+#               ^^^^ entity.name.function.inset
+#                   ^ punctuation.brackets.round.inset
+#                    ^ punctuation.brackets.round.inset
+#                     ^ punctuation.accessor.dot.inset
+#                      ^^^ entity.name.function.inset
+#                         ^ punctuation.brackets.round.inset
+#                          ^ keyword.operator.closure.inset
+#                           ^^^^^ variable.other.inset
+#                                ^ keyword.operator.closure.inset
+#                                  ^^^^^^ entity.name.function.macro.inset
+#                                        ^ entity.name.function.macro.inset
+#                                         ^ punctuation.brackets.round.inset
+#                                          ^ string.quoted.double.inset punctuation.definition.string.begin.inset
+#                                           ^^ string.quoted.double.inset constant.other.placeholder.inset
+#                                              ^^ string.quoted.double.inset constant.other.placeholder.inset
+#                                                ^^ string.quoted.double.inset constant.character.escape.inset
+#                                                  ^ string.quoted.double.inset punctuation.definition.string.end.inset
+#                                                   ^ punctuation.separator.comma.inset
+#                                                     ^^^^^ variable.other.inset
+#                                                          ^ punctuation.accessor.dot.inset
+#                                                           ^^^ variable.other.inset
+#                                                              ^ punctuation.separator.comma.inset
+#                                                                ^^^^^ variable.other.inset
+#                                                                     ^ punctuation.accessor.dot.inset
+#                                                                      ^^^^^^^^ variable.other.inset
+#                                                                              ^ punctuation.brackets.round.inset
+#                                                                               ^ punctuation.brackets.round.inset
+#                                                                                ^ punctuation.accessor.dot.inset
+#                                                                                 ^^^^^^^ entity.name.function.inset
+#                                                                                        ^ punctuation.brackets.round.inset
+#                                                                                         ^ punctuation.brackets.round.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// Keeps the stock record of every item, and raises a reorder when stock runs low.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>component Inventory {
+#^^^^^^^^^ storage.type.component.inset
+#          ^^^^^^^^^ entity.name.type.component.inset
+#                    ^ punctuation.brackets.curly.inset
+>    items: Table<String, Item>,
+#    ^^^^^ variable.other.inset
+#         ^ punctuation.separator.colon.inset
+#           ^^^^^ support.type.capability.inset
+#                ^ punctuation.brackets.angle.inset
+#                 ^^^^^^ entity.name.type.inset
+#                       ^ punctuation.separator.comma.inset
+#                         ^^^^ entity.name.type.inset
+#                             ^ punctuation.brackets.angle.inset
+#                              ^ punctuation.separator.comma.inset
+>    /// A reorder for each item that shipping leaves at or below its reorder level.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    low_stock: Outlet<Reorder>,
+#    ^^^^^^^^^ variable.other.inset
+#             ^ punctuation.separator.colon.inset
+#               ^^^^^^ support.type.inset
+#                     ^ punctuation.brackets.angle.inset
+#                      ^^^^^^^ entity.name.type.inset
+#                             ^ punctuation.brackets.angle.inset
+#                              ^ punctuation.separator.comma.inset
+>
+>    failure {
+#    ^^^^^^^ meta.failure.inset keyword.control.failure.inset
+#            ^ meta.failure.inset punctuation.brackets.curly.inset
+>        /// A database error affects only the request it happened in. The next request
+#        ^^^ meta.failure.inset comment.line.documentation.inset punctuation.definition.comment.inset
+#           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.failure.inset comment.line.documentation.inset
+>        /// may succeed, so the program keeps running.
+#        ^^^ meta.failure.inset comment.line.documentation.inset punctuation.definition.comment.inset
+#           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.failure.inset comment.line.documentation.inset
+>        Capability(items) => rollback,
+#        ^^^^^^^^^^ meta.failure.inset support.constant.failure.inset
+#                  ^ meta.failure.inset punctuation.brackets.round.inset
+#                   ^^^^^ meta.failure.inset variable.other.inset
+#                        ^ meta.failure.inset punctuation.brackets.round.inset
+#                          ^^ meta.failure.inset keyword.operator.arrow.fat.inset
+#                             ^^^^^^^^ meta.failure.inset keyword.control.failure.inset
+#                                     ^ meta.failure.inset punctuation.separator.comma.inset
+>    }
+#    ^ meta.failure.inset punctuation.brackets.curly.inset
+>
+>    /// The item with this SKU, if there is one.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[message]
+#    ^ meta.attribute.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#      ^^^^^^^ meta.attribute.inset keyword.other.attribute.inset
+#             ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>    async fn item(&self, sku: &str) -> Option<Item> {
+#    ^^^^^ storage.modifier.inset
+#          ^^ storage.type.function.inset
+#             ^^^^ entity.name.function.inset
+#                 ^ punctuation.brackets.round.inset
+#                  ^ keyword.operator.borrow.inset
+#                   ^^^^ variable.language.self.inset
+#                       ^ punctuation.separator.comma.inset
+#                         ^^^ variable.other.inset
+#                            ^ punctuation.separator.colon.inset
+#                              ^ keyword.operator.borrow.inset
+#                               ^^^ entity.name.type.primitive.inset
+#                                  ^ punctuation.brackets.round.inset
+#                                    ^^ keyword.operator.arrow.skinny.inset
+#                                       ^^^^^^ entity.name.type.inset
+#                                             ^ punctuation.brackets.angle.inset
+#                                              ^^^^ entity.name.type.inset
+#                                                  ^ punctuation.brackets.angle.inset
+#                                                    ^ punctuation.brackets.curly.inset
+>        self.items.get(sku).await
+#        ^^^^ variable.language.self.inset
+#            ^ punctuation.accessor.dot.inset
+#             ^^^^^ variable.other.inset
+#                  ^ punctuation.accessor.dot.inset
+#                   ^^^ entity.name.function.inset
+#                      ^ punctuation.brackets.round.inset
+#                       ^^^ variable.other.inset
+#                          ^ punctuation.brackets.round.inset
+#                           ^ punctuation.accessor.dot.inset
+#                            ^^^^^ keyword.control.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>
+>    /// Adds to an item's stock, and returns the item as it now stands.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[message]
+#    ^ meta.attribute.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#      ^^^^^^^ meta.attribute.inset keyword.other.attribute.inset
+#             ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>    async fn receive(&mut self, sku: &str, quantity: u32) -> Option<Item> {
+#    ^^^^^ storage.modifier.inset
+#          ^^ storage.type.function.inset
+#             ^^^^^^^ entity.name.function.inset
+#                    ^ punctuation.brackets.round.inset
+#                     ^ keyword.operator.borrow.inset
+#                      ^^^ storage.modifier.inset
+#                          ^^^^ variable.language.self.inset
+#                              ^ punctuation.separator.comma.inset
+#                                ^^^ variable.other.inset
+#                                   ^ punctuation.separator.colon.inset
+#                                     ^ keyword.operator.borrow.inset
+#                                      ^^^ entity.name.type.primitive.inset
+#                                         ^ punctuation.separator.comma.inset
+#                                           ^^^^^^^^ variable.other.inset
+#                                                   ^ punctuation.separator.colon.inset
+#                                                     ^^^ entity.name.type.primitive.inset
+#                                                        ^ punctuation.brackets.round.inset
+#                                                          ^^ keyword.operator.arrow.skinny.inset
+#                                                             ^^^^^^ entity.name.type.inset
+#                                                                   ^ punctuation.brackets.angle.inset
+#                                                                    ^^^^ entity.name.type.inset
+#                                                                        ^ punctuation.brackets.angle.inset
+#                                                                          ^ punctuation.brackets.curly.inset
+>        let mut item = self.items.get(sku).await?;
+#        ^^^ storage.type.inset
+#            ^^^ storage.modifier.inset
+#                ^^^^ variable.other.inset
+#                     ^ keyword.operator.assignment.inset
+#                       ^^^^ variable.language.self.inset
+#                           ^ punctuation.accessor.dot.inset
+#                            ^^^^^ variable.other.inset
+#                                 ^ punctuation.accessor.dot.inset
+#                                  ^^^ entity.name.function.inset
+#                                     ^ punctuation.brackets.round.inset
+#                                      ^^^ variable.other.inset
+#                                         ^ punctuation.brackets.round.inset
+#                                          ^ punctuation.accessor.dot.inset
+#                                           ^^^^^ keyword.control.inset
+#                                                ^ keyword.operator.question.inset
+#                                                 ^ punctuation.terminator.statement.inset
+>        item.on_hand += quantity;
+#        ^^^^ variable.other.inset
+#            ^ punctuation.accessor.dot.inset
+#             ^^^^^^^ variable.other.inset
+#                     ^^ keyword.operator.assignment.compound.inset
+#                        ^^^^^^^^ variable.other.inset
+#                                ^ punctuation.terminator.statement.inset
+>        self.items.insert(sku.to_string(), item.clone()).await;
+#        ^^^^ variable.language.self.inset
+#            ^ punctuation.accessor.dot.inset
+#             ^^^^^ variable.other.inset
+#                  ^ punctuation.accessor.dot.inset
+#                   ^^^^^^ entity.name.function.inset
+#                         ^ punctuation.brackets.round.inset
+#                          ^^^ variable.other.inset
+#                             ^ punctuation.accessor.dot.inset
+#                              ^^^^^^^^^ entity.name.function.inset
+#                                       ^ punctuation.brackets.round.inset
+#                                        ^ punctuation.brackets.round.inset
+#                                         ^ punctuation.separator.comma.inset
+#                                           ^^^^ variable.other.inset
+#                                               ^ punctuation.accessor.dot.inset
+#                                                ^^^^^ entity.name.function.inset
+#                                                     ^ punctuation.brackets.round.inset
+#                                                      ^ punctuation.brackets.round.inset
+#                                                       ^ punctuation.brackets.round.inset
+#                                                        ^ punctuation.accessor.dot.inset
+#                                                         ^^^^^ keyword.control.inset
+#                                                              ^ punctuation.terminator.statement.inset
+>        Some(item)
+#        ^^^^ entity.name.type.inset
+#            ^ punctuation.brackets.round.inset
+#             ^^^^ variable.other.inset
+#                 ^ punctuation.brackets.round.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>
+>    /// Takes from an item's stock if it holds enough, and returns the item as it now stands.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    /// Raises a reorder if that leaves stock at or below its reorder level.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[message]
+#    ^ meta.attribute.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#      ^^^^^^^ meta.attribute.inset keyword.other.attribute.inset
+#             ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>    async fn ship(&mut self, sku: &str, quantity: u32) -> Result<Item, ShipError> {
+#    ^^^^^ storage.modifier.inset
+#          ^^ storage.type.function.inset
+#             ^^^^ entity.name.function.inset
+#                 ^ punctuation.brackets.round.inset
+#                  ^ keyword.operator.borrow.inset
+#                   ^^^ storage.modifier.inset
+#                       ^^^^ variable.language.self.inset
+#                           ^ punctuation.separator.comma.inset
+#                             ^^^ variable.other.inset
+#                                ^ punctuation.separator.colon.inset
+#                                  ^ keyword.operator.borrow.inset
+#                                   ^^^ entity.name.type.primitive.inset
+#                                      ^ punctuation.separator.comma.inset
+#                                        ^^^^^^^^ variable.other.inset
+#                                                ^ punctuation.separator.colon.inset
+#                                                  ^^^ entity.name.type.primitive.inset
+#                                                     ^ punctuation.brackets.round.inset
+#                                                       ^^ keyword.operator.arrow.skinny.inset
+#                                                          ^^^^^^ entity.name.type.inset
+#                                                                ^ punctuation.brackets.angle.inset
+#                                                                 ^^^^ entity.name.type.inset
+#                                                                     ^ punctuation.separator.comma.inset
+#                                                                       ^^^^^^^^^ entity.name.type.inset
+#                                                                                ^ punctuation.brackets.angle.inset
+#                                                                                  ^ punctuation.brackets.curly.inset
+>        let Some(mut item) = self.items.get(sku).await else {
+#        ^^^ storage.type.inset
+#            ^^^^ entity.name.type.inset
+#                ^ punctuation.brackets.round.inset
+#                 ^^^ storage.modifier.inset
+#                     ^^^^ variable.other.inset
+#                         ^ punctuation.brackets.round.inset
+#                           ^ keyword.operator.assignment.inset
+#                             ^^^^ variable.language.self.inset
+#                                 ^ punctuation.accessor.dot.inset
+#                                  ^^^^^ variable.other.inset
+#                                       ^ punctuation.accessor.dot.inset
+#                                        ^^^ entity.name.function.inset
+#                                           ^ punctuation.brackets.round.inset
+#                                            ^^^ variable.other.inset
+#                                               ^ punctuation.brackets.round.inset
+#                                                ^ punctuation.accessor.dot.inset
+#                                                 ^^^^^ keyword.control.inset
+#                                                       ^^^^ keyword.control.inset
+#                                                            ^ punctuation.brackets.curly.inset
+>            return Err(ShipError::UnknownItem);
+#            ^^^^^^ keyword.control.inset
+#                   ^^^ entity.name.type.inset
+#                      ^ punctuation.brackets.round.inset
+#                       ^^^^^^^^^ entity.name.type.inset
+#                                ^^ punctuation.separator.namespace.inset
+#                                  ^^^^^^^^^^^ entity.name.type.inset
+#                                             ^ punctuation.brackets.round.inset
+#                                              ^ punctuation.terminator.statement.inset
+>        };
+#        ^ punctuation.brackets.curly.inset
+#         ^ punctuation.terminator.statement.inset
+>        if item.on_hand < quantity {
+#        ^^ keyword.control.inset
+#           ^^^^ variable.other.inset
+#               ^ punctuation.accessor.dot.inset
+#                ^^^^^^^ variable.other.inset
+#                        ^ keyword.operator.comparison.inset
+#                          ^^^^^^^^ variable.other.inset
+#                                   ^ punctuation.brackets.curly.inset
+>            return Err(ShipError::NotEnoughStock);
+#            ^^^^^^ keyword.control.inset
+#                   ^^^ entity.name.type.inset
+#                      ^ punctuation.brackets.round.inset
+#                       ^^^^^^^^^ entity.name.type.inset
+#                                ^^ punctuation.separator.namespace.inset
+#                                  ^^^^^^^^^^^^^^ entity.name.type.inset
+#                                                ^ punctuation.brackets.round.inset
+#                                                 ^ punctuation.terminator.statement.inset
+>        }
+#        ^ punctuation.brackets.curly.inset
+>        item.on_hand -= quantity;
+#        ^^^^ variable.other.inset
+#            ^ punctuation.accessor.dot.inset
+#             ^^^^^^^ variable.other.inset
+#                     ^^ keyword.operator.assignment.compound.inset
+#                        ^^^^^^^^ variable.other.inset
+#                                ^ punctuation.terminator.statement.inset
+>        self.items.insert(sku.to_string(), item.clone()).await;
+#        ^^^^ variable.language.self.inset
+#            ^ punctuation.accessor.dot.inset
+#             ^^^^^ variable.other.inset
+#                  ^ punctuation.accessor.dot.inset
+#                   ^^^^^^ entity.name.function.inset
+#                         ^ punctuation.brackets.round.inset
+#                          ^^^ variable.other.inset
+#                             ^ punctuation.accessor.dot.inset
+#                              ^^^^^^^^^ entity.name.function.inset
+#                                       ^ punctuation.brackets.round.inset
+#                                        ^ punctuation.brackets.round.inset
+#                                         ^ punctuation.separator.comma.inset
+#                                           ^^^^ variable.other.inset
+#                                               ^ punctuation.accessor.dot.inset
+#                                                ^^^^^ entity.name.function.inset
+#                                                     ^ punctuation.brackets.round.inset
+#                                                      ^ punctuation.brackets.round.inset
+#                                                       ^ punctuation.brackets.round.inset
+#                                                        ^ punctuation.accessor.dot.inset
+#                                                         ^^^^^ keyword.control.inset
+#                                                              ^ punctuation.terminator.statement.inset
+>        let order = Self::reorder_quantity(item.on_hand, item.reorder_level, item.target_level);
+#        ^^^ storage.type.inset
+#            ^^^^^ variable.other.inset
+#                  ^ keyword.operator.assignment.inset
+#                    ^^^^ variable.language.self.inset
+#                        ^^ punctuation.separator.namespace.inset
+#                          ^^^^^^^^^^^^^^^^ entity.name.function.inset
+#                                          ^ punctuation.brackets.round.inset
+#                                           ^^^^ variable.other.inset
+#                                               ^ punctuation.accessor.dot.inset
+#                                                ^^^^^^^ variable.other.inset
+#                                                       ^ punctuation.separator.comma.inset
+#                                                         ^^^^ variable.other.inset
+#                                                             ^ punctuation.accessor.dot.inset
+#                                                              ^^^^^^^^^^^^^ variable.other.inset
+#                                                                           ^ punctuation.separator.comma.inset
+#                                                                             ^^^^ variable.other.inset
+#                                                                                 ^ punctuation.accessor.dot.inset
+#                                                                                  ^^^^^^^^^^^^ variable.other.inset
+#                                                                                              ^ punctuation.brackets.round.inset
+#                                                                                               ^ punctuation.terminator.statement.inset
+>        if order > 0 {
+#        ^^ keyword.control.inset
+#           ^^^^^ variable.other.inset
+#                 ^ keyword.operator.comparison.inset
+#                   ^ constant.numeric.decimal.inset
+#                     ^ punctuation.brackets.curly.inset
+>            send self.low_stock.emit(Reorder { sku: sku.to_string(), quantity: order });
+#            ^^^^ keyword.control.send.inset
+#                 ^^^^ variable.language.self.inset
+#                     ^ punctuation.accessor.dot.inset
+#                      ^^^^^^^^^ variable.other.inset
+#                               ^ punctuation.accessor.dot.inset
+#                                ^^^^ entity.name.function.inset
+#                                    ^ punctuation.brackets.round.inset
+#                                     ^^^^^^^ entity.name.type.inset
+#                                             ^ punctuation.brackets.curly.inset
+#                                               ^^^ variable.other.inset
+#                                                  ^ punctuation.separator.colon.inset
+#                                                    ^^^ variable.other.inset
+#                                                       ^ punctuation.accessor.dot.inset
+#                                                        ^^^^^^^^^ entity.name.function.inset
+#                                                                 ^ punctuation.brackets.round.inset
+#                                                                  ^ punctuation.brackets.round.inset
+#                                                                   ^ punctuation.separator.comma.inset
+#                                                                     ^^^^^^^^ variable.other.inset
+#                                                                             ^ punctuation.separator.colon.inset
+#                                                                               ^^^^^ variable.other.inset
+#                                                                                     ^ punctuation.brackets.curly.inset
+#                                                                                      ^ punctuation.brackets.round.inset
+#                                                                                       ^ punctuation.terminator.statement.inset
+>        }
+#        ^ punctuation.brackets.curly.inset
+>        Ok(item)
+#        ^^ entity.name.type.inset
+#          ^ punctuation.brackets.round.inset
+#           ^^^^ variable.other.inset
+#               ^ punctuation.brackets.round.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>
+>    /// How many to reorder so that stock goes back up to its target level.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    fn reorder_quantity(on_hand: u32, reorder_level: u32, target_level: u32) -> u32 {
+#    ^^ storage.type.function.inset
+#       ^^^^^^^^^^^^^^^^ entity.name.function.inset
+#                       ^ punctuation.brackets.round.inset
+#                        ^^^^^^^ variable.other.inset
+#                               ^ punctuation.separator.colon.inset
+#                                 ^^^ entity.name.type.primitive.inset
+#                                    ^ punctuation.separator.comma.inset
+#                                      ^^^^^^^^^^^^^ variable.other.inset
+#                                                   ^ punctuation.separator.colon.inset
+#                                                     ^^^ entity.name.type.primitive.inset
+#                                                        ^ punctuation.separator.comma.inset
+#                                                          ^^^^^^^^^^^^ variable.other.inset
+#                                                                      ^ punctuation.separator.colon.inset
+#                                                                        ^^^ entity.name.type.primitive.inset
+#                                                                           ^ punctuation.brackets.round.inset
+#                                                                             ^^ keyword.operator.arrow.skinny.inset
+#                                                                                ^^^ entity.name.type.primitive.inset
+#                                                                                    ^ punctuation.brackets.curly.inset
+>        if on_hand > reorder_level {
+#        ^^ keyword.control.inset
+#           ^^^^^^^ variable.other.inset
+#                   ^ keyword.operator.comparison.inset
+#                     ^^^^^^^^^^^^^ variable.other.inset
+#                                   ^ punctuation.brackets.curly.inset
+>            0
+#            ^ constant.numeric.decimal.inset
+>        } else {
+#        ^ punctuation.brackets.curly.inset
+#          ^^^^ keyword.control.inset
+#               ^ punctuation.brackets.curly.inset
+>            target_level.saturating_sub(on_hand)
+#            ^^^^^^^^^^^^ variable.other.inset
+#                        ^ punctuation.accessor.dot.inset
+#                         ^^^^^^^^^^^^^^ entity.name.function.inset
+#                                       ^ punctuation.brackets.round.inset
+#                                        ^^^^^^^ variable.other.inset
+#                                               ^ punctuation.brackets.round.inset
+>        }
+#        ^ punctuation.brackets.curly.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// Keeps the reorders waiting to be placed, at most one per item.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>component Reorders {
+#^^^^^^^^^ storage.type.component.inset
+#          ^^^^^^^^ entity.name.type.component.inset
+#                   ^ punctuation.brackets.curly.inset
+>    orders: Vec<Reorder>,
+#    ^^^^^^ variable.other.inset
+#          ^ punctuation.separator.colon.inset
+#            ^^^ entity.name.type.inset
+#               ^ punctuation.brackets.angle.inset
+#                ^^^^^^^ entity.name.type.inset
+#                       ^ punctuation.brackets.angle.inset
+#                        ^ punctuation.separator.comma.inset
+>
+>    /// Records a reorder, replacing any earlier one for the same item.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[message]
+#    ^ meta.attribute.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#      ^^^^^^^ meta.attribute.inset keyword.other.attribute.inset
+#             ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>    fn raise(&mut self, order: Reorder) {
+#    ^^ storage.type.function.inset
+#       ^^^^^ entity.name.function.inset
+#            ^ punctuation.brackets.round.inset
+#             ^ keyword.operator.borrow.inset
+#              ^^^ storage.modifier.inset
+#                  ^^^^ variable.language.self.inset
+#                      ^ punctuation.separator.comma.inset
+#                        ^^^^^ variable.other.inset
+#                             ^ punctuation.separator.colon.inset
+#                               ^^^^^^^ entity.name.type.inset
+#                                      ^ punctuation.brackets.round.inset
+#                                        ^ punctuation.brackets.curly.inset
+>        if let Some(pending) = self.orders.iter_mut().find(|pending| pending.sku == order.sku) {
+#        ^^ keyword.control.inset
+#           ^^^ storage.type.inset
+#               ^^^^ entity.name.type.inset
+#                   ^ punctuation.brackets.round.inset
+#                    ^^^^^^^ variable.other.inset
+#                           ^ punctuation.brackets.round.inset
+#                             ^ keyword.operator.assignment.inset
+#                               ^^^^ variable.language.self.inset
+#                                   ^ punctuation.accessor.dot.inset
+#                                    ^^^^^^ variable.other.inset
+#                                          ^ punctuation.accessor.dot.inset
+#                                           ^^^^^^^^ entity.name.function.inset
+#                                                   ^ punctuation.brackets.round.inset
+#                                                    ^ punctuation.brackets.round.inset
+#                                                     ^ punctuation.accessor.dot.inset
+#                                                      ^^^^ entity.name.function.inset
+#                                                          ^ punctuation.brackets.round.inset
+#                                                           ^ keyword.operator.closure.inset
+#                                                            ^^^^^^^ variable.other.inset
+#                                                                   ^ keyword.operator.closure.inset
+#                                                                     ^^^^^^^ variable.other.inset
+#                                                                            ^ punctuation.accessor.dot.inset
+#                                                                             ^^^ variable.other.inset
+#                                                                                 ^^ keyword.operator.comparison.inset
+#                                                                                    ^^^^^ variable.other.inset
+#                                                                                         ^ punctuation.accessor.dot.inset
+#                                                                                          ^^^ variable.other.inset
+#                                                                                             ^ punctuation.brackets.round.inset
+#                                                                                               ^ punctuation.brackets.curly.inset
+>            pending.quantity = order.quantity;
+#            ^^^^^^^ variable.other.inset
+#                   ^ punctuation.accessor.dot.inset
+#                    ^^^^^^^^ variable.other.inset
+#                             ^ keyword.operator.assignment.inset
+#                               ^^^^^ variable.other.inset
+#                                    ^ punctuation.accessor.dot.inset
+#                                     ^^^^^^^^ variable.other.inset
+#                                             ^ punctuation.terminator.statement.inset
+>        } else {
+#        ^ punctuation.brackets.curly.inset
+#          ^^^^ keyword.control.inset
+#               ^ punctuation.brackets.curly.inset
+>            self.orders.push(order);
+#            ^^^^ variable.language.self.inset
+#                ^ punctuation.accessor.dot.inset
+#                 ^^^^^^ variable.other.inset
+#                       ^ punctuation.accessor.dot.inset
+#                        ^^^^ entity.name.function.inset
+#                            ^ punctuation.brackets.round.inset
+#                             ^^^^^ variable.other.inset
+#                                  ^ punctuation.brackets.round.inset
+#                                   ^ punctuation.terminator.statement.inset
+>        }
+#        ^ punctuation.brackets.curly.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>
+>    /// Every reorder waiting to be placed, oldest first.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[message]
+#    ^ meta.attribute.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#      ^^^^^^^ meta.attribute.inset keyword.other.attribute.inset
+#             ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>    fn pending(&self) -> Vec<Reorder> {
+#    ^^ storage.type.function.inset
+#       ^^^^^^^ entity.name.function.inset
+#              ^ punctuation.brackets.round.inset
+#               ^ keyword.operator.borrow.inset
+#                ^^^^ variable.language.self.inset
+#                    ^ punctuation.brackets.round.inset
+#                      ^^ keyword.operator.arrow.skinny.inset
+#                         ^^^ entity.name.type.inset
+#                            ^ punctuation.brackets.angle.inset
+#                             ^^^^^^^ entity.name.type.inset
+#                                    ^ punctuation.brackets.angle.inset
+#                                      ^ punctuation.brackets.curly.inset
+>        self.orders.clone()
+#        ^^^^ variable.language.self.inset
+#            ^ punctuation.accessor.dot.inset
+#             ^^^^^^ variable.other.inset
+#                   ^ punctuation.accessor.dot.inset
+#                    ^^^^^ entity.name.function.inset
+#                         ^ punctuation.brackets.round.inset
+#                          ^ punctuation.brackets.round.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>}
+#^ punctuation.brackets.curly.inset

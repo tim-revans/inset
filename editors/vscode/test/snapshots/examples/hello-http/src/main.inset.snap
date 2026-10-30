@@ -1,0 +1,98 @@
+>/// Hello HTTP: the smallest Inset program that serves the web.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>app HelloHttp {
+#^^^ storage.type.app.inset
+#    ^^^^^^^^^ entity.name.type.app.inset
+#              ^ punctuation.brackets.curly.inset
+>    /// The port to serve on.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    setting port: u16 = 8080;
+#    ^^^^^^^ storage.type.setting.inset
+#            ^^^^ variable.other.setting.inset
+#                ^ punctuation.separator.colon.inset
+#                  ^^^ entity.name.type.primitive.inset
+#                      ^ keyword.operator.assignment.inset
+#                        ^^^^ constant.numeric.decimal.inset
+#                            ^ punctuation.terminator.statement.inset
+>    grant http: HttpServer { port };
+#    ^^^^^ storage.type.grant.inset
+#          ^^^^ variable.other.capability.inset
+#              ^ punctuation.separator.colon.inset
+#                ^^^^^^^^^^ support.type.capability.inset
+#                           ^ punctuation.brackets.curly.inset
+#                             ^^^^ variable.other.inset
+#                                  ^ punctuation.brackets.curly.inset
+#                                   ^ punctuation.terminator.statement.inset
+>    start Greeter { http: move http };
+#    ^^^^^ meta.start.inset storage.type.start.inset
+#          ^^^^^^^ meta.start.inset entity.name.type.component.inset
+#                  ^ meta.start.inset punctuation.brackets.curly.inset
+#                    ^^^^ meta.start.inset variable.other.member.inset
+#                        ^ meta.start.inset punctuation.separator.colon.inset
+#                          ^^^^ meta.start.inset storage.modifier.boundary.move.inset
+#                               ^^^^ meta.start.inset variable.other.inset
+#                                    ^ meta.start.inset punctuation.brackets.curly.inset
+#                                     ^ punctuation.terminator.statement.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// Greets visitors by name.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>component Greeter {
+#^^^^^^^^^ storage.type.component.inset
+#          ^^^^^^^ entity.name.type.component.inset
+#                  ^ punctuation.brackets.curly.inset
+>    http: HttpServer,
+#    ^^^^ variable.other.inset
+#        ^ punctuation.separator.colon.inset
+#          ^^^^^^^^^^ support.type.capability.inset
+#                    ^ punctuation.separator.comma.inset
+>
+>    /// Replies with a greeting for the name in the path.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[get("/hello/{name}", via = http)]
+#    ^ meta.attribute.route.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+#      ^^^ meta.attribute.route.inset constant.language.http-method.inset
+#         ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#          ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.begin.inset
+#           ^^^^^^^ meta.attribute.route.inset string.quoted.double.route.inset
+#                  ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.begin.inset
+#                   ^^^^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset variable.parameter.route.inset
+#                       ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.end.inset
+#                        ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.end.inset
+#                         ^ meta.attribute.route.inset punctuation.separator.comma.inset
+#                           ^^^ meta.attribute.route.inset keyword.other.route-option.inset
+#                               ^ meta.attribute.route.inset keyword.operator.assignment.inset
+#                                 ^^^^ meta.attribute.route.inset variable.other.capability.inset
+#                                     ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#                                      ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+>    fn hello(name: String) -> String {
+#    ^^ storage.type.function.inset
+#       ^^^^^ entity.name.function.inset
+#            ^ punctuation.brackets.round.inset
+#             ^^^^ variable.other.inset
+#                 ^ punctuation.separator.colon.inset
+#                   ^^^^^^ entity.name.type.inset
+#                         ^ punctuation.brackets.round.inset
+#                           ^^ keyword.operator.arrow.skinny.inset
+#                              ^^^^^^ entity.name.type.inset
+#                                     ^ punctuation.brackets.curly.inset
+>        format!("Hello, {name}!")
+#        ^^^^^^ entity.name.function.macro.inset
+#              ^ entity.name.function.macro.inset
+#               ^ punctuation.brackets.round.inset
+#                ^ string.quoted.double.inset punctuation.definition.string.begin.inset
+#                 ^^^^^^^ string.quoted.double.inset
+#                        ^^^^^^ string.quoted.double.inset constant.other.placeholder.inset
+#                              ^ string.quoted.double.inset
+#                               ^ string.quoted.double.inset punctuation.definition.string.end.inset
+#                                ^ punctuation.brackets.round.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>}
+#^ punctuation.brackets.curly.inset

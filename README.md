@@ -15,13 +15,15 @@ The syntax is being designed through example programs. Nothing compiles yet.
 - [`docs/language/syntax.md`](docs/language/syntax.md) is the syntax reference.
 - [`docs/language/diagrams.md`](docs/language/diagrams.md) describes the generated diagrams.
 - [`examples/`](examples/) holds the example programs that pin the syntax down.
+- [`editors/vscode/`](editors/vscode/) is a VS Code extension that highlights Inset code and requirements. `cargo xtask editor` packages it.
 
 ## Building
 
-You need [rustup](https://rustup.rs). `rust-toolchain.toml` selects the toolchain and installs the `wasm32-wasip2` target.
+You need [rustup](https://rustup.rs). `rust-toolchain.toml` selects the toolchain and installs the `wasm32-wasip2` target. The editor grammar tests and packaging also need [Node.js](https://nodejs.org) 22 or later with npm.
 
 ```sh
-cargo xtask ci    # format check, clippy, tests
+cargo xtask ci        # format check, clippy, tests, editor grammar tests
+cargo xtask editor    # package the VS Code extension
 ```
 
 Or open the repo in its dev container (`.devcontainer/`), which any [Dev Container](https://containers.dev) client supports. CI runs `cargo xtask ci` in the same image.

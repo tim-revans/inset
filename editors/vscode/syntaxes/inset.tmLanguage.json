@@ -1,0 +1,912 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Inset",
+  "scopeName": "source.inset",
+  "fileTypes": [
+    "inset"
+  ],
+  "patterns": [
+    {
+      "include": "#items"
+    }
+  ],
+  "repository": {
+    "items": {
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#attributes"
+        },
+        {
+          "include": "#declarations"
+        },
+        {
+          "include": "#expressions"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.documentation.inset",
+          "match": "(///(?!/)|//!).*$",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.comment.inset"
+            }
+          }
+        },
+        {
+          "name": "comment.line.double-slash.inset",
+          "match": "(//).*$",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.comment.inset"
+            }
+          }
+        },
+        {
+          "include": "#block-comment"
+        }
+      ]
+    },
+    "block-comment": {
+      "patterns": [
+        {
+          "name": "comment.block.documentation.inset",
+          "begin": "/\\*[*!](?![*/])",
+          "end": "\\*/",
+          "patterns": [
+            {
+              "include": "#block-comment"
+            }
+          ]
+        },
+        {
+          "name": "comment.block.inset",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "patterns": [
+            {
+              "include": "#block-comment"
+            }
+          ]
+        }
+      ]
+    },
+    "attributes": {
+      "patterns": [
+        {
+          "comment": "A route attribute: the HTTP method, the path with its {param} segments, and the capability the requests arrive through.",
+          "name": "meta.attribute.route.inset",
+          "begin": "(#)(\\[)\\s*(get|post|put|patch|delete)\\s*(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.attribute.inset"
+            },
+            "2": {
+              "name": "punctuation.brackets.attribute.inset"
+            },
+            "3": {
+              "name": "constant.language.http-method.inset"
+            },
+            "4": {
+              "name": "punctuation.brackets.round.inset"
+            }
+          },
+          "end": "(\\))\\s*(\\])",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.brackets.round.inset"
+            },
+            "2": {
+              "name": "punctuation.brackets.attribute.inset"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#route-path"
+            },
+            {
+              "match": "\\b(via)\\s*(=)\\s*([a-z_]\\w*)",
+              "captures": {
+                "1": {
+                  "name": "keyword.other.route-option.inset"
+                },
+                "2": {
+                  "name": "keyword.operator.assignment.inset"
+                },
+                "3": {
+                  "name": "variable.other.capability.inset"
+                }
+              }
+            },
+            {
+              "match": "\\b(body)\\s*(=)\\s*([a-z_]\\w*)",
+              "captures": {
+                "1": {
+                  "name": "keyword.other.route-option.inset"
+                },
+                "2": {
+                  "name": "keyword.operator.assignment.inset"
+                },
+                "3": {
+                  "name": "variable.parameter.inset"
+                }
+              }
+            },
+            {
+              "match": "\\b(header)\\s*(\\()\\s*(\\\"[^\\\"]*\\\")\\s*(\\))\\s*(=)\\s*([a-z_]\\w*)",
+              "captures": {
+                "1": {
+                  "name": "keyword.other.route-option.inset"
+                },
+                "2": {
+                  "name": "punctuation.brackets.round.inset"
+                },
+                "3": {
+                  "name": "string.quoted.double.header.inset"
+                },
+                "4": {
+                  "name": "punctuation.brackets.round.inset"
+                },
+                "5": {
+                  "name": "keyword.operator.assignment.inset"
+                },
+                "6": {
+                  "name": "variable.parameter.inset"
+                }
+              }
+            },
+            {
+              "include": "#punctuation"
+            }
+          ]
+        },
+        {
+          "name": "meta.attribute.status.inset",
+          "match": "(#)(\\[)\\s*(status)\\s*(\\()\\s*([A-Z]\\w*)\\s*(\\))\\s*(\\])",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.attribute.inset"
+            },
+            "2": {
+              "name": "punctuation.brackets.attribute.inset"
+            },
+            "3": {
+              "name": "keyword.other.attribute.inset"
+            },
+            "4": {
+              "name": "punctuation.brackets.round.inset"
+            },
+            "5": {
+              "name": "constant.other.status.inset"
+            },
+            "6": {
+              "name": "punctuation.brackets.round.inset"
+            },
+            "7": {
+              "name": "punctuation.brackets.attribute.inset"
+            }
+          }
+        },
+        {
+          "comment": "Attributes Inset adds to Rust's.",
+          "name": "meta.attribute.inset",
+          "begin": "(#)(\\[)\\s*(message|handed_down|rust|defensive)\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.attribute.inset"
+            },
+            "2": {
+              "name": "punctuation.brackets.attribute.inset"
+            },
+            "3": {
+              "name": "keyword.other.attribute.inset"
+            }
+          },
+          "end": "\\]",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.brackets.attribute.inset"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#attribute-contents"
+            }
+          ]
+        },
+        {
+          "name": "meta.attribute.inset",
+          "begin": "(#)(!?)(\\[)\\s*([a-z_][\\w:]*)",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.attribute.inset"
+            },
+            "2": {
+              "name": "punctuation.definition.attribute.inner.inset"
+            },
+            "3": {
+              "name": "punctuation.brackets.attribute.inset"
+            },
+            "4": {
+              "name": "entity.name.function.attribute.inset"
+            }
+          },
+          "end": "\\]",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.brackets.attribute.inset"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#attribute-contents"
+            }
+          ]
+        }
+      ]
+    },
+    "attribute-contents": {
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "begin": "\\[",
+          "end": "\\]",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.brackets.square.inset"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.brackets.square.inset"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#attribute-contents"
+            }
+          ]
+        },
+        {
+          "include": "#types"
+        },
+        {
+          "match": "\\b[a-z_]\\w*\\b",
+          "name": "variable.parameter.attribute.inset"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "route-path": {
+      "name": "string.quoted.double.route.inset",
+      "begin": "\"",
+      "end": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.inset"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.inset"
+        }
+      },
+      "patterns": [
+        {
+          "name": "meta.route-parameter.inset",
+          "match": "(\\{)\\s*([a-z_]\\w*)\\s*(\\})",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.parameter.begin.inset"
+            },
+            "2": {
+              "name": "variable.parameter.route.inset"
+            },
+            "3": {
+              "name": "punctuation.definition.parameter.end.inset"
+            }
+          }
+        },
+        {
+          "match": "[?&]",
+          "name": "punctuation.separator.query.inset"
+        },
+        {
+          "match": "\\\\(?:[nrt0\\\\'\\\"]|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F_]{1,6}\\})",
+          "name": "constant.character.escape.inset"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(app)\\s+([A-Z]\\w*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.app.inset"
+            },
+            "2": {
+              "name": "entity.name.type.app.inset"
+            }
+          }
+        },
+        {
+          "match": "\\b(extern)\\s+(component)\\s+([A-Z]\\w*)",
+          "captures": {
+            "1": {
+              "name": "storage.modifier.extern.inset"
+            },
+            "2": {
+              "name": "storage.type.component.inset"
+            },
+            "3": {
+              "name": "entity.name.type.component.inset"
+            }
+          }
+        },
+        {
+          "match": "\\b(component)\\s+([A-Z]\\w*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.component.inset"
+            },
+            "2": {
+              "name": "entity.name.type.component.inset"
+            }
+          }
+        },
+        {
+          "match": "\\b(setting)\\s+([a-z_]\\w*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.setting.inset"
+            },
+            "2": {
+              "name": "variable.other.setting.inset"
+            }
+          }
+        },
+        {
+          "match": "\\b(grant)\\s+([a-z_]\\w*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.grant.inset"
+            },
+            "2": {
+              "name": "variable.other.capability.inset"
+            }
+          }
+        },
+        {
+          "include": "#start"
+        },
+        {
+          "include": "#failure"
+        },
+        {
+          "match": "\\b(fn)\\s+([a-z_]\\w*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.function.inset"
+            },
+            "2": {
+              "name": "entity.name.function.inset"
+            }
+          }
+        },
+        {
+          "match": "\\b(struct|enum|union|type|trait)\\s+([A-Z]\\w*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.inset"
+            },
+            "2": {
+              "name": "entity.name.type.inset"
+            }
+          }
+        },
+        {
+          "match": "\\b(mod)\\s+([a-z_]\\w*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.module.inset"
+            },
+            "2": {
+              "name": "entity.name.module.inset"
+            }
+          }
+        },
+        {
+          "match": "\\b(impl|let|const|static)\\b",
+          "name": "storage.type.inset"
+        },
+        {
+          "match": "\\b(use|as|where|crate|super)\\b",
+          "name": "keyword.other.inset"
+        }
+      ]
+    },
+    "start": {
+      "comment": "A start statement and its handoffs, where values cross into the child.",
+      "name": "meta.start.inset",
+      "begin": "\\b(start)\\b(?:\\s+([a-z_]\\w*)\\s*(:))?\\s+([A-Z]\\w*)\\s*(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.start.inset"
+        },
+        "2": {
+          "name": "variable.other.component.inset"
+        },
+        "3": {
+          "name": "punctuation.separator.colon.inset"
+        },
+        "4": {
+          "name": "entity.name.type.component.inset"
+        },
+        "5": {
+          "name": "punctuation.brackets.curly.inset"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.brackets.curly.inset"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "match": "\\b(send)\\s+(?:(self)|([a-z_]\\w*))\\s*(\\.)\\s*([a-z_]\\w*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.send.inset"
+            },
+            "2": {
+              "name": "variable.language.self.inset"
+            },
+            "3": {
+              "name": "variable.other.component.inset"
+            },
+            "4": {
+              "name": "punctuation.accessor.dot.inset"
+            },
+            "5": {
+              "name": "entity.name.function.message.inset"
+            }
+          }
+        },
+        {
+          "match": "\\b([a-z_]\\w*)\\s*(:)(?!:)",
+          "captures": {
+            "1": {
+              "name": "variable.other.member.inset"
+            },
+            "2": {
+              "name": "punctuation.separator.colon.inset"
+            }
+          }
+        },
+        {
+          "match": "&(?!&)",
+          "name": "storage.modifier.boundary.borrow.inset"
+        },
+        {
+          "include": "#expressions"
+        }
+      ]
+    },
+    "failure": {
+      "name": "meta.failure.inset",
+      "begin": "\\b(failure)\\s*(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.failure.inset"
+        },
+        "2": {
+          "name": "punctuation.brackets.curly.inset"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.brackets.curly.inset"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#attributes"
+        },
+        {
+          "match": "\\b(Panic|Overflow|Capability|Message|Child)\\b",
+          "name": "support.constant.failure.inset"
+        },
+        {
+          "match": "\\b(rollback|restart)\\b",
+          "name": "keyword.control.failure.inset"
+        },
+        {
+          "match": "\\b_\\b",
+          "name": "support.constant.failure.inset"
+        },
+        {
+          "include": "#expressions"
+        }
+      ]
+    },
+    "expressions": {
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#attributes"
+        },
+        {
+          "include": "#block"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#chars"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#keywords"
+        },
+        {
+          "include": "#macros"
+        },
+        {
+          "include": "#functions"
+        },
+        {
+          "include": "#types"
+        },
+        {
+          "match": "\\b[a-z_]\\w*\\b",
+          "name": "variable.other.inset"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "block": {
+      "begin": "\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.brackets.curly.inset"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.brackets.curly.inset"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#items"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.raw.inset",
+          "begin": "\\b(b?r)(#*)(\\\")",
+          "end": "(\\\")(\\2)",
+          "beginCaptures": {
+            "1": {
+              "name": "string.quoted.byte.raw.inset"
+            },
+            "2": {
+              "name": "punctuation.definition.string.raw.inset"
+            },
+            "3": {
+              "name": "punctuation.definition.string.begin.inset"
+            }
+          },
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.string.end.inset"
+            },
+            "2": {
+              "name": "punctuation.definition.string.raw.inset"
+            }
+          }
+        },
+        {
+          "name": "string.quoted.double.inset",
+          "begin": "(b?)(\\\")",
+          "end": "\"",
+          "beginCaptures": {
+            "1": {
+              "name": "string.quoted.byte.inset"
+            },
+            "2": {
+              "name": "punctuation.definition.string.begin.inset"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.inset"
+            }
+          },
+          "patterns": [
+            {
+              "match": "\\\\(?:[nrt0\\\\'\\\"]|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F_]{1,6}\\})",
+              "name": "constant.character.escape.inset"
+            },
+            {
+              "match": "\\\\$",
+              "name": "constant.character.escape.line-continuation.inset"
+            },
+            {
+              "match": "\\{\\{|\\}\\}",
+              "name": "constant.character.escape.inset"
+            },
+            {
+              "match": "\\{[\\w.]*(?::[^{}\\\"]*)?\\}",
+              "name": "constant.other.placeholder.inset"
+            }
+          ]
+        }
+      ]
+    },
+    "chars": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.char.inset",
+          "match": "b?'(?:[^'\\\\]|\\\\(?:[nrt0\\\\'\\\"]|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F_]{1,6}\\}))'"
+        },
+        {
+          "name": "storage.modifier.lifetime.inset",
+          "match": "'[a-z_]\\w*\\b(?!')"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.inset",
+          "match": "\\b0x[\\da-fA-F_]+(?:u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize|f32|f64)?\\b"
+        },
+        {
+          "name": "constant.numeric.octal.inset",
+          "match": "\\b0o[0-7_]+(?:u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize|f32|f64)?\\b"
+        },
+        {
+          "name": "constant.numeric.binary.inset",
+          "match": "\\b0b[01_]+(?:u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize|f32|f64)?\\b"
+        },
+        {
+          "name": "constant.numeric.decimal.inset",
+          "match": "\\b\\d[\\d_]*(?:\\.\\d[\\d_]*)?(?:[eE][+-]?\\d[\\d_]*)?(?:u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize|f32|f64)?\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\b(true|false)\\b",
+          "name": "constant.language.bool.inset"
+        },
+        {
+          "match": "\\b(self|Self)\\b",
+          "name": "variable.language.self.inset"
+        },
+        {
+          "comment": "Inset's keywords for messages that do not wait and for structured concurrency.",
+          "match": "\\bsend\\b",
+          "name": "keyword.control.send.inset"
+        },
+        {
+          "match": "\\bfork\\b",
+          "name": "keyword.control.fork.inset"
+        },
+        {
+          "comment": "A move closure keeps its Rust meaning. Any other move is a boundary crossing.",
+          "match": "\\bmove\\b(?=\\s*\\|)",
+          "name": "storage.modifier.move.inset"
+        },
+        {
+          "match": "\\bmove\\b",
+          "name": "storage.modifier.boundary.move.inset"
+        },
+        {
+          "match": "\\b(if|else|match|for|while|loop|return|break|continue|in|await)\\b",
+          "name": "keyword.control.inset"
+        },
+        {
+          "match": "\\b(async|mut|pub|ref|dyn|unsafe|extern)\\b",
+          "name": "storage.modifier.inset"
+        },
+        {
+          "include": "#declarations"
+        }
+      ]
+    },
+    "macros": {
+      "match": "\\b([a-z_]\\w*)(!)(?!=)",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.macro.inset"
+        },
+        "2": {
+          "name": "entity.name.function.macro.inset"
+        }
+      }
+    },
+    "functions": {
+      "match": "\\b([a-z_]\\w*)(?=\\s*(?:\\(|::<))",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.inset"
+        }
+      }
+    },
+    "types": {
+      "patterns": [
+        {
+          "comment": "The capability types the host grants.",
+          "match": "\\b(HttpServer|Table)\\b",
+          "name": "support.type.capability.inset"
+        },
+        {
+          "match": "\\b(Handle|Outlet)\\b",
+          "name": "support.type.inset"
+        },
+        {
+          "match": "\\b(?:bool|char|str|u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize|f32|f64)\\b",
+          "name": "entity.name.type.primitive.inset"
+        },
+        {
+          "match": "\\b[A-Z]\\w*\\b",
+          "name": "entity.name.type.inset"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "match": "=>",
+          "name": "keyword.operator.arrow.fat.inset"
+        },
+        {
+          "match": "->",
+          "name": "keyword.operator.arrow.skinny.inset"
+        },
+        {
+          "match": "::",
+          "name": "punctuation.separator.namespace.inset"
+        },
+        {
+          "match": "\\.\\.=?",
+          "name": "keyword.operator.range.inset"
+        },
+        {
+          "comment": "Angle brackets of a generic, told from comparisons by their neighbours.",
+          "match": "(?<=[\\w:])<(?=[A-Z&'(\\[_]|(?:bool|char|str|u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize|f32|f64)\\b)",
+          "name": "punctuation.brackets.angle.inset"
+        },
+        {
+          "match": "(?<=[\\w>\\])])>(?!=)",
+          "name": "punctuation.brackets.angle.inset"
+        },
+        {
+          "match": "<<=|>>=|[-+*/%^&|]=",
+          "name": "keyword.operator.assignment.compound.inset"
+        },
+        {
+          "match": "==|!=|<=|>=|<|>",
+          "name": "keyword.operator.comparison.inset"
+        },
+        {
+          "match": "&&|\\|\\|",
+          "name": "keyword.operator.logical.inset"
+        },
+        {
+          "match": "<<|>>|\\^",
+          "name": "keyword.operator.bitwise.inset"
+        },
+        {
+          "match": "&",
+          "name": "keyword.operator.borrow.inset"
+        },
+        {
+          "match": "\\|",
+          "name": "keyword.operator.closure.inset"
+        },
+        {
+          "match": "[-+*/%]",
+          "name": "keyword.operator.arithmetic.inset"
+        },
+        {
+          "match": "!",
+          "name": "keyword.operator.logical.inset"
+        },
+        {
+          "match": "=",
+          "name": "keyword.operator.assignment.inset"
+        },
+        {
+          "match": "\\?",
+          "name": "keyword.operator.question.inset"
+        },
+        {
+          "match": "@",
+          "name": "keyword.operator.binding.inset"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "match": ";",
+          "name": "punctuation.terminator.statement.inset"
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.comma.inset"
+        },
+        {
+          "match": "\\.",
+          "name": "punctuation.accessor.dot.inset"
+        },
+        {
+          "match": ":",
+          "name": "punctuation.separator.colon.inset"
+        },
+        {
+          "match": "[()]",
+          "name": "punctuation.brackets.round.inset"
+        },
+        {
+          "match": "[\\[\\]]",
+          "name": "punctuation.brackets.square.inset"
+        },
+        {
+          "match": "[{}]",
+          "name": "punctuation.brackets.curly.inset"
+        },
+        {
+          "match": "#",
+          "name": "punctuation.definition.attribute.inset"
+        }
+      ]
+    }
+  }
+}

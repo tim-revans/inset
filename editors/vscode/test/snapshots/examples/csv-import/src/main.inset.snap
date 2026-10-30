@@ -1,0 +1,850 @@
+>/// Price import: stores a supplier's price list in the product catalogue.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>app PriceImport {
+#^^^ storage.type.app.inset
+#    ^^^^^^^^^^^ entity.name.type.app.inset
+#                ^ punctuation.brackets.curly.inset
+>    /// The port to serve on.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    setting port: u16 = 8080;
+#    ^^^^^^^ storage.type.setting.inset
+#            ^^^^ variable.other.setting.inset
+#                ^ punctuation.separator.colon.inset
+#                  ^^^ entity.name.type.primitive.inset
+#                      ^ keyword.operator.assignment.inset
+#                        ^^^^ constant.numeric.decimal.inset
+#                            ^ punctuation.terminator.statement.inset
+>    /// The catalogue database, which other tools also read.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    setting catalogue: String = "catalogue.db";
+#    ^^^^^^^ storage.type.setting.inset
+#            ^^^^^^^^^ variable.other.setting.inset
+#                     ^ punctuation.separator.colon.inset
+#                       ^^^^^^ entity.name.type.inset
+#                              ^ keyword.operator.assignment.inset
+#                                ^ string.quoted.double.inset punctuation.definition.string.begin.inset
+#                                 ^^^^^^^^^^^^ string.quoted.double.inset
+#                                             ^ string.quoted.double.inset punctuation.definition.string.end.inset
+#                                              ^ punctuation.terminator.statement.inset
+>    grant http: HttpServer { port };
+#    ^^^^^ storage.type.grant.inset
+#          ^^^^ variable.other.capability.inset
+#              ^ punctuation.separator.colon.inset
+#                ^^^^^^^^^^ support.type.capability.inset
+#                           ^ punctuation.brackets.curly.inset
+#                             ^^^^ variable.other.inset
+#                                  ^ punctuation.brackets.curly.inset
+#                                   ^ punctuation.terminator.statement.inset
+>    grant products: Table<String, Product> { file: catalogue, name: "products" };
+#    ^^^^^ storage.type.grant.inset
+#          ^^^^^^^^ variable.other.capability.inset
+#                  ^ punctuation.separator.colon.inset
+#                    ^^^^^ support.type.capability.inset
+#                         ^ punctuation.brackets.angle.inset
+#                          ^^^^^^ entity.name.type.inset
+#                                ^ punctuation.separator.comma.inset
+#                                  ^^^^^^^ entity.name.type.inset
+#                                         ^ punctuation.brackets.angle.inset
+#                                           ^ punctuation.brackets.curly.inset
+#                                             ^^^^ variable.other.inset
+#                                                 ^ punctuation.separator.colon.inset
+#                                                   ^^^^^^^^^ variable.other.inset
+#                                                            ^ punctuation.separator.comma.inset
+#                                                              ^^^^ variable.other.inset
+#                                                                  ^ punctuation.separator.colon.inset
+#                                                                    ^ string.quoted.double.inset punctuation.definition.string.begin.inset
+#                                                                     ^^^^^^^^ string.quoted.double.inset
+#                                                                             ^ string.quoted.double.inset punctuation.definition.string.end.inset
+#                                                                               ^ punctuation.brackets.curly.inset
+#                                                                                ^ punctuation.terminator.statement.inset
+>    start Importer { http: move http, products: move products };
+#    ^^^^^ meta.start.inset storage.type.start.inset
+#          ^^^^^^^^ meta.start.inset entity.name.type.component.inset
+#                   ^ meta.start.inset punctuation.brackets.curly.inset
+#                     ^^^^ meta.start.inset variable.other.member.inset
+#                         ^ meta.start.inset punctuation.separator.colon.inset
+#                           ^^^^ meta.start.inset storage.modifier.boundary.move.inset
+#                                ^^^^ meta.start.inset variable.other.inset
+#                                    ^ meta.start.inset punctuation.separator.comma.inset
+#                                      ^^^^^^^^ meta.start.inset variable.other.member.inset
+#                                              ^ meta.start.inset punctuation.separator.colon.inset
+#                                                ^^^^ meta.start.inset storage.modifier.boundary.move.inset
+#                                                     ^^^^^^^^ meta.start.inset variable.other.inset
+#                                                              ^ meta.start.inset punctuation.brackets.curly.inset
+#                                                               ^ punctuation.terminator.statement.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// A product in the catalogue, stored under its SKU. Prices are in pounds.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>#[derive(Clone, Debug, PartialEq)]
+#^ meta.attribute.inset punctuation.definition.attribute.inset
+# ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#  ^^^^^^ meta.attribute.inset entity.name.function.attribute.inset
+#        ^ meta.attribute.inset punctuation.brackets.round.inset
+#         ^^^^^ meta.attribute.inset entity.name.type.inset
+#              ^ meta.attribute.inset punctuation.separator.comma.inset
+#                ^^^^^ meta.attribute.inset entity.name.type.inset
+#                     ^ meta.attribute.inset punctuation.separator.comma.inset
+#                       ^^^^^^^^^ meta.attribute.inset entity.name.type.inset
+#                                ^ meta.attribute.inset punctuation.brackets.round.inset
+#                                 ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>struct Product {
+#^^^^^^ storage.type.inset
+#       ^^^^^^^ entity.name.type.inset
+#               ^ punctuation.brackets.curly.inset
+>    name: String,
+#    ^^^^ variable.other.inset
+#        ^ punctuation.separator.colon.inset
+#          ^^^^^^ entity.name.type.inset
+#                ^ punctuation.separator.comma.inset
+>    /// The price before VAT.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    net: Decimal,
+#    ^^^ variable.other.inset
+#       ^ punctuation.separator.colon.inset
+#         ^^^^^^^ entity.name.type.inset
+#                ^ punctuation.separator.comma.inset
+>    /// The price with VAT added.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    gross: Decimal,
+#    ^^^^^ variable.other.inset
+#         ^ punctuation.separator.colon.inset
+#           ^^^^^^^ entity.name.type.inset
+#                  ^ punctuation.separator.comma.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// One row of a CSV file.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>#[derive(Clone, Debug, PartialEq)]
+#^ meta.attribute.inset punctuation.definition.attribute.inset
+# ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#  ^^^^^^ meta.attribute.inset entity.name.function.attribute.inset
+#        ^ meta.attribute.inset punctuation.brackets.round.inset
+#         ^^^^^ meta.attribute.inset entity.name.type.inset
+#              ^ meta.attribute.inset punctuation.separator.comma.inset
+#                ^^^^^ meta.attribute.inset entity.name.type.inset
+#                     ^ meta.attribute.inset punctuation.separator.comma.inset
+#                       ^^^^^^^^^ meta.attribute.inset entity.name.type.inset
+#                                ^ meta.attribute.inset punctuation.brackets.round.inset
+#                                 ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>struct Row {
+#^^^^^^ storage.type.inset
+#       ^^^ entity.name.type.inset
+#           ^ punctuation.brackets.curly.inset
+>    /// The line the row is on, counting the header as line 1.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    line: u64,
+#    ^^^^ variable.other.inset
+#        ^ punctuation.separator.colon.inset
+#          ^^^ entity.name.type.primitive.inset
+#             ^ punctuation.separator.comma.inset
+>    fields: Vec<String>,
+#    ^^^^^^ variable.other.inset
+#          ^ punctuation.separator.colon.inset
+#            ^^^ entity.name.type.inset
+#               ^ punctuation.brackets.angle.inset
+#                ^^^^^^ entity.name.type.inset
+#                      ^ punctuation.brackets.angle.inset
+#                       ^ punctuation.separator.comma.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// Why a price list was not imported.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>#[derive(Clone, Debug, PartialEq)]
+#^ meta.attribute.inset punctuation.definition.attribute.inset
+# ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#  ^^^^^^ meta.attribute.inset entity.name.function.attribute.inset
+#        ^ meta.attribute.inset punctuation.brackets.round.inset
+#         ^^^^^ meta.attribute.inset entity.name.type.inset
+#              ^ meta.attribute.inset punctuation.separator.comma.inset
+#                ^^^^^ meta.attribute.inset entity.name.type.inset
+#                     ^ meta.attribute.inset punctuation.separator.comma.inset
+#                       ^^^^^^^^^ meta.attribute.inset entity.name.type.inset
+#                                ^ meta.attribute.inset punctuation.brackets.round.inset
+#                                 ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>enum ImportError {
+#^^^^ storage.type.inset
+#     ^^^^^^^^^^^ entity.name.type.inset
+#                 ^ punctuation.brackets.curly.inset
+>    /// Some rows are invalid. Describes each one, one per line.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[status(BadRequest)]
+#    ^ meta.attribute.status.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.status.inset punctuation.brackets.attribute.inset
+#      ^^^^^^ meta.attribute.status.inset keyword.other.attribute.inset
+#            ^ meta.attribute.status.inset punctuation.brackets.round.inset
+#             ^^^^^^^^^^ meta.attribute.status.inset constant.other.status.inset
+#                       ^ meta.attribute.status.inset punctuation.brackets.round.inset
+#                        ^ meta.attribute.status.inset punctuation.brackets.attribute.inset
+>    InvalidRows(String),
+#    ^^^^^^^^^^^ entity.name.type.inset
+#               ^ punctuation.brackets.round.inset
+#                ^^^^^^ entity.name.type.inset
+#                      ^ punctuation.brackets.round.inset
+#                       ^ punctuation.separator.comma.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// Reads CSV text with the `csv` crate. Holds no capabilities, so it can only compute.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>#[rust(path = "csv_reader.rs", crates = ["csv@1.3"])]
+#^ meta.attribute.inset punctuation.definition.attribute.inset
+# ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#  ^^^^ meta.attribute.inset keyword.other.attribute.inset
+#      ^ meta.attribute.inset punctuation.brackets.round.inset
+#       ^^^^ meta.attribute.inset variable.parameter.attribute.inset
+#            ^ meta.attribute.inset keyword.operator.assignment.inset
+#              ^ meta.attribute.inset string.quoted.double.inset punctuation.definition.string.begin.inset
+#               ^^^^^^^^^^^^^ meta.attribute.inset string.quoted.double.inset
+#                            ^ meta.attribute.inset string.quoted.double.inset punctuation.definition.string.end.inset
+#                             ^ meta.attribute.inset punctuation.separator.comma.inset
+#                               ^^^^^^ meta.attribute.inset variable.parameter.attribute.inset
+#                                      ^ meta.attribute.inset keyword.operator.assignment.inset
+#                                        ^ meta.attribute.inset punctuation.brackets.square.inset
+#                                         ^ meta.attribute.inset string.quoted.double.inset punctuation.definition.string.begin.inset
+#                                          ^^^^^^^ meta.attribute.inset string.quoted.double.inset
+#                                                 ^ meta.attribute.inset string.quoted.double.inset punctuation.definition.string.end.inset
+#                                                  ^ meta.attribute.inset punctuation.brackets.square.inset
+#                                                   ^ meta.attribute.inset punctuation.brackets.round.inset
+#                                                    ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>extern component CsvReader {
+#^^^^^^ storage.modifier.extern.inset
+#       ^^^^^^^^^ storage.type.component.inset
+#                 ^^^^^^^^^ entity.name.type.component.inset
+#                           ^ punctuation.brackets.curly.inset
+>    /// Reads every row after the header line, whatever number of fields it has.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[message]
+#    ^ meta.attribute.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#      ^^^^^^^ meta.attribute.inset keyword.other.attribute.inset
+#             ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>    fn read(&self, text: &str) -> Vec<Row>;
+#    ^^ storage.type.function.inset
+#       ^^^^ entity.name.function.inset
+#           ^ punctuation.brackets.round.inset
+#            ^ keyword.operator.borrow.inset
+#             ^^^^ variable.language.self.inset
+#                 ^ punctuation.separator.comma.inset
+#                   ^^^^ variable.other.inset
+#                       ^ punctuation.separator.colon.inset
+#                         ^ keyword.operator.borrow.inset
+#                          ^^^ entity.name.type.primitive.inset
+#                             ^ punctuation.brackets.round.inset
+#                               ^^ keyword.operator.arrow.skinny.inset
+#                                  ^^^ entity.name.type.inset
+#                                     ^ punctuation.brackets.angle.inset
+#                                      ^^^ entity.name.type.inset
+#                                         ^ punctuation.brackets.angle.inset
+#                                          ^ punctuation.terminator.statement.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// Accepts price lists over HTTP and stores their products.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>component Importer {
+#^^^^^^^^^ storage.type.component.inset
+#          ^^^^^^^^ entity.name.type.component.inset
+#                   ^ punctuation.brackets.curly.inset
+>    http: HttpServer,
+#    ^^^^ variable.other.inset
+#        ^ punctuation.separator.colon.inset
+#          ^^^^^^^^^^ support.type.capability.inset
+#                    ^ punctuation.separator.comma.inset
+>    products: Table<String, Product>,
+#    ^^^^^^^^ variable.other.inset
+#            ^ punctuation.separator.colon.inset
+#              ^^^^^ support.type.capability.inset
+#                   ^ punctuation.brackets.angle.inset
+#                    ^^^^^^ entity.name.type.inset
+#                          ^ punctuation.separator.comma.inset
+#                            ^^^^^^^ entity.name.type.inset
+#                                   ^ punctuation.brackets.angle.inset
+#                                    ^ punctuation.separator.comma.inset
+>
+>    start csv: CsvReader {};
+#    ^^^^^ meta.start.inset storage.type.start.inset
+#          ^^^ meta.start.inset variable.other.component.inset
+#             ^ meta.start.inset punctuation.separator.colon.inset
+#               ^^^^^^^^^ meta.start.inset entity.name.type.component.inset
+#                         ^ meta.start.inset punctuation.brackets.curly.inset
+#                          ^ meta.start.inset punctuation.brackets.curly.inset
+#                           ^ punctuation.terminator.statement.inset
+>
+>    /// Stores every product in a price list, or none if any row is invalid.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    /// A price list is CSV with a header line, then one row per product: SKU, name, net price.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[post("/price-lists", via = http, body = text)]
+#    ^ meta.attribute.route.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+#      ^^^^ meta.attribute.route.inset constant.language.http-method.inset
+#          ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#           ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.begin.inset
+#            ^^^^^^^^^^^^ meta.attribute.route.inset string.quoted.double.route.inset
+#                        ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.end.inset
+#                         ^ meta.attribute.route.inset punctuation.separator.comma.inset
+#                           ^^^ meta.attribute.route.inset keyword.other.route-option.inset
+#                               ^ meta.attribute.route.inset keyword.operator.assignment.inset
+#                                 ^^^^ meta.attribute.route.inset variable.other.capability.inset
+#                                     ^ meta.attribute.route.inset punctuation.separator.comma.inset
+#                                       ^^^^ meta.attribute.route.inset keyword.other.route-option.inset
+#                                            ^ meta.attribute.route.inset keyword.operator.assignment.inset
+#                                              ^^^^ meta.attribute.route.inset variable.parameter.inset
+#                                                  ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#                                                   ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+>    async fn import(&mut self, text: String) -> Result<String, ImportError> {
+#    ^^^^^ storage.modifier.inset
+#          ^^ storage.type.function.inset
+#             ^^^^^^ entity.name.function.inset
+#                   ^ punctuation.brackets.round.inset
+#                    ^ keyword.operator.borrow.inset
+#                     ^^^ storage.modifier.inset
+#                         ^^^^ variable.language.self.inset
+#                             ^ punctuation.separator.comma.inset
+#                               ^^^^ variable.other.inset
+#                                   ^ punctuation.separator.colon.inset
+#                                     ^^^^^^ entity.name.type.inset
+#                                           ^ punctuation.brackets.round.inset
+#                                             ^^ keyword.operator.arrow.skinny.inset
+#                                                ^^^^^^ entity.name.type.inset
+#                                                      ^ punctuation.brackets.angle.inset
+#                                                       ^^^^^^ entity.name.type.inset
+#                                                             ^ punctuation.separator.comma.inset
+#                                                               ^^^^^^^^^^^ entity.name.type.inset
+#                                                                          ^ punctuation.brackets.angle.inset
+#                                                                            ^ punctuation.brackets.curly.inset
+>        let rows = self.csv.read(&text).await;
+#        ^^^ storage.type.inset
+#            ^^^^ variable.other.inset
+#                 ^ keyword.operator.assignment.inset
+#                   ^^^^ variable.language.self.inset
+#                       ^ punctuation.accessor.dot.inset
+#                        ^^^ variable.other.inset
+#                           ^ punctuation.accessor.dot.inset
+#                            ^^^^ entity.name.function.inset
+#                                ^ punctuation.brackets.round.inset
+#                                 ^ keyword.operator.borrow.inset
+#                                  ^^^^ variable.other.inset
+#                                      ^ punctuation.brackets.round.inset
+#                                       ^ punctuation.accessor.dot.inset
+#                                        ^^^^^ keyword.control.inset
+#                                             ^ punctuation.terminator.statement.inset
+>        let products = match parse_price_list(&rows) {
+#        ^^^ storage.type.inset
+#            ^^^^^^^^ variable.other.inset
+#                     ^ keyword.operator.assignment.inset
+#                       ^^^^^ keyword.control.inset
+#                             ^^^^^^^^^^^^^^^^ entity.name.function.inset
+#                                             ^ punctuation.brackets.round.inset
+#                                              ^ keyword.operator.borrow.inset
+#                                               ^^^^ variable.other.inset
+#                                                   ^ punctuation.brackets.round.inset
+#                                                     ^ punctuation.brackets.curly.inset
+>            Ok(products) => products,
+#            ^^ entity.name.type.inset
+#              ^ punctuation.brackets.round.inset
+#               ^^^^^^^^ variable.other.inset
+#                       ^ punctuation.brackets.round.inset
+#                         ^^ keyword.operator.arrow.fat.inset
+#                            ^^^^^^^^ variable.other.inset
+#                                    ^ punctuation.separator.comma.inset
+>            Err(errors) => return Err(ImportError::InvalidRows(errors)),
+#            ^^^ entity.name.type.inset
+#               ^ punctuation.brackets.round.inset
+#                ^^^^^^ variable.other.inset
+#                      ^ punctuation.brackets.round.inset
+#                        ^^ keyword.operator.arrow.fat.inset
+#                           ^^^^^^ keyword.control.inset
+#                                  ^^^ entity.name.type.inset
+#                                     ^ punctuation.brackets.round.inset
+#                                      ^^^^^^^^^^^ entity.name.type.inset
+#                                                 ^^ punctuation.separator.namespace.inset
+#                                                   ^^^^^^^^^^^ entity.name.type.inset
+#                                                              ^ punctuation.brackets.round.inset
+#                                                               ^^^^^^ variable.other.inset
+#                                                                     ^ punctuation.brackets.round.inset
+#                                                                      ^ punctuation.brackets.round.inset
+#                                                                       ^ punctuation.separator.comma.inset
+>        };
+#        ^ punctuation.brackets.curly.inset
+#         ^ punctuation.terminator.statement.inset
+>        let count = products.len();
+#        ^^^ storage.type.inset
+#            ^^^^^ variable.other.inset
+#                  ^ keyword.operator.assignment.inset
+#                    ^^^^^^^^ variable.other.inset
+#                            ^ punctuation.accessor.dot.inset
+#                             ^^^ entity.name.function.inset
+#                                ^ punctuation.brackets.round.inset
+#                                 ^ punctuation.brackets.round.inset
+#                                  ^ punctuation.terminator.statement.inset
+>        for (sku, product) in products {
+#        ^^^ keyword.control.inset
+#            ^ punctuation.brackets.round.inset
+#             ^^^ variable.other.inset
+#                ^ punctuation.separator.comma.inset
+#                  ^^^^^^^ variable.other.inset
+#                         ^ punctuation.brackets.round.inset
+#                           ^^ keyword.control.inset
+#                              ^^^^^^^^ variable.other.inset
+#                                       ^ punctuation.brackets.curly.inset
+>            self.products.insert(sku, product).await;
+#            ^^^^ variable.language.self.inset
+#                ^ punctuation.accessor.dot.inset
+#                 ^^^^^^^^ variable.other.inset
+#                         ^ punctuation.accessor.dot.inset
+#                          ^^^^^^ entity.name.function.inset
+#                                ^ punctuation.brackets.round.inset
+#                                 ^^^ variable.other.inset
+#                                    ^ punctuation.separator.comma.inset
+#                                      ^^^^^^^ variable.other.inset
+#                                             ^ punctuation.brackets.round.inset
+#                                              ^ punctuation.accessor.dot.inset
+#                                               ^^^^^ keyword.control.inset
+#                                                    ^ punctuation.terminator.statement.inset
+>        }
+#        ^ punctuation.brackets.curly.inset
+>        Ok(format!("Products imported: {count}"))
+#        ^^ entity.name.type.inset
+#          ^ punctuation.brackets.round.inset
+#           ^^^^^^ entity.name.function.macro.inset
+#                 ^ entity.name.function.macro.inset
+#                  ^ punctuation.brackets.round.inset
+#                   ^ string.quoted.double.inset punctuation.definition.string.begin.inset
+#                    ^^^^^^^^^^^^^^^^^^^ string.quoted.double.inset
+#                                       ^^^^^^^ string.quoted.double.inset constant.other.placeholder.inset
+#                                              ^ string.quoted.double.inset punctuation.definition.string.end.inset
+#                                               ^ punctuation.brackets.round.inset
+#                                                ^ punctuation.brackets.round.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// Reads every row of a price list, or describes every invalid row, one per line.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>fn parse_price_list(rows: &[Row]) -> Result<Vec<(String, Product)>, String> {
+#^^ storage.type.function.inset
+#   ^^^^^^^^^^^^^^^^ entity.name.function.inset
+#                   ^ punctuation.brackets.round.inset
+#                    ^^^^ variable.other.inset
+#                        ^ punctuation.separator.colon.inset
+#                          ^ keyword.operator.borrow.inset
+#                           ^ punctuation.brackets.square.inset
+#                            ^^^ entity.name.type.inset
+#                               ^ punctuation.brackets.square.inset
+#                                ^ punctuation.brackets.round.inset
+#                                  ^^ keyword.operator.arrow.skinny.inset
+#                                     ^^^^^^ entity.name.type.inset
+#                                           ^ punctuation.brackets.angle.inset
+#                                            ^^^ entity.name.type.inset
+#                                               ^ punctuation.brackets.angle.inset
+#                                                ^ punctuation.brackets.round.inset
+#                                                 ^^^^^^ entity.name.type.inset
+#                                                       ^ punctuation.separator.comma.inset
+#                                                         ^^^^^^^ entity.name.type.inset
+#                                                                ^ punctuation.brackets.round.inset
+#                                                                 ^ punctuation.brackets.angle.inset
+#                                                                  ^ punctuation.separator.comma.inset
+#                                                                    ^^^^^^ entity.name.type.inset
+#                                                                          ^ punctuation.brackets.angle.inset
+#                                                                            ^ punctuation.brackets.curly.inset
+>    let results = fork for row in rows {
+#    ^^^ storage.type.inset
+#        ^^^^^^^ variable.other.inset
+#                ^ keyword.operator.assignment.inset
+#                  ^^^^ keyword.control.fork.inset
+#                       ^^^ keyword.control.inset
+#                           ^^^ variable.other.inset
+#                               ^^ keyword.control.inset
+#                                  ^^^^ variable.other.inset
+#                                       ^ punctuation.brackets.curly.inset
+>        parse_row(row)
+#        ^^^^^^^^^ entity.name.function.inset
+#                 ^ punctuation.brackets.round.inset
+#                  ^^^ variable.other.inset
+#                     ^ punctuation.brackets.round.inset
+>    };
+#    ^ punctuation.brackets.curly.inset
+#     ^ punctuation.terminator.statement.inset
+>    let mut products = Vec::new();
+#    ^^^ storage.type.inset
+#        ^^^ storage.modifier.inset
+#            ^^^^^^^^ variable.other.inset
+#                     ^ keyword.operator.assignment.inset
+#                       ^^^ entity.name.type.inset
+#                          ^^ punctuation.separator.namespace.inset
+#                            ^^^ entity.name.function.inset
+#                               ^ punctuation.brackets.round.inset
+#                                ^ punctuation.brackets.round.inset
+#                                 ^ punctuation.terminator.statement.inset
+>    let mut errors = String::new();
+#    ^^^ storage.type.inset
+#        ^^^ storage.modifier.inset
+#            ^^^^^^ variable.other.inset
+#                   ^ keyword.operator.assignment.inset
+#                     ^^^^^^ entity.name.type.inset
+#                           ^^ punctuation.separator.namespace.inset
+#                             ^^^ entity.name.function.inset
+#                                ^ punctuation.brackets.round.inset
+#                                 ^ punctuation.brackets.round.inset
+#                                  ^ punctuation.terminator.statement.inset
+>    for result in results {
+#    ^^^ keyword.control.inset
+#        ^^^^^^ variable.other.inset
+#               ^^ keyword.control.inset
+#                  ^^^^^^^ variable.other.inset
+#                          ^ punctuation.brackets.curly.inset
+>        match result {
+#        ^^^^^ keyword.control.inset
+#              ^^^^^^ variable.other.inset
+#                     ^ punctuation.brackets.curly.inset
+>            Ok(product) => products.push(product),
+#            ^^ entity.name.type.inset
+#              ^ punctuation.brackets.round.inset
+#               ^^^^^^^ variable.other.inset
+#                      ^ punctuation.brackets.round.inset
+#                        ^^ keyword.operator.arrow.fat.inset
+#                           ^^^^^^^^ variable.other.inset
+#                                   ^ punctuation.accessor.dot.inset
+#                                    ^^^^ entity.name.function.inset
+#                                        ^ punctuation.brackets.round.inset
+#                                         ^^^^^^^ variable.other.inset
+#                                                ^ punctuation.brackets.round.inset
+#                                                 ^ punctuation.separator.comma.inset
+>            Err(error) => errors.push_str(&format!("{error}\n")),
+#            ^^^ entity.name.type.inset
+#               ^ punctuation.brackets.round.inset
+#                ^^^^^ variable.other.inset
+#                     ^ punctuation.brackets.round.inset
+#                       ^^ keyword.operator.arrow.fat.inset
+#                          ^^^^^^ variable.other.inset
+#                                ^ punctuation.accessor.dot.inset
+#                                 ^^^^^^^^ entity.name.function.inset
+#                                         ^ punctuation.brackets.round.inset
+#                                          ^ keyword.operator.borrow.inset
+#                                           ^^^^^^ entity.name.function.macro.inset
+#                                                 ^ entity.name.function.macro.inset
+#                                                  ^ punctuation.brackets.round.inset
+#                                                   ^ string.quoted.double.inset punctuation.definition.string.begin.inset
+#                                                    ^^^^^^^ string.quoted.double.inset constant.other.placeholder.inset
+#                                                           ^^ string.quoted.double.inset constant.character.escape.inset
+#                                                             ^ string.quoted.double.inset punctuation.definition.string.end.inset
+#                                                              ^ punctuation.brackets.round.inset
+#                                                               ^ punctuation.brackets.round.inset
+#                                                                ^ punctuation.separator.comma.inset
+>        }
+#        ^ punctuation.brackets.curly.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>    if errors.is_empty() {
+#    ^^ keyword.control.inset
+#       ^^^^^^ variable.other.inset
+#             ^ punctuation.accessor.dot.inset
+#              ^^^^^^^^ entity.name.function.inset
+#                      ^ punctuation.brackets.round.inset
+#                       ^ punctuation.brackets.round.inset
+#                         ^ punctuation.brackets.curly.inset
+>        Ok(products)
+#        ^^ entity.name.type.inset
+#          ^ punctuation.brackets.round.inset
+#           ^^^^^^^^ variable.other.inset
+#                   ^ punctuation.brackets.round.inset
+>    } else {
+#    ^ punctuation.brackets.curly.inset
+#      ^^^^ keyword.control.inset
+#           ^ punctuation.brackets.curly.inset
+>        Err(errors)
+#        ^^^ entity.name.type.inset
+#           ^ punctuation.brackets.round.inset
+#            ^^^^^^ variable.other.inset
+#                  ^ punctuation.brackets.round.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// Reads one row: a SKU, a product name and a net price.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>fn parse_row(row: &Row) -> Result<(String, Product), String> {
+#^^ storage.type.function.inset
+#   ^^^^^^^^^ entity.name.function.inset
+#            ^ punctuation.brackets.round.inset
+#             ^^^ variable.other.inset
+#                ^ punctuation.separator.colon.inset
+#                  ^ keyword.operator.borrow.inset
+#                   ^^^ entity.name.type.inset
+#                      ^ punctuation.brackets.round.inset
+#                        ^^ keyword.operator.arrow.skinny.inset
+#                           ^^^^^^ entity.name.type.inset
+#                                 ^ punctuation.brackets.angle.inset
+#                                  ^ punctuation.brackets.round.inset
+#                                   ^^^^^^ entity.name.type.inset
+#                                         ^ punctuation.separator.comma.inset
+#                                           ^^^^^^^ entity.name.type.inset
+#                                                  ^ punctuation.brackets.round.inset
+#                                                   ^ punctuation.separator.comma.inset
+#                                                     ^^^^^^ entity.name.type.inset
+#                                                           ^ punctuation.brackets.angle.inset
+#                                                             ^ punctuation.brackets.curly.inset
+>    if row.fields.len() != 3 {
+#    ^^ keyword.control.inset
+#       ^^^ variable.other.inset
+#          ^ punctuation.accessor.dot.inset
+#           ^^^^^^ variable.other.inset
+#                 ^ punctuation.accessor.dot.inset
+#                  ^^^ entity.name.function.inset
+#                     ^ punctuation.brackets.round.inset
+#                      ^ punctuation.brackets.round.inset
+#                        ^^ keyword.operator.comparison.inset
+#                           ^ constant.numeric.decimal.inset
+#                             ^ punctuation.brackets.curly.inset
+>        return Err(format!("line {}: expected 3 fields, found {}", row.line, row.fields.len()));
+#        ^^^^^^ keyword.control.inset
+#               ^^^ entity.name.type.inset
+#                  ^ punctuation.brackets.round.inset
+#                   ^^^^^^ entity.name.function.macro.inset
+#                         ^ entity.name.function.macro.inset
+#                          ^ punctuation.brackets.round.inset
+#                           ^ string.quoted.double.inset punctuation.definition.string.begin.inset
+#                            ^^^^^ string.quoted.double.inset
+#                                 ^^ string.quoted.double.inset constant.other.placeholder.inset
+#                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.double.inset
+#                                                              ^^ string.quoted.double.inset constant.other.placeholder.inset
+#                                                                ^ string.quoted.double.inset punctuation.definition.string.end.inset
+#                                                                 ^ punctuation.separator.comma.inset
+#                                                                   ^^^ variable.other.inset
+#                                                                      ^ punctuation.accessor.dot.inset
+#                                                                       ^^^^ variable.other.inset
+#                                                                           ^ punctuation.separator.comma.inset
+#                                                                             ^^^ variable.other.inset
+#                                                                                ^ punctuation.accessor.dot.inset
+#                                                                                 ^^^^^^ variable.other.inset
+#                                                                                       ^ punctuation.accessor.dot.inset
+#                                                                                        ^^^ entity.name.function.inset
+#                                                                                           ^ punctuation.brackets.round.inset
+#                                                                                            ^ punctuation.brackets.round.inset
+#                                                                                             ^ punctuation.brackets.round.inset
+#                                                                                              ^ punctuation.brackets.round.inset
+#                                                                                               ^ punctuation.terminator.statement.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>    let Some(net) = parse_price(&row.fields[2]) else {
+#    ^^^ storage.type.inset
+#        ^^^^ entity.name.type.inset
+#            ^ punctuation.brackets.round.inset
+#             ^^^ variable.other.inset
+#                ^ punctuation.brackets.round.inset
+#                  ^ keyword.operator.assignment.inset
+#                    ^^^^^^^^^^^ entity.name.function.inset
+#                               ^ punctuation.brackets.round.inset
+#                                ^ keyword.operator.borrow.inset
+#                                 ^^^ variable.other.inset
+#                                    ^ punctuation.accessor.dot.inset
+#                                     ^^^^^^ variable.other.inset
+#                                           ^ punctuation.brackets.square.inset
+#                                            ^ constant.numeric.decimal.inset
+#                                             ^ punctuation.brackets.square.inset
+#                                              ^ punctuation.brackets.round.inset
+#                                                ^^^^ keyword.control.inset
+#                                                     ^ punctuation.brackets.curly.inset
+>        return Err(format!("line {}: net price {:?} is not a price", row.line, row.fields[2]));
+#        ^^^^^^ keyword.control.inset
+#               ^^^ entity.name.type.inset
+#                  ^ punctuation.brackets.round.inset
+#                   ^^^^^^ entity.name.function.macro.inset
+#                         ^ entity.name.function.macro.inset
+#                          ^ punctuation.brackets.round.inset
+#                           ^ string.quoted.double.inset punctuation.definition.string.begin.inset
+#                            ^^^^^ string.quoted.double.inset
+#                                 ^^ string.quoted.double.inset constant.other.placeholder.inset
+#                                   ^^^^^^^^^^^^ string.quoted.double.inset
+#                                               ^^^^ string.quoted.double.inset constant.other.placeholder.inset
+#                                                   ^^^^^^^^^^^^^^^ string.quoted.double.inset
+#                                                                  ^ string.quoted.double.inset punctuation.definition.string.end.inset
+#                                                                   ^ punctuation.separator.comma.inset
+#                                                                     ^^^ variable.other.inset
+#                                                                        ^ punctuation.accessor.dot.inset
+#                                                                         ^^^^ variable.other.inset
+#                                                                             ^ punctuation.separator.comma.inset
+#                                                                               ^^^ variable.other.inset
+#                                                                                  ^ punctuation.accessor.dot.inset
+#                                                                                   ^^^^^^ variable.other.inset
+#                                                                                         ^ punctuation.brackets.square.inset
+#                                                                                          ^ constant.numeric.decimal.inset
+#                                                                                           ^ punctuation.brackets.square.inset
+#                                                                                            ^ punctuation.brackets.round.inset
+#                                                                                             ^ punctuation.brackets.round.inset
+#                                                                                              ^ punctuation.terminator.statement.inset
+>    };
+#    ^ punctuation.brackets.curly.inset
+#     ^ punctuation.terminator.statement.inset
+>    let product = Product { name: row.fields[1].clone(), net, gross: add_vat(net) };
+#    ^^^ storage.type.inset
+#        ^^^^^^^ variable.other.inset
+#                ^ keyword.operator.assignment.inset
+#                  ^^^^^^^ entity.name.type.inset
+#                          ^ punctuation.brackets.curly.inset
+#                            ^^^^ variable.other.inset
+#                                ^ punctuation.separator.colon.inset
+#                                  ^^^ variable.other.inset
+#                                     ^ punctuation.accessor.dot.inset
+#                                      ^^^^^^ variable.other.inset
+#                                            ^ punctuation.brackets.square.inset
+#                                             ^ constant.numeric.decimal.inset
+#                                              ^ punctuation.brackets.square.inset
+#                                               ^ punctuation.accessor.dot.inset
+#                                                ^^^^^ entity.name.function.inset
+#                                                     ^ punctuation.brackets.round.inset
+#                                                      ^ punctuation.brackets.round.inset
+#                                                       ^ punctuation.separator.comma.inset
+#                                                         ^^^ variable.other.inset
+#                                                            ^ punctuation.separator.comma.inset
+#                                                              ^^^^^ variable.other.inset
+#                                                                   ^ punctuation.separator.colon.inset
+#                                                                     ^^^^^^^ entity.name.function.inset
+#                                                                            ^ punctuation.brackets.round.inset
+#                                                                             ^^^ variable.other.inset
+#                                                                                ^ punctuation.brackets.round.inset
+#                                                                                  ^ punctuation.brackets.curly.inset
+#                                                                                   ^ punctuation.terminator.statement.inset
+>    Ok((row.fields[0].clone(), product))
+#    ^^ entity.name.type.inset
+#      ^ punctuation.brackets.round.inset
+#       ^ punctuation.brackets.round.inset
+#        ^^^ variable.other.inset
+#           ^ punctuation.accessor.dot.inset
+#            ^^^^^^ variable.other.inset
+#                  ^ punctuation.brackets.square.inset
+#                   ^ constant.numeric.decimal.inset
+#                    ^ punctuation.brackets.square.inset
+#                     ^ punctuation.accessor.dot.inset
+#                      ^^^^^ entity.name.function.inset
+#                           ^ punctuation.brackets.round.inset
+#                            ^ punctuation.brackets.round.inset
+#                             ^ punctuation.separator.comma.inset
+#                               ^^^^^^^ variable.other.inset
+#                                      ^ punctuation.brackets.round.inset
+#                                       ^ punctuation.brackets.round.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// Reads a price of zero or more pounds with at most two decimal places, such as `12.50`.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>fn parse_price(text: &str) -> Option<Decimal> {
+#^^ storage.type.function.inset
+#   ^^^^^^^^^^^ entity.name.function.inset
+#              ^ punctuation.brackets.round.inset
+#               ^^^^ variable.other.inset
+#                   ^ punctuation.separator.colon.inset
+#                     ^ keyword.operator.borrow.inset
+#                      ^^^ entity.name.type.primitive.inset
+#                         ^ punctuation.brackets.round.inset
+#                           ^^ keyword.operator.arrow.skinny.inset
+#                              ^^^^^^ entity.name.type.inset
+#                                    ^ punctuation.brackets.angle.inset
+#                                     ^^^^^^^ entity.name.type.inset
+#                                            ^ punctuation.brackets.angle.inset
+#                                              ^ punctuation.brackets.curly.inset
+>    match text.parse::<Decimal>() {
+#    ^^^^^ keyword.control.inset
+#          ^^^^ variable.other.inset
+#              ^ punctuation.accessor.dot.inset
+#               ^^^^^ entity.name.function.inset
+#                    ^^ punctuation.separator.namespace.inset
+#                      ^ punctuation.brackets.angle.inset
+#                       ^^^^^^^ entity.name.type.inset
+#                              ^ punctuation.brackets.angle.inset
+#                               ^ punctuation.brackets.round.inset
+#                                ^ punctuation.brackets.round.inset
+#                                  ^ punctuation.brackets.curly.inset
+>        Ok(price) if price >= dec!(0) && price.scale() <= 2 => Some(price),
+#        ^^ entity.name.type.inset
+#          ^ punctuation.brackets.round.inset
+#           ^^^^^ variable.other.inset
+#                ^ punctuation.brackets.round.inset
+#                  ^^ keyword.control.inset
+#                     ^^^^^ variable.other.inset
+#                           ^^ keyword.operator.comparison.inset
+#                              ^^^ entity.name.function.macro.inset
+#                                 ^ entity.name.function.macro.inset
+#                                  ^ punctuation.brackets.round.inset
+#                                   ^ constant.numeric.decimal.inset
+#                                    ^ punctuation.brackets.round.inset
+#                                      ^^ keyword.operator.logical.inset
+#                                         ^^^^^ variable.other.inset
+#                                              ^ punctuation.accessor.dot.inset
+#                                               ^^^^^ entity.name.function.inset
+#                                                    ^ punctuation.brackets.round.inset
+#                                                     ^ punctuation.brackets.round.inset
+#                                                       ^^ keyword.operator.comparison.inset
+#                                                          ^ constant.numeric.decimal.inset
+#                                                            ^^ keyword.operator.arrow.fat.inset
+#                                                               ^^^^ entity.name.type.inset
+#                                                                   ^ punctuation.brackets.round.inset
+#                                                                    ^^^^^ variable.other.inset
+#                                                                         ^ punctuation.brackets.round.inset
+#                                                                          ^ punctuation.separator.comma.inset
+>        _ => None,
+#        ^ variable.other.inset
+#          ^^ keyword.operator.arrow.fat.inset
+#             ^^^^ entity.name.type.inset
+#                 ^ punctuation.separator.comma.inset
+>    }
+#    ^ punctuation.brackets.curly.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// Adds VAT at 20%, rounded to the nearest penny.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>fn add_vat(net: Decimal) -> Decimal {
+#^^ storage.type.function.inset
+#   ^^^^^^^ entity.name.function.inset
+#          ^ punctuation.brackets.round.inset
+#           ^^^ variable.other.inset
+#              ^ punctuation.separator.colon.inset
+#                ^^^^^^^ entity.name.type.inset
+#                       ^ punctuation.brackets.round.inset
+#                         ^^ keyword.operator.arrow.skinny.inset
+#                            ^^^^^^^ entity.name.type.inset
+#                                    ^ punctuation.brackets.curly.inset
+>    (net * dec!(1.20)).round_dp(2)
+#    ^ punctuation.brackets.round.inset
+#     ^^^ variable.other.inset
+#         ^ keyword.operator.arithmetic.inset
+#           ^^^ entity.name.function.macro.inset
+#              ^ entity.name.function.macro.inset
+#               ^ punctuation.brackets.round.inset
+#                ^^^^ constant.numeric.decimal.inset
+#                    ^ punctuation.brackets.round.inset
+#                     ^ punctuation.brackets.round.inset
+#                      ^ punctuation.accessor.dot.inset
+#                       ^^^^^^^^ entity.name.function.inset
+#                               ^ punctuation.brackets.round.inset
+#                                ^ constant.numeric.decimal.inset
+#                                 ^ punctuation.brackets.round.inset
+>}
+#^ punctuation.brackets.curly.inset

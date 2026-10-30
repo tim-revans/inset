@@ -1,0 +1,58 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "comment": "Highlights ```inset and ```inset-req fenced code blocks in Markdown. The fence patterns follow VS Code's own Markdown grammar.",
+  "scopeName": "markdown.inset.codeblock",
+  "injectionSelector": "L:text.html.markdown",
+  "patterns": [
+    {
+      "include": "#inset-code-block"
+    },
+    {
+      "include": "#inset-req-code-block"
+    }
+  ],
+  "repository": {
+    "inset-code-block": {
+      "name": "markup.fenced_code.block.markdown",
+      "begin": "(^|\\G)(\\s*)(`{3,}|~{3,})\\s*(?i:(inset)((\\s+|:|,|\\{|\\?)[^`~]*)?$)",
+      "beginCaptures": {
+        "3": { "name": "punctuation.definition.markdown" },
+        "4": { "name": "fenced_code.block.language.markdown" },
+        "5": { "name": "fenced_code.block.language.attributes.markdown" }
+      },
+      "end": "(^|\\G)(\\2|\\s{0,3})(\\3)\\s*$",
+      "endCaptures": {
+        "3": { "name": "punctuation.definition.markdown" }
+      },
+      "patterns": [
+        {
+          "begin": "(^|\\G)(\\s*)(.*)",
+          "while": "(^|\\G)(?!\\s*([`~]{3,})\\s*$)",
+          "contentName": "meta.embedded.block.inset",
+          "patterns": [{ "include": "source.inset" }]
+        }
+      ]
+    },
+    "inset-req-code-block": {
+      "name": "markup.fenced_code.block.markdown",
+      "begin": "(^|\\G)(\\s*)(`{3,}|~{3,})\\s*(?i:(inset-req)((\\s+|:|,|\\{|\\?)[^`~]*)?$)",
+      "beginCaptures": {
+        "3": { "name": "punctuation.definition.markdown" },
+        "4": { "name": "fenced_code.block.language.markdown" },
+        "5": { "name": "fenced_code.block.language.attributes.markdown" }
+      },
+      "end": "(^|\\G)(\\2|\\s{0,3})(\\3)\\s*$",
+      "endCaptures": {
+        "3": { "name": "punctuation.definition.markdown" }
+      },
+      "patterns": [
+        {
+          "begin": "(^|\\G)(\\s*)(.*)",
+          "while": "(^|\\G)(?!\\s*([`~]{3,})\\s*$)",
+          "contentName": "meta.embedded.block.inset-req",
+          "patterns": [{ "include": "source.inset-req" }]
+        }
+      ]
+    }
+  }
+}

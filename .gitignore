@@ -7,3 +7,6 @@ target/
 
 # Secrets
 .env*
+
+# Editor extension dependencies
+node_modules/

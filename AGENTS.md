@@ -12,6 +12,7 @@ Read this before changing anything in the repo.
 - Write idiomatic Rust. Any `unsafe` needs a written justification in the crate's `//!` docs.
 - Put the reason for a non-obvious decision next to what it explains: the crate's `//!` docs, or the relevant page in `docs/language/`.
 - Keep `docs/language/` in step with the compiler. It is the language specification.
+- Change the grammars in `editors/vscode/` with the syntax, in the same commit.
 - Compiler output (generated Rust, diagram JSON, API contracts) must be deterministic. Pin it with tests.
 
 ## Never commit

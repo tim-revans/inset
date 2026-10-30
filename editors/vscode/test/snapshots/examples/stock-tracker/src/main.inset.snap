@@ -1,0 +1,211 @@
+>mod warehouse;
+#^^^ storage.type.module.inset
+#    ^^^^^^^^^ entity.name.module.inset
+#             ^ punctuation.terminator.statement.inset
+>
+>use warehouse::Warehouse;
+#^^^ keyword.other.inset
+#    ^^^^^^^^^ variable.other.inset
+#             ^^ punctuation.separator.namespace.inset
+#               ^^^^^^^^^ entity.name.type.inset
+#                        ^ punctuation.terminator.statement.inset
+>
+>/// Stock tracker: how many of each item the warehouse holds, and what to reorder.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>app StockTracker {
+#^^^ storage.type.app.inset
+#    ^^^^^^^^^^^^ entity.name.type.app.inset
+#                 ^ punctuation.brackets.curly.inset
+>    /// The port to serve on.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    setting port: u16 = 8080;
+#    ^^^^^^^ storage.type.setting.inset
+#            ^^^^ variable.other.setting.inset
+#                ^ punctuation.separator.colon.inset
+#                  ^^^ entity.name.type.primitive.inset
+#                      ^ keyword.operator.assignment.inset
+#                        ^^^^ constant.numeric.decimal.inset
+#                            ^ punctuation.terminator.statement.inset
+>    grant http: HttpServer { port };
+#    ^^^^^ storage.type.grant.inset
+#          ^^^^ variable.other.capability.inset
+#              ^ punctuation.separator.colon.inset
+#                ^^^^^^^^^^ support.type.capability.inset
+#                           ^ punctuation.brackets.curly.inset
+#                             ^^^^ variable.other.inset
+#                                  ^ punctuation.brackets.curly.inset
+#                                   ^ punctuation.terminator.statement.inset
+>    // The stock database belongs to this tool alone, so its file is fixed.
+#    ^^ comment.line.double-slash.inset punctuation.definition.comment.inset
+#      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.inset
+>    grant items: Table<String, Item> { file: "stock.db", name: "items" };
+#    ^^^^^ storage.type.grant.inset
+#          ^^^^^ variable.other.capability.inset
+#               ^ punctuation.separator.colon.inset
+#                 ^^^^^ support.type.capability.inset
+#                      ^ punctuation.brackets.angle.inset
+#                       ^^^^^^ entity.name.type.inset
+#                             ^ punctuation.separator.comma.inset
+#                               ^^^^ entity.name.type.inset
+#                                   ^ punctuation.brackets.angle.inset
+#                                     ^ punctuation.brackets.curly.inset
+#                                       ^^^^ variable.other.inset
+#                                           ^ punctuation.separator.colon.inset
+#                                             ^ string.quoted.double.inset punctuation.definition.string.begin.inset
+#                                              ^^^^^^^^ string.quoted.double.inset
+#                                                      ^ string.quoted.double.inset punctuation.definition.string.end.inset
+#                                                       ^ punctuation.separator.comma.inset
+#                                                         ^^^^ variable.other.inset
+#                                                             ^ punctuation.separator.colon.inset
+#                                                               ^ string.quoted.double.inset punctuation.definition.string.begin.inset
+#                                                                ^^^^^ string.quoted.double.inset
+#                                                                     ^ string.quoted.double.inset punctuation.definition.string.end.inset
+#                                                                       ^ punctuation.brackets.curly.inset
+#                                                                        ^ punctuation.terminator.statement.inset
+>    start Warehouse { http: move http, items: move items };
+#    ^^^^^ meta.start.inset storage.type.start.inset
+#          ^^^^^^^^^ meta.start.inset entity.name.type.component.inset
+#                    ^ meta.start.inset punctuation.brackets.curly.inset
+#                      ^^^^ meta.start.inset variable.other.member.inset
+#                          ^ meta.start.inset punctuation.separator.colon.inset
+#                            ^^^^ meta.start.inset storage.modifier.boundary.move.inset
+#                                 ^^^^ meta.start.inset variable.other.inset
+#                                     ^ meta.start.inset punctuation.separator.comma.inset
+#                                       ^^^^^ meta.start.inset variable.other.member.inset
+#                                            ^ meta.start.inset punctuation.separator.colon.inset
+#                                              ^^^^ meta.start.inset storage.modifier.boundary.move.inset
+#                                                   ^^^^^ meta.start.inset variable.other.inset
+#                                                         ^ meta.start.inset punctuation.brackets.curly.inset
+#                                                          ^ punctuation.terminator.statement.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// A stocked item, stored under its SKU.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>#[derive(Clone, Debug, PartialEq)]
+#^ meta.attribute.inset punctuation.definition.attribute.inset
+# ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#  ^^^^^^ meta.attribute.inset entity.name.function.attribute.inset
+#        ^ meta.attribute.inset punctuation.brackets.round.inset
+#         ^^^^^ meta.attribute.inset entity.name.type.inset
+#              ^ meta.attribute.inset punctuation.separator.comma.inset
+#                ^^^^^ meta.attribute.inset entity.name.type.inset
+#                     ^ meta.attribute.inset punctuation.separator.comma.inset
+#                       ^^^^^^^^^ meta.attribute.inset entity.name.type.inset
+#                                ^ meta.attribute.inset punctuation.brackets.round.inset
+#                                 ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>struct Item {
+#^^^^^^ storage.type.inset
+#       ^^^^ entity.name.type.inset
+#            ^ punctuation.brackets.curly.inset
+>    /// How many the warehouse holds.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    on_hand: u32,
+#    ^^^^^^^ variable.other.inset
+#           ^ punctuation.separator.colon.inset
+#             ^^^ entity.name.type.primitive.inset
+#                ^ punctuation.separator.comma.inset
+>    /// Stock at or below this level is reordered.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    reorder_level: u32,
+#    ^^^^^^^^^^^^^ variable.other.inset
+#                 ^ punctuation.separator.colon.inset
+#                   ^^^ entity.name.type.primitive.inset
+#                      ^ punctuation.separator.comma.inset
+>    /// A reorder brings stock back up to this level.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    target_level: u32,
+#    ^^^^^^^^^^^^ variable.other.inset
+#                ^ punctuation.separator.colon.inset
+#                  ^^^ entity.name.type.primitive.inset
+#                     ^ punctuation.separator.comma.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// An order to place with a supplier.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>#[derive(Clone, Debug, PartialEq)]
+#^ meta.attribute.inset punctuation.definition.attribute.inset
+# ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#  ^^^^^^ meta.attribute.inset entity.name.function.attribute.inset
+#        ^ meta.attribute.inset punctuation.brackets.round.inset
+#         ^^^^^ meta.attribute.inset entity.name.type.inset
+#              ^ meta.attribute.inset punctuation.separator.comma.inset
+#                ^^^^^ meta.attribute.inset entity.name.type.inset
+#                     ^ meta.attribute.inset punctuation.separator.comma.inset
+#                       ^^^^^^^^^ meta.attribute.inset entity.name.type.inset
+#                                ^ meta.attribute.inset punctuation.brackets.round.inset
+#                                 ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>struct Reorder {
+#^^^^^^ storage.type.inset
+#       ^^^^^^^ entity.name.type.inset
+#               ^ punctuation.brackets.curly.inset
+>    sku: String,
+#    ^^^ variable.other.inset
+#       ^ punctuation.separator.colon.inset
+#         ^^^^^^ entity.name.type.inset
+#               ^ punctuation.separator.comma.inset
+>    quantity: u32,
+#    ^^^^^^^^ variable.other.inset
+#            ^ punctuation.separator.colon.inset
+#              ^^^ entity.name.type.primitive.inset
+#                 ^ punctuation.separator.comma.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// Why stock could not be shipped.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>#[derive(Clone, Debug, PartialEq)]
+#^ meta.attribute.inset punctuation.definition.attribute.inset
+# ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#  ^^^^^^ meta.attribute.inset entity.name.function.attribute.inset
+#        ^ meta.attribute.inset punctuation.brackets.round.inset
+#         ^^^^^ meta.attribute.inset entity.name.type.inset
+#              ^ meta.attribute.inset punctuation.separator.comma.inset
+#                ^^^^^ meta.attribute.inset entity.name.type.inset
+#                     ^ meta.attribute.inset punctuation.separator.comma.inset
+#                       ^^^^^^^^^ meta.attribute.inset entity.name.type.inset
+#                                ^ meta.attribute.inset punctuation.brackets.round.inset
+#                                 ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>enum ShipError {
+#^^^^ storage.type.inset
+#     ^^^^^^^^^ entity.name.type.inset
+#               ^ punctuation.brackets.curly.inset
+>    /// No item has the SKU.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[status(NotFound)]
+#    ^ meta.attribute.status.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.status.inset punctuation.brackets.attribute.inset
+#      ^^^^^^ meta.attribute.status.inset keyword.other.attribute.inset
+#            ^ meta.attribute.status.inset punctuation.brackets.round.inset
+#             ^^^^^^^^ meta.attribute.status.inset constant.other.status.inset
+#                     ^ meta.attribute.status.inset punctuation.brackets.round.inset
+#                      ^ meta.attribute.status.inset punctuation.brackets.attribute.inset
+>    UnknownItem,
+#    ^^^^^^^^^^^ entity.name.type.inset
+#               ^ punctuation.separator.comma.inset
+>    /// The warehouse holds fewer than the quantity asked for.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    #[status(Conflict)]
+#    ^ meta.attribute.status.inset punctuation.definition.attribute.inset
+#     ^ meta.attribute.status.inset punctuation.brackets.attribute.inset
+#      ^^^^^^ meta.attribute.status.inset keyword.other.attribute.inset
+#            ^ meta.attribute.status.inset punctuation.brackets.round.inset
+#             ^^^^^^^^ meta.attribute.status.inset constant.other.status.inset
+#                     ^ meta.attribute.status.inset punctuation.brackets.round.inset
+#                      ^ meta.attribute.status.inset punctuation.brackets.attribute.inset
+>    NotEnoughStock,
+#    ^^^^^^^^^^^^^^ entity.name.type.inset
+#                  ^ punctuation.separator.comma.inset
+>}
+#^ punctuation.brackets.curly.inset

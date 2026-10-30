@@ -1,0 +1,123 @@
+{
+  "name": "inset",
+  "displayName": "Inset",
+  "description": "Syntax highlighting for the Inset language and its requirement tests",
+  "version": "0.1.0",
+  "publisher": "inset",
+  "license": "MIT OR Apache-2.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "scripts": {
+    "test": "node test/grammar.test.mjs",
+    "package": "vsce package --skip-license --allow-missing-repository"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "inset",
+        "aliases": [
+          "Inset"
+        ],
+        "extensions": [
+          ".inset"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/inset.svg",
+          "dark": "./icons/inset.svg"
+        }
+      },
+      {
+        "id": "inset-req",
+        "aliases": [
+          "Inset requirements"
+        ],
+        "extensions": [
+          ".req.inset"
+        ],
+        "configuration": "./requirements-language-configuration.json",
+        "icon": {
+          "light": "./icons/inset-req.svg",
+          "dark": "./icons/inset-req.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "inset",
+        "scopeName": "source.inset",
+        "path": "./syntaxes/inset.tmLanguage.json"
+      },
+      {
+        "language": "inset-req",
+        "scopeName": "source.inset-req",
+        "path": "./syntaxes/inset-req.tmLanguage.json"
+      },
+      {
+        "scopeName": "markdown.inset.codeblock",
+        "path": "./syntaxes/inset-markdown.tmLanguage.json",
+        "injectTo": [
+          "text.html.markdown"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.inset": "inset",
+          "meta.embedded.block.inset-req": "inset-req"
+        }
+      }
+    ],
+    "configurationDefaults": {
+      "[inset]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true
+      },
+      "[inset-req]": {
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true,
+        "editor.detectIndentation": false
+      },
+      "editor.tokenColorCustomizations": {
+        "textMateRules": [
+          {
+            "scope": [
+              "markup.heading.requirement.inset-req",
+              "keyword.control.step.inset-req"
+            ],
+            "settings": {
+              "fontStyle": "bold"
+            }
+          },
+          {
+            "scope": [
+              "storage.modifier.boundary.inset",
+              "keyword.control.send.inset",
+              "keyword.control.fork.inset"
+            ],
+            "settings": {
+              "fontStyle": "bold"
+            }
+          },
+          {
+            "scope": [
+              "support.type.capability.inset",
+              "variable.other.capability.inset",
+              "variable.other.capability.inset-req"
+            ],
+            "settings": {
+              "fontStyle": "underline"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "devDependencies": {
+    "@vscode/vsce": "4.0.0",
+    "vscode-oniguruma": "2.0.1",
+    "vscode-textmate": "9.3.2"
+  }
+}

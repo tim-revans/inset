@@ -9,6 +9,8 @@ Each construct is marked with its status:
 
 How the generated diagrams look is in [`diagrams.md`](diagrams.md). The example programs are in [`examples/`](../../examples/): Hello HTTP, Stock tracker and CSV import.
 
+The VS Code extension in [`editors/vscode/`](../../editors/vscode/) highlights this syntax, so its grammars change with it, in the same commit. Its snapshot tests cover every example program and every code block on this page marked `inset` (code) or `inset-req` (requirements).
+
 ## Principles
 
 An AI writes Inset source, and a human reviews the diagrams and requirement tests generated from it. The syntax follows from both.
@@ -76,7 +78,7 @@ Inset leaves out only what would hide an effect, a data flow, or which code runs
 
 An app is the root of a program. It names the settings it can be run with and the capabilities the host must grant, and it starts the top-level components. A program has exactly one app.
 
-```rust
+```inset
 app PriceImport {
     /// The port to serve on.
     setting port: u16 = 8080;
@@ -105,7 +107,7 @@ app PriceImport {
 
 A component is an actor. It runs concurrently with other components, holds its own state, and talks to the outside only through messages and the capabilities it was handed.
 
-```rust
+```inset
 /// Keeps the reorders waiting to be placed, at most one per item.
 component Reorders {
     orders: Vec<Reorder>,
@@ -146,7 +148,7 @@ A component's body has four parts, in this order:
 
 A `start` statement starts a component and supplies each of its fields. It is the same in an app and in a component.
 
-```rust
+```inset
 pub component Warehouse {
     http: HttpServer,
     #[handed_down]
@@ -209,7 +211,7 @@ A program cannot declare its own capability types. A capability is something the
 
 A route attribute turns a component function into an HTTP route handler. The attribute style follows Rust web frameworks such as actix-web and Rocket.
 
-```rust
+```inset
 #[post("/items/{sku}/shipments", via = http, body = quantity)]
 async fn ship(&self, sku: String, quantity: u32) -> Result<String, ShipError> {
     ...
@@ -234,7 +236,7 @@ The return type decides the response:
 
 The error type `E` is an enum whose every variant has a `#[status(Name)]` attribute, using the status names of the requirements dialect. A unit variant replies with an empty body. A variant holding one `String` replies with that string as the body.
 
-```rust
+```inset
 enum ShipError {
     #[status(NotFound)]
     UnknownItem,
@@ -245,7 +247,7 @@ enum ShipError {
 
 **JSON, query parameters and headers.** *(Draft: no example uses them yet. Stage 9 confirms them against the typed API contract.)* They take the forms of Rust web frameworks.
 
-```rust
+```inset
 #[put("/products/{sku}?{dry_run}", via = http, body = product, header("If-Match") = version)]
 async fn update(
     &self,
@@ -298,7 +300,7 @@ A component's `#[message]` functions are its messages. Another component sends o
 
 An outlet lets a component announce something without knowing who receives it. The component declares the outlet as a field and emits values through it. Whoever starts the component connects the outlet to a message.
 
-```rust
+```inset
 component Inventory {
     items: Table<String, Item>,
     /// A reorder for each item that shipping leaves at or below its reorder level.
@@ -309,7 +311,7 @@ component Inventory {
 }
 ```
 
-```rust
+```inset
 start inventory: Inventory { items: move items, low_stock: send reorders.raise };
 ```
 
@@ -334,7 +336,7 @@ start inventory: Inventory { items: move items, low_stock: send reorders.raise }
 
 Errors a component expects are values, as in Rust: a handler returns a `Result`, and its error type says what went wrong, as `ShipError` does. A **failure** is everything else: a panic, an integer overflow, a capability call that fails, or a message that fails. By default a failure stops the whole program. A component may respond to particular failures instead, and each response it gives is shown on the diagram with its reason.
 
-```rust
+```inset
 component Inventory {
     items: Table<String, Item>,
     low_stock: Outlet<Reorder>,
@@ -411,7 +413,7 @@ A boundary is any place a value leaves a component: a handoff in `start`, and an
 
 Inset's modules are Rust's, with `.inset` in place of `.rs`.
 
-```rust
+```inset
 // src/main.inset
 mod warehouse;
 
@@ -432,7 +434,7 @@ use warehouse::Warehouse;
 
 Inset uses Rust's types: `bool`, the integer types, `String`, tuples, `Option`, `Result`, the standard collections, `struct` and `enum`. It adds `Decimal`, an exact decimal number for money and quantities, written with the `dec!` macro as in the `rust_decimal` crate: `dec!(1.20)`. Its methods are those of `rust_decimal`, such as `scale` and `round_dp`.
 
-```rust
+```inset
 /// A stocked item, stored under its SKU.
 #[derive(Clone, Debug, PartialEq)]
 struct Item {
@@ -453,7 +455,7 @@ struct Item {
 
 An algorithm is a function that takes no `self`, written as in Rust. Its body becomes a flowchart.
 
-```rust
+```inset
 /// Adds VAT at 20%, rounded to the nearest penny.
 fn add_vat(net: Decimal) -> Decimal {
     (net * dec!(1.20)).round_dp(2)
@@ -472,7 +474,7 @@ fn add_vat(net: Decimal) -> Decimal {
 
 `fork` runs work concurrently and waits for all of it to finish before going on. The fork and its join appear on the flowchart.
 
-```rust
+```inset
 let results = fork for row in rows {
     parse_row(row)
 };
@@ -491,7 +493,7 @@ let results = fork for row in rows {
 
 An external component is written in another language. Inset declares its messages and capabilities, and the diagram shows it as an opaque box with its interface.
 
-```rust
+```inset
 /// Reads CSV text with the `csv` crate. Holds no capabilities, so it can only compute.
 #[rust(path = "csv_reader.rs", crates = ["csv@1.3"])]
 extern component CsvReader {
@@ -547,7 +549,7 @@ interface::export!(Reader);
 
 Each requirement is exactly one test of what the program does, seen from outside. The test opens with the requirement as a sentence, then states the behaviour in steps.
 
-```
+```inset-req
 requirement "Visitors are greeted by the name in the web address"
   when HelloHttp receives GET /hello/Ada
   then HelloHttp replies OK with "Hello, Ada!"
@@ -615,7 +617,7 @@ Values in facts are written as Rust literals and constructors: `40`, `"M6 bolt"`
 
 **Text blocks.** A body that spans lines is written as a text block, after `with` at the end of the step's line. The block starts and ends with `"""` on lines of their own, indented under the step. Each line between them is one line of the text, ending in a newline, with the block's indentation removed. Text blocks come from Gherkin's doc strings.
 
-```
+```inset-req
   when PriceImport receives POST /price-lists with
     """
     sku,name,net
@@ -627,7 +629,7 @@ Values in facts are written as Rust literals and constructors: `40`, `"M6 bolt"`
 
 A requirement with several cases writes its steps once, with `<name>` placeholders, and lists the cases in an `examples` table after the steps. Each heading names a placeholder, each row is one case, and the report shows each row's result. This is Gherkin's Scenario Outline.
 
-```
+```inset-req
 requirement "Stock that falls to its reorder level or below is reordered up to its target level"
   given items["bolt-m6"] is Item { on_hand: <on hand>, reorder_level: 10, target_level: <target level> }
   when StockTracker receives POST /items/bolt-m6/shipments with "1"
@@ -649,7 +651,7 @@ requirement "Stock that falls to its reorder level or below is reordered up to i
 
 A rule that holds for every input is written with `for all` before the steps, and the compiler generates the inputs. The `where` condition limits them. Both are Rust, so they follow Rust's typing, as in `dec!(0)`. The steps use the generated value as the placeholder `<name>`, with the same replacement as in examples, using the value's `Display` text. In a check, the placeholder is the value itself.
 
-```
+```inset-req
 requirement "The gross price is never below the net price"
   for all net: Decimal where net >= dec!(0) && net.scale() <= 2
   given products is empty
@@ -687,7 +689,7 @@ A program's directory holds its code in `src/` and its requirements in `requirem
 - as the first line of the block of an `if` or `else` branch, or of a `let ... else`, marking that branch;
 - on a statement, marking the branches inside it, such as the error path of a `?`.
 
-```rust
+```inset
 let Some(net) = parse_price(&fields[2]) else {
     #[defensive("parse_row has already checked every price")]
     return Err(ImportError::Internal);
