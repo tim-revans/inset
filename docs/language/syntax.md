@@ -63,7 +63,7 @@ Where a model reaches for a Rust feature Inset does not have, the compiler rejec
 | Closures | `for` loops, named algorithms | A closure captures its surroundings without saying so, which is a data flow the diagram cannot label |
 | Generic items | Concrete types | Diagram arrows are labelled with concrete types. The standard generic types, such as `Vec<T>`, can still be used |
 
-Iterator adaptors such as `map` and `filter` take closures, so they are out with them. The full list is settled as the examples grow. See [open question 3](open-questions.md).
+Iterator adaptors such as `map` and `filter` take closures, so they are out with them. The full list is settled as the examples grow. See [open question 2](open-questions.md).
 
 ### App
 
@@ -236,7 +236,7 @@ enum ShipError {
 }
 ```
 
-JSON bodies and headers are settled in later stages. See [open question 4](open-questions.md).
+JSON bodies and headers are settled in later stages. See [open question 3](open-questions.md).
 
 *Why `via` is required:* the capability is the source of the diagram arrow, so it is always written down. It also lets a component hold two servers, such as a public one and an admin one.
 
@@ -281,6 +281,9 @@ A boundary is any place a value leaves a component: a handoff in `start`, and an
 - Any other expression makes a new value, which simply moves. `Vec::new()`, `"Hello"` and `Reorder { sku, quantity: order }` need no notation.
 - A reply always moves its value, so it needs no notation.
 - `&x` in a message is allowed only when the sender awaits the reply, because the sender then outlives the borrow. `send` does not wait, so it can only move or copy. `&child` in `start` is allowed because the parent outlives its children.
+- A value lent in a message reaches the receiver as a copy, and its handler gets `&T` to the copy. The type must therefore be `Clone`. The compiler rejects lending any other type, and its error says to derive `Clone`. For large values the runtime may share one immutable copy instead, which cannot be told apart.
+
+*Why a lent value is copied:* the receiver runs on its own task, and Rust does not let a plain reference cross tasks. Running the receiver inside the sender's borrow would be unsound, because a sender cancelled while it waits would leave the receiver holding a dangling reference, and it would need `unsafe` to build. A copy behind `&T` behaves exactly as a Rust borrow does for the receiver: it can read the value, but cannot change it, and cannot keep the reference, because Inset has no lifetimes to store it with. So `&` keeps its Rust meaning, with no `unsafe`.
 - Capabilities are never `Copy` and never lent, so handing one down is always a `move`.
 
 *Why `move` is written at boundaries when Rust leaves it implicit:* the boundary rule is what the diagrams depend on, so that is where a reader must see it. `move` in this position is not Rust syntax, which marks it as an Inset boundary rather than a familiar construct with a new meaning.
@@ -386,7 +389,7 @@ extern component CsvReader {
 - `extern component` declares a component with no Inset body. As in a Rust `extern` block, its functions are signatures ending in `;`.
 - Its fields are the capabilities it holds, as in any component. `CsvReader` has none. *(Draft: an external component with capabilities.)*
 - `#[rust(path = ..., crates = [...])]` names the Rust file that implements it, relative to the file declaring it, and the crates that file may use, as `name@version`.
-- The Rust file defines a type with the component's name and the declared functions. It may use the Inset types of the program by their module paths, such as `crate::Row`. The compiler checks it against the declaration. *(Draft: stage 13 fixes the exact Rust interface. See [open question 6](open-questions.md).)*
+- The Rust file defines a type with the component's name and the declared functions. It may use the Inset types of the program by their module paths, such as `crate::Row`. The compiler checks it against the declaration. *(Draft: stage 13 fixes the exact Rust interface. See [open question 5](open-questions.md).)*
 - An external component is started and sent messages like any component. Like any component, requirements reach it only through the app, as CSV import's "A field in quotes may contain commas" does.
 
 *Why `extern`:* in Rust, `extern` declares something whose body is written elsewhere, which is what this is. `component` after it says what kind of thing is declared.
