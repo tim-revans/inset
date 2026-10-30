@@ -7,7 +7,7 @@ pub component Warehouse {
     items: Table<String, Item>,
 
     start reorders: Reorders { orders: Vec::new() };
-    start inventory: Inventory { items: move items, reorders: &reorders };
+    start inventory: Inventory { items: move items, low_stock: send reorders.raise };
 
     failure {
         /// Inventory rolls back a request whose database call fails, so this request fails too.
@@ -46,7 +46,8 @@ pub component Warehouse {
 /// Keeps the stock record of every item, and raises a reorder when stock runs low.
 component Inventory {
     items: Table<String, Item>,
-    reorders: &Handle<Reorders>,
+    /// A reorder for each item that shipping leaves at or below its reorder level.
+    low_stock: Outlet<Reorder>,
 
     failure {
         /// A database error affects only the request it happened in. The next request
@@ -83,7 +84,7 @@ component Inventory {
         self.items.insert(sku.to_string(), item.clone()).await;
         let order = Self::reorder_quantity(item.on_hand, item.reorder_level, item.target_level);
         if order > 0 {
-            send self.reorders.raise(Reorder { sku: sku.to_string(), quantity: order });
+            send self.low_stock.emit(Reorder { sku: sku.to_string(), quantity: order });
         }
         Ok(item)
     }

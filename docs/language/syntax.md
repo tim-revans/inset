@@ -19,7 +19,7 @@ An AI writes Inset source, and a human reviews the diagrams and requirement test
 - **Data flow is written down.** Every value or capability that crosses a component boundary says whether it is moved, lent or copied, so the diagram can label each arrow truthfully.
 - **Capabilities have one origin and one holder.** Capabilities enter the program only through the app's `grant` statements, reach components only by being moved down, and are held by one component at a time, so every external access appears as exactly one diagram edge.
 - **Requirements see only the outside.** A requirement tests what the program does through its boundary: HTTP requests and replies, and what its granted capabilities hold. How the program is built is the diagram's job.
-- **Structure is wired by the parent.** Components nest. A component sends messages to the children it started, and to earlier siblings its parent lent it. Every arrow is known from the source, and no two components can end up waiting on each other.
+- **Structure is wired like hardware.** Hardware description languages are designed to be drawn, and Inset takes its structure from them. Components nest like modules. A component sends messages to the children it started, and announces events through outlets, like a module's output ports, whose connections its parent chooses. Every arrow is known from the source, and no two components can end up waiting on each other.
 
 ## Two dialects
 
@@ -42,7 +42,7 @@ The code dialect uses Rust's lexical rules: identifiers, integer and string lite
 - String literals do not interpolate, as in Rust. Build text with `format!`.
 - Inset adds these keywords to Rust's: `app`, `component`, `setting`, `grant`, `start`, `send`, `fork`, and `failure` with its responses `rollback` and `restart`. It also gives Rust's `extern` a new use, in `extern component`.
 - Inset adds these attributes: the route attributes `#[get]`, `#[post]`, `#[put]`, `#[patch]` and `#[delete]`, and `#[message]`, `#[handed_down]`, `#[status]`, `#[rust]` and `#[defensive]`. Attributes that change what an item does are familiar from Rust frameworks, so these keep Rust's meaning of an attribute.
-- Inset adds one standard type, `Handle<C>`, for a running component, alongside the capability types.
+- Inset adds two standard types alongside the capability types: `Handle<C>`, for a running component, and `Outlet<T>`, for announcing events (see [Outlets](#outlets)).
 
 ### What Inset keeps from Rust
 
@@ -124,7 +124,7 @@ component Reorders {
 
 A component's body has four parts, in this order:
 
-1. **Fields**, written like a Rust struct's fields. They hold the capabilities it was handed, the handles of siblings lent to it, and its state. Whoever starts the component supplies every field.
+1. **Fields**, written like a Rust struct's fields. They hold the capabilities it was handed, its outlets, the handles of siblings lent to it, and its state. Whoever starts the component supplies every field.
 2. **`start` statements**, which start its children (see [Starting components](#starting-components)).
 3. **A `failure` block**, if it has one, which says how it responds to failures (see [Failures](#failures)).
 4. **Functions.** Each one is exactly one of:
@@ -153,7 +153,7 @@ pub component Warehouse {
     items: Table<String, Item>,
 
     start reorders: Reorders { orders: Vec::new() };
-    start inventory: Inventory { items: move items, reorders: &reorders };
+    start inventory: Inventory { items: move items, low_stock: send reorders.raise };
     ...
 }
 ```
@@ -164,13 +164,14 @@ pub component Warehouse {
 - In a component, a handoff can name the component's own fields. A field that is moved into a child is marked `#[handed_down]`. It is supplied when the component starts, passed straight to the child, and is not kept, so the component's functions cannot use it. `Warehouse` holds `items` only to hand it to `Inventory`. The compiler requires the attribute on every field moved into a child, and only on those.
 
   *Why `#[handed_down]`:* in Rust, every declared field of a struct exists for as long as the struct does. A field that is moved away at start would break that rule silently, so the attribute says, where the field is declared, that it is only passed through.
-- A handoff can lend a child started earlier in the same body to a later one: `reorders: &reorders`. The later child declares the field as a borrowed handle, `reorders: &Handle<Reorders>`, and can send it messages. Like all borrows across a boundary, it is written without a lifetime: the compiler knows the parent outlives both children. The parent still owns the lent child.
+- A handoff connects a child's outlet to a message with `send`: `low_stock: send reorders.raise` (see [Outlets](#outlets)).
+- *(Draft: no example needs it yet.)* A handoff can lend a child started earlier in the same body to a later one: `reorders: &reorders`. The later child declares the field as a borrowed handle, `reorders: &Handle<Reorders>`, and can send it messages and await their replies. Like all borrows across a boundary, it is written without a lifetime: the compiler knows the parent outlives both children. The parent still owns the lent child.
 - A child can only be lent to siblings started after it, never to itself or to its parent.
-- A component handle cannot be moved, copied, stored in data or sent in a message. The only handles a component holds are its own children and the siblings lent to it at `start`.
+- A component handle cannot be moved, copied, stored in data or sent in a message. The only handles a component holds are its own children and the siblings lent to it at `start`. A component that only needs to tell another something is given an outlet instead.
 - A component's children start before it handles anything, and stop after it stops.
 - A component started by a parent is nested inside the parent on the diagram. The app's children are the top-level components.
 
-*Why the parent wires its children:* who can message whom is then fixed in the source, so the diagram can draw every arrow. Hardware description languages such as Verilog wire submodules the same way, and the WebAssembly component model, which Inset compiles to, composes component instances in the same order. Actor languages such as Erlang and Akka instead let a handle travel in any message. Their diagrams cannot be drawn from the code, and two calls waiting on each other can deadlock.
+*Why the parent wires its children:* who can message whom is then fixed in the source, so the diagram can draw every arrow. Hardware description languages such as Verilog and VHDL wire submodules the same way, and the WebAssembly component model, which Inset compiles to, composes component instances in the same order. Actor languages such as Erlang and Akka instead let a handle travel in any message. Their diagrams cannot be drawn from the code, and two calls waiting on each other can deadlock.
 
 *Why lending only goes to later siblings:* a component that waits for a reply then waits only on its own children or on components started before it, which can never wait on it in turn. So the one-at-a-time rule cannot deadlock. The parent still owns the lent child and outlives the sibling it was lent to, so `&` keeps its Rust meaning.
 
@@ -242,7 +243,7 @@ enum ShipError {
 }
 ```
 
-JSON bodies and headers are settled in later stages. See [open question 2](open-questions.md).
+JSON bodies and headers are settled in later stages. See [open question 1](open-questions.md).
 
 *Why `via` is required:* the capability is the source of the diagram arrow, so it is always written down. It also lets a component hold two servers, such as a public one and an admin one.
 
@@ -263,10 +264,46 @@ A component's `#[message]` functions are its messages. Another component sends o
 - A message is always awaited or sent with `send`, whether or not the receiving function is `async`.
 - `Handle<C>` has one async method for each message of `C`, with the same parameters and reply, taking `&self`. So sending a message needs only `&self`, and the receiver's `&mut self` applies in its own handler, on its own task. This is the actor-handle pattern from Rust's async ecosystem, so a call on a handle means what it would in Rust.
 - A message function's visibility follows Rust: the handle's method can be called wherever the function is visible.
-- A component can send messages to the children it started and to the siblings lent to it (see [Starting components](#starting-components)). It cannot send messages to its parent or to a later sibling. See [open question 1](open-questions.md).
-- An awaited message is in its receiver's mailbox before its sender carries on. A message sent with `send` is delivered when the sending handler completes, before its reply, so that a handler that fails can take it back (see [Failures](#failures)). So when one message leads to another, even through other components, the first arrives first. The Stock tracker relies on this: `Inventory` raises a reorder with `send` in its `ship` handler, so a `pending()` that `Warehouse` sends after the reply finds the reorder already raised.
+- A component can send messages to the children it started and to the siblings lent to it (see [Starting components](#starting-components)). It holds no handle to its parent or to a later sibling. To tell them something, it emits through an outlet (see [Outlets](#outlets)).
+- An awaited message is in its receiver's mailbox before its sender carries on. A message sent with `send` is delivered when the sending handler completes, before its reply, so that a handler that fails can take it back (see [Failures](#failures)). So when one message leads to another, even through other components, the first arrives first. The Stock tracker relies on this: `Inventory` emits a reorder through its outlet in its `ship` handler, so a `pending()` that `Warehouse` sends after the reply finds the reorder already raised.
 
 *Why calls look like async method calls:* a message that waits for its reply behaves like an awaited async call, so the familiar syntax keeps its familiar meaning. `send` has no equivalent in Rust, so it gets a keyword.
+
+### Outlets
+
+**Status:** Used.
+
+An outlet lets a component announce something without knowing who receives it. The component declares the outlet as a field and emits values through it. Whoever starts the component connects the outlet to a message.
+
+```rust
+component Inventory {
+    items: Table<String, Item>,
+    /// A reorder for each item that shipping leaves at or below its reorder level.
+    low_stock: Outlet<Reorder>,
+    ...
+            send self.low_stock.emit(Reorder { sku: sku.to_string(), quantity: order });
+    ...
+}
+```
+
+```rust
+start inventory: Inventory { items: move items, low_stock: send reorders.raise };
+```
+
+- `Outlet<T>` has one method, `emit(&self, value: T)`, which is always used with `send`. An outlet has nothing to await.
+- The handoff `send name.message` connects the outlet to a message of the child or sibling `name`, and `send self.message` to a message of the component doing the starting. The message must take one parameter, of type `T`, and return nothing.
+- The target can be any sibling, started before or after, or the parent itself.
+- Every outlet is connected, to exactly one message.
+- *(Draft)* A component can connect a child's outlet to an outlet of its own of the same type, `send self.changes`, passing the value on up, as a module's port in a hardware description language connects to a port of the module around it.
+- An emitted value is moved, and is delivered as any `send` is: when the emitting handler completes. A rollback drops it.
+- An outlet, like a handle, cannot be moved, copied, stored in data or sent in a message.
+- The diagram draws an outlet as a port on the edge of its component's box, labelled with its name, and a dashed arrow from the port to the message it is connected to.
+
+*Why the parent connects outlets:* the component names only what it emits, never who receives it, so it depends on nothing around it and works unchanged under another parent. Every connection is written in the parent's `start` statements, so one place holds all the arrows between a parent's children, and the diagram is drawn from it. Hardware description languages work the same way: a module declares its output ports, and the module that instantiates it decides what they drive. An outlet also gives no more than is needed. `Inventory` only ever raises reorders, so it gets an outlet rather than a handle to `Reorders`, which would also let it await `pending()`.
+
+*Why an outlet can point anywhere:* it is only ever used with `send`, which never waits, so a connection back up the structure or to a later sibling cannot make two components wait on each other.
+
+*Why `send reorders.raise`:* naming a method without calling it is not valid Rust, so the connection cannot be mistaken for Rust, and `send` says it never waits. The closure `|order| send reorders.raise(order)` would read more like Rust, but closures cannot contain `send`.
 
 ### Failures
 
@@ -277,7 +314,7 @@ Errors a component expects are values, as in Rust: a handler returns a `Result`,
 ```rust
 component Inventory {
     items: Table<String, Item>,
-    reorders: &Handle<Reorders>,
+    low_stock: Outlet<Reorder>,
 
     failure {
         /// A database error affects only the request it happened in. The next request
@@ -326,7 +363,7 @@ Inset uses Rust's ownership rules: every value has one owner, and a value can be
 | Notation | Meaning | Inside a component | Across a boundary |
 | --- | --- | --- | --- |
 | `move x` | Ownership passes to the receiver, and `x` can no longer be used | Implicit, as in Rust | Required for a value that is not `Copy` |
-| `&x` | The receiver may read `x` until it replies, or use the lent child `x` while it runs | As in Rust | Allowed in a message that is awaited, and for lending a child in `start` |
+| `&x` | The receiver may read `x` until it replies, or use the lent child `x` while it runs | As in Rust | Allowed in a message that is awaited, and for lending a child in `start` *(Draft)* |
 | `x`, where `x` is `Copy` | The receiver gets a copy, and the sender keeps `x` | As in Rust | Allowed |
 | `&mut x` | The receiver may change `x` | As in Rust | Never allowed |
 
@@ -444,7 +481,7 @@ extern component CsvReader {
 - `extern component` declares a component with no Inset body. As in a Rust `extern` block, its functions are signatures ending in `;`.
 - Its fields are the capabilities it holds, as in any component. `CsvReader` has none. *(Draft: an external component with capabilities.)*
 - `#[rust(path = ..., crates = [...])]` names the Rust file that implements it, relative to the file declaring it, and the crates that file may use, as `name@version`.
-- The Rust file defines a type with the component's name and the declared functions. It may use the Inset types of the program by their module paths, such as `crate::Row`. The compiler checks it against the declaration. *(Draft: stage 13 fixes the exact Rust interface. See [open question 3](open-questions.md).)*
+- The Rust file defines a type with the component's name and the declared functions. It may use the Inset types of the program by their module paths, such as `crate::Row`. The compiler checks it against the declaration. *(Draft: stage 13 fixes the exact Rust interface. See [open question 2](open-questions.md).)*
 - An external component is started and sent messages like any component. Like any component, requirements reach it only through the app, as CSV import's "A field in quotes may contain commas" does.
 
 *Why `extern`:* in Rust, `extern` declares something whose body is written elsewhere, which is what this is. `component` after it says what kind of thing is declared.
@@ -609,7 +646,7 @@ setting      = "setting" ident ":" type "=" literal ";" ;
 grant        = "grant" ident ":" type "{" [ fields ] "}" ";" ;
 start        = "start" [ ident ":" ] Ident "{" [ handoffs ] "}" ";" ;
 handoffs     = handoff { "," handoff } [ "," ] ;
-handoff      = ident ":" ( "move" place | "&" ident | expr ) ;
+handoff      = ident ":" ( "move" place | "&" ident | "send" ( "self" | ident ) "." ident | expr ) ;
 
 component    = "component" Ident "{" [ field_decls ] { start } [ failure ] { { doc } function } "}" ;
 failure      = "failure" "{" { doc { doc } condition "=>" response "," } "}" ;

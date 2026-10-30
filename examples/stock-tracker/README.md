@@ -27,11 +27,11 @@ The program is split into two modules to show that Inset's modules are Rust's: `
 | A fixed file and a setting | The stock database belongs to the tool alone, so its file is written in the grant. The port is a `setting` |
 | Several actors | `Warehouse`, `Inventory` and `Reorders` each run as a component |
 | Nested components | `Warehouse` starts `Reorders` and `Inventory` with `start` statements |
-| A sibling lent to a sibling | `start inventory: Inventory { ..., reorders: &reorders }`, so `Inventory` can raise reorders itself. `Inventory` declares the field as `reorders: &Handle<Reorders>` |
+| An outlet | `Inventory` declares `low_stock: Outlet<Reorder>` and emits reorders through it, without naming who receives them. `Warehouse` connects it with `start inventory: Inventory { ..., low_stock: send reorders.raise }` |
 | Capability hand-down | The app moves `items` into `Warehouse`, which marks the field `#[handed_down]` and moves it on into `Inventory`. Only `Inventory` uses it |
 | Message handlers | `#[message]` on the functions of `Inventory` and `Reorders` |
 | Messages that wait for a reply | `self.inventory.ship(&sku, quantity).await`, a call on a `Handle<Inventory>` |
-| A message that does not wait | `send self.reorders.raise(...)`, from `Inventory` to its sibling |
+| A message that does not wait | `send self.low_stock.emit(...)`, which reaches `Reorders` through the outlet |
 | Boundary notation | `move` for capabilities, `&sku` for a lent string, a bare `quantity` for a copied number, and `Reorder { ... }` for a value built in place |
 | Component state | `Reorders` holds its list of reorders in a field and changes it in `&mut self` handlers |
 | Request bodies | `body = quantity` reads the request body as a `u32` |
@@ -50,7 +50,7 @@ No requirement names a component or an algorithm, yet every branch of the code i
 
 ## Expected diagrams
 
-Sketches of what each review level should show. Stage 3 replaces them with `expected/diagram.json` and rendered SVGs. Solid arrows are messages that wait for a reply. Dashed arrows are messages sent without waiting.
+Sketches of what each review level should show. Stage 3 replaces them with `expected/diagram.json` and rendered SVGs. Solid arrows are messages that wait for a reply. Dashed arrows are messages sent without waiting. A `○` on a box's edge is an outlet.
 
 **Component view.** `Warehouse` is collapsed, so the `items` edge leaves from it.
 
@@ -83,13 +83,13 @@ Sketches of what each review level should show. Stage 3 replaces them with `expe
  │     │                                      │  algorithm:     │            │
  │     │                                      │  reorder_       │            │
  │     │                                      │  quantity       │            │
- │     │                                      └─────────────────┘            │
+ │     │                                      └────────○────────┘            │
+ │     │                                               ╎ low_stock           │
  │     │                                               ╎ send raise(Reorder) │
  │     │                                               ▼                     │
  │     │                                      ┌─────────────────┐            │
  │     └── pending() ───────────────────────▶ │    Reorders     │            │
  │                                            └─────────────────┘            │
- │                                       lent to Inventory: &reorders        │
  └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -109,7 +109,7 @@ Sketches of what each review level should show. Stage 3 replaces them with `expe
 ```
 
 - `items` enters at the app, passes through `Warehouse` without being used, and is used only by `Inventory`. The reviewer sees exactly one component touching the database.
-- Messages go from a parent to its children, or from a child to an earlier sibling its parent lent it. `Reorders` started first, so the arrow from `Inventory` to it cannot be part of a loop.
+- Messages go from a parent to its children. `Inventory` announces low stock through its `low_stock` outlet, drawn as the port `○` on its box, and `Warehouse` connects that port to `Reorders`. `Inventory` never names `Reorders`, and an outlet never waits, so the arrow cannot be part of a loop.
 - Moving the reorder decision from `Warehouse` into `Inventory` changed no requirement, because requirements only see the app's boundary.
 - The examples table reaches both branches of the flowchart through HTTP requests alone.
 - Each component box has a failure section. `Inventory` shows `Capability(items) → rollback` and `Warehouse` shows `Message(inventory) → rollback`, each with its reason. `Reorders` has none, so the reviewer can see that any failure there stops the program.
