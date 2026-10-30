@@ -11,7 +11,7 @@
 #               ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                      ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 #                       ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                         ^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                         ^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^ meta.requirement.inset-req entity.name.type.inset
 #                                 ^ meta.requirement.inset-req punctuation.brackets.curly.inset
 #                                   ^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
@@ -29,15 +29,15 @@
 >  when StockTracker receives GET /items/bolt-m6
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                 ^^^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
 >  then StockTracker replies OK with "40"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^ meta.requirement.inset-req constant.other.status.inset-req
-#                               ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                               ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                    ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                     ^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                       ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
@@ -50,54 +50,54 @@
 >  given items is empty
 #  ^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #        ^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#              ^^ meta.requirement.inset-req keyword.operator.word.inset-req
-#                 ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#              ^^ meta.requirement.inset-req keyword.other.inset-req
+#                 ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 >  when StockTracker receives GET /items/bolt-m6
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                 ^^^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
 >  then StockTracker replies NotFound
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^^^^^ meta.requirement.inset-req constant.other.status.inset-req
 >  when StockTracker receives POST /items/bolt-m6/receipts with "20"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                  ^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                                          ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                                          ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                                               ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                                                ^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                                  ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 >  then StockTracker replies NotFound
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^^^^^ meta.requirement.inset-req constant.other.status.inset-req
 >  when StockTracker receives POST /items/bolt-m6/shipments with "5"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                  ^^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                                           ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                                           ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                                                ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                                                 ^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                                  ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 >  then StockTracker replies NotFound
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^^^^^ meta.requirement.inset-req constant.other.status.inset-req
 >  and items is empty
 #  ^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #      ^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#            ^^ meta.requirement.inset-req keyword.operator.word.inset-req
-#               ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#            ^^ meta.requirement.inset-req keyword.other.inset-req
+#               ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 >
 >requirement "Received stock is added to the quantity on hand"
 #^^^^^^^^^^^ meta.requirement.inset-req keyword.other.requirement.inset-req
@@ -112,7 +112,7 @@
 #               ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                      ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 #                       ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                         ^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                         ^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^ meta.requirement.inset-req entity.name.type.inset
 #                                 ^ meta.requirement.inset-req punctuation.brackets.curly.inset
 #                                   ^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
@@ -130,19 +130,19 @@
 >  when StockTracker receives POST /items/bolt-m6/receipts with "20"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                  ^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                                          ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                                          ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                                               ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                                                ^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                                  ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 >  then StockTracker replies OK with "23"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^ meta.requirement.inset-req constant.other.status.inset-req
-#                               ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                               ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                    ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                     ^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                       ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
@@ -154,7 +154,7 @@
 #             ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                    ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 #                     ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                       ^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                       ^^ meta.requirement.inset-req keyword.other.inset-req
 #                          ^^^^ meta.requirement.inset-req entity.name.type.inset
 #                               ^ meta.requirement.inset-req punctuation.brackets.curly.inset
 #                                 ^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
@@ -183,7 +183,7 @@
 #               ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                      ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 #                       ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                         ^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                         ^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^ meta.requirement.inset-req entity.name.type.inset
 #                                 ^ meta.requirement.inset-req punctuation.brackets.curly.inset
 #                                   ^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
@@ -201,19 +201,19 @@
 >  when StockTracker receives POST /items/bolt-m6/shipments with "5"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                  ^^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                                           ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                                           ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                                                ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                                                 ^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                                  ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 >  then StockTracker replies OK with "35"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^ meta.requirement.inset-req constant.other.status.inset-req
-#                               ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                               ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                    ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                     ^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                       ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
@@ -225,7 +225,7 @@
 #             ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                    ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 #                     ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                       ^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                       ^^ meta.requirement.inset-req keyword.other.inset-req
 #                          ^^^^ meta.requirement.inset-req entity.name.type.inset
 #                               ^ meta.requirement.inset-req punctuation.brackets.curly.inset
 #                                 ^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
@@ -254,7 +254,7 @@
 #               ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                      ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 #                       ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                         ^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                         ^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^ meta.requirement.inset-req entity.name.type.inset
 #                                 ^ meta.requirement.inset-req punctuation.brackets.curly.inset
 #                                   ^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
@@ -272,17 +272,17 @@
 >  when StockTracker receives POST /items/bolt-m6/shipments with "5"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                  ^^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                                           ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                                           ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                                                ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                                                 ^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                                  ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 >  then StockTracker replies Conflict
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^^^^^ meta.requirement.inset-req constant.other.status.inset-req
 >  and items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
 #  ^^^ meta.requirement.inset-req keyword.control.step.inset-req
@@ -292,7 +292,7 @@
 #             ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                    ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 #                     ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                       ^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                       ^^ meta.requirement.inset-req keyword.other.inset-req
 #                          ^^^^ meta.requirement.inset-req entity.name.type.inset
 #                               ^ meta.requirement.inset-req punctuation.brackets.curly.inset
 #                                 ^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
@@ -321,7 +321,7 @@
 #               ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                      ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 #                       ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                         ^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                         ^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^ meta.requirement.inset-req entity.name.type.inset
 #                                 ^ meta.requirement.inset-req punctuation.brackets.curly.inset
 #                                   ^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
@@ -339,34 +339,34 @@
 >  when StockTracker receives POST /items/bolt-m6/shipments with "1"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                  ^^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                                           ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                                           ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                                                ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                                                 ^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                                  ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 >  then StockTracker replies OK with "<left>"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^ meta.requirement.inset-req constant.other.status.inset-req
-#                               ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                               ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                    ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                     ^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req variable.parameter.placeholder.inset-req
 #                                           ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 >  when StockTracker receives GET /reorders
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                 ^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
 >  then StockTracker replies OK with <reorders>
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^ meta.requirement.inset-req constant.other.status.inset-req
-#                               ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                               ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                    ^^^^^^^^^^ meta.requirement.inset-req variable.parameter.placeholder.inset-req
 >  examples
 #  ^^^^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
@@ -442,7 +442,7 @@
 #               ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                      ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 #                       ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                         ^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                         ^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^ meta.requirement.inset-req entity.name.type.inset
 #                                 ^ meta.requirement.inset-req punctuation.brackets.curly.inset
 #                                   ^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
@@ -460,53 +460,53 @@
 >  when StockTracker receives POST /items/bolt-m6/shipments with "2"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                  ^^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                                           ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                                           ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                                                ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                                                 ^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                                  ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 >  then StockTracker replies OK with "10"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^ meta.requirement.inset-req constant.other.status.inset-req
-#                               ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                               ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                    ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                     ^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                       ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 >  when StockTracker receives POST /items/bolt-m6/shipments with "4"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                  ^^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                                           ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                                           ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                                                ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                                                 ^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                                  ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 >  then StockTracker replies OK with "6"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^ meta.requirement.inset-req constant.other.status.inset-req
-#                               ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                               ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                    ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                     ^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                      ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 >  when StockTracker receives GET /reorders
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                 ^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
 >  then StockTracker replies OK with "bolt-m6 44\n"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^ meta.requirement.inset-req constant.other.status.inset-req
-#                               ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                               ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                    ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                     ^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                               ^^ meta.requirement.inset-req string.quoted.double.inset-req constant.character.escape.inset-req
@@ -525,7 +525,7 @@
 #               ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                      ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 #                       ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                         ^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                         ^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^ meta.requirement.inset-req entity.name.type.inset
 #                                 ^ meta.requirement.inset-req punctuation.brackets.curly.inset
 #                                   ^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req
@@ -543,21 +543,21 @@
 >  and items fails
 #  ^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #      ^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#            ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#            ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 >  when StockTracker receives POST /items/bolt-m6/receipts with "20"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                  ^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                                          ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                                          ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                                               ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                                                ^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                                  ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 >  then StockTracker replies InternalServerError
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                    ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                    ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req constant.other.status.inset-req
 >  and items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
 #  ^^^ meta.requirement.inset-req keyword.control.step.inset-req
@@ -567,7 +567,7 @@
 #             ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                    ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 #                     ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                       ^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                       ^^ meta.requirement.inset-req keyword.other.inset-req
 #                          ^^^^ meta.requirement.inset-req entity.name.type.inset
 #                               ^ meta.requirement.inset-req punctuation.brackets.curly.inset
 #                                 ^^^^^^^ meta.requirement.inset-req variable.other.member.inset-req

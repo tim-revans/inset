@@ -6,15 +6,15 @@
 >  given products is empty
 #  ^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #        ^^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#                 ^^ meta.requirement.inset-req keyword.operator.word.inset-req
-#                    ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                 ^^ meta.requirement.inset-req keyword.other.inset-req
+#                    ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 >  when PriceImport receives POST /price-lists with
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                   ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                 ^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                              ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 >    """
 #    ^^^ meta.requirement.inset-req string.quoted.triple.inset-req punctuation.definition.string.begin.inset-req
 >    sku,name,net
@@ -28,9 +28,9 @@
 >  then PriceImport replies OK with "Products imported: 2"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                           ^^ meta.requirement.inset-req constant.other.status.inset-req
-#                              ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                   ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                    ^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                        ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
@@ -42,7 +42,7 @@
 #                ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                       ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 #                        ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                          ^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                          ^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^^^^^ meta.requirement.inset-req entity.name.type.inset
 #                                     ^ meta.requirement.inset-req punctuation.brackets.curly.inset
 #                                       ^^^^ meta.requirement.inset-req variable.other.member.inset-req
@@ -67,7 +67,7 @@
 #                ^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                      ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 #                       ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                         ^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                         ^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^^^^ meta.requirement.inset-req entity.name.type.inset
 #                                    ^ meta.requirement.inset-req punctuation.brackets.curly.inset
 #                                      ^^^^ meta.requirement.inset-req variable.other.member.inset-req
@@ -93,15 +93,15 @@
 >  given products is empty
 #  ^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #        ^^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#                 ^^ meta.requirement.inset-req keyword.operator.word.inset-req
-#                    ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                 ^^ meta.requirement.inset-req keyword.other.inset-req
+#                    ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 >  when PriceImport receives POST /price-lists with
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                   ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                 ^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                              ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 >    """
 #    ^^^ meta.requirement.inset-req string.quoted.triple.inset-req punctuation.definition.string.begin.inset-req
 >    sku,name,net
@@ -113,9 +113,9 @@
 >  then PriceImport replies OK with "Products imported: 1"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                           ^^ meta.requirement.inset-req constant.other.status.inset-req
-#                              ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                   ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                    ^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                        ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
@@ -127,7 +127,7 @@
 #                ^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                       ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 #                        ^ meta.requirement.inset-req punctuation.brackets.square.inset
-#                          ^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                          ^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^^^^^ meta.requirement.inset-req entity.name.type.inset
 #                                     ^ meta.requirement.inset-req punctuation.brackets.curly.inset
 #                                       ^^^^ meta.requirement.inset-req variable.other.member.inset-req
@@ -153,15 +153,15 @@
 >  given products is empty
 #  ^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #        ^^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#                 ^^ meta.requirement.inset-req keyword.operator.word.inset-req
-#                    ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                 ^^ meta.requirement.inset-req keyword.other.inset-req
+#                    ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 >  when PriceImport receives POST /price-lists with "sku,name,net\n"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                   ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                 ^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                              ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                                   ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                                    ^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                                ^^ meta.requirement.inset-req string.quoted.double.inset-req constant.character.escape.inset-req
@@ -169,17 +169,17 @@
 >  then PriceImport replies OK with "Products imported: 0"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                           ^^ meta.requirement.inset-req constant.other.status.inset-req
-#                              ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                   ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                    ^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                        ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 >  and products is empty
 #  ^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #      ^^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#               ^^ meta.requirement.inset-req keyword.operator.word.inset-req
-#                  ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#               ^^ meta.requirement.inset-req keyword.other.inset-req
+#                  ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 >
 >requirement "A price list with any invalid row is refused whole, naming each invalid line"
 #^^^^^^^^^^^ meta.requirement.inset-req keyword.other.requirement.inset-req
@@ -189,15 +189,15 @@
 >  given products is empty
 #  ^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #        ^^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#                 ^^ meta.requirement.inset-req keyword.operator.word.inset-req
-#                    ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                 ^^ meta.requirement.inset-req keyword.other.inset-req
+#                    ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 >  when PriceImport receives POST /price-lists with
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                   ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                 ^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                              ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 >    """
 #    ^^^ meta.requirement.inset-req string.quoted.triple.inset-req punctuation.definition.string.begin.inset-req
 >    sku,name,net
@@ -213,9 +213,9 @@
 >  then PriceImport replies BadRequest with
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                           ^^^^^^^^^^ meta.requirement.inset-req constant.other.status.inset-req
-#                                      ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                      ^^^^ meta.requirement.inset-req keyword.other.inset-req
 >    """
 #    ^^^ meta.requirement.inset-req string.quoted.triple.inset-req punctuation.definition.string.begin.inset-req
 >    line 3: expected 3 fields, found 2
@@ -227,8 +227,8 @@
 >  and products is empty
 #  ^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #      ^^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#               ^^ meta.requirement.inset-req keyword.operator.word.inset-req
-#                  ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#               ^^ meta.requirement.inset-req keyword.other.inset-req
+#                  ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 >
 >requirement "A net price that is negative, has more than two decimal places or is not a number is refused"
 #^^^^^^^^^^^ meta.requirement.inset-req keyword.other.requirement.inset-req
@@ -238,15 +238,15 @@
 >  given products is empty
 #  ^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #        ^^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#                 ^^ meta.requirement.inset-req keyword.operator.word.inset-req
-#                    ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                 ^^ meta.requirement.inset-req keyword.other.inset-req
+#                    ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 >  when PriceImport receives POST /price-lists with
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                   ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                 ^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                              ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 >    """
 #    ^^^ meta.requirement.inset-req string.quoted.triple.inset-req punctuation.definition.string.begin.inset-req
 >    sku,name,net
@@ -259,9 +259,9 @@
 >  then PriceImport replies BadRequest with
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                           ^^^^^^^^^^ meta.requirement.inset-req constant.other.status.inset-req
-#                                      ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                      ^^^^ meta.requirement.inset-req keyword.other.inset-req
 >    """
 #    ^^^ meta.requirement.inset-req string.quoted.triple.inset-req punctuation.definition.string.begin.inset-req
 >    line 2: net price "<net>" is not a price
@@ -273,8 +273,8 @@
 >  and products is empty
 #  ^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #      ^^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#               ^^ meta.requirement.inset-req keyword.operator.word.inset-req
-#                  ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#               ^^ meta.requirement.inset-req keyword.other.inset-req
+#                  ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 >  examples
 #  ^^^^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 >  | net   |
@@ -305,7 +305,7 @@
 #          ^^^ meta.requirement.inset-req variable.parameter.placeholder.inset-req
 #             ^ meta.requirement.inset-req punctuation.separator.colon.inset
 #               ^^^^^^^ meta.requirement.inset-req entity.name.type.inset
-#                       ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                       ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^ meta.requirement.inset-req variable.other.inset-req
 #                                 ^^ meta.requirement.inset-req keyword.operator.comparison.inset
 #                                    ^^^ meta.requirement.inset-req entity.name.function.macro.inset
@@ -324,15 +324,15 @@
 >  given products is empty
 #  ^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #        ^^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#                 ^^ meta.requirement.inset-req keyword.operator.word.inset-req
-#                    ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                 ^^ meta.requirement.inset-req keyword.other.inset-req
+#                    ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 >  when PriceImport receives POST /price-lists with
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                   ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                 ^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                              ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 >    """
 #    ^^^ meta.requirement.inset-req string.quoted.triple.inset-req punctuation.definition.string.begin.inset-req
 >    sku,name,net
@@ -345,9 +345,9 @@
 >  then PriceImport replies OK with "Products imported: 1"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                           ^^ meta.requirement.inset-req constant.other.status.inset-req
-#                              ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                   ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                    ^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                        ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
@@ -374,7 +374,7 @@
 #          ^^^ meta.requirement.inset-req variable.parameter.placeholder.inset-req
 #             ^ meta.requirement.inset-req punctuation.separator.colon.inset
 #               ^^^^^^^ meta.requirement.inset-req entity.name.type.inset
-#                       ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                       ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                             ^^^ meta.requirement.inset-req variable.other.inset-req
 #                                 ^^ meta.requirement.inset-req keyword.operator.comparison.inset
 #                                    ^^^ meta.requirement.inset-req entity.name.function.macro.inset
@@ -393,15 +393,15 @@
 >  given products is empty
 #  ^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #        ^^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
-#                 ^^ meta.requirement.inset-req keyword.operator.word.inset-req
-#                    ^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                 ^^ meta.requirement.inset-req keyword.other.inset-req
+#                    ^^^^^ meta.requirement.inset-req keyword.other.inset-req
 >  when PriceImport receives POST /price-lists with
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                   ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                            ^^^^ meta.requirement.inset-req constant.language.http-method.inset-req
 #                                 ^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
-#                                              ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 >    """
 #    ^^^ meta.requirement.inset-req string.quoted.triple.inset-req punctuation.definition.string.begin.inset-req
 >    sku,name,net
@@ -414,9 +414,9 @@
 >  then PriceImport replies OK with "Products imported: 1"
 #  ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
 #       ^^^^^^^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
-#                   ^^^^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                   ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                           ^^ meta.requirement.inset-req constant.other.status.inset-req
-#                              ^^^^ meta.requirement.inset-req keyword.operator.word.inset-req
+#                              ^^^^ meta.requirement.inset-req keyword.other.inset-req
 #                                   ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
 #                                    ^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                                        ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req

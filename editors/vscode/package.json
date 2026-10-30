@@ -83,10 +83,7 @@
       "editor.tokenColorCustomizations": {
         "textMateRules": [
           {
-            "scope": [
-              "markup.heading.requirement.inset-req",
-              "keyword.control.step.inset-req"
-            ],
+            "scope": "markup.heading.requirement.inset-req",
             "settings": {
               "fontStyle": "bold"
             }

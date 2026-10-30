@@ -16,9 +16,9 @@ code --install-extension target/vscode/inset.vsix
 ## What it highlights
 
 - Code: Inset's keywords (`app`, `component`, `setting`, `grant`, `start`, `failure`), route attributes with their HTTP method, `{param}` segments and `via` capability, capability types, and boundary crossings: `move` and `&` where a value crosses into another component, `send` and `fork`.
-- Requirements: the requirement sentence as a heading, `given`, `when`, `then` and `and` in bold, paths, statuses, `<placeholders>`, `"""` text blocks and `examples` tables, whose headings share the colour of the placeholders they name.
+- Requirements: the requirement sentence, as a bold heading so it stands out from the steps below it; the step keywords (`given`, `when`, `then`, `and`) and the dialect's fixed words (`receives`, `replies`, `with`, `is`, `empty`, `fails`); paths, statuses, `<placeholders>`, `"""` text blocks and `examples` tables, whose headings share the colour of the placeholders they name.
 
-Boundary crossings, `send` and `fork` are bold, and capabilities are underlined, whatever the colour theme. These come from `editor.tokenColorCustomizations` defaults, so your own setting of it replaces them.
+Whatever the colour theme, the requirement sentence is the only bold text in a requirements file, boundary crossings, `send` and `fork` are bold in code, and capabilities are underlined. These come from `editor.tokenColorCustomizations` defaults, so your own setting of it replaces them.
 
 ## Grammar tests
 

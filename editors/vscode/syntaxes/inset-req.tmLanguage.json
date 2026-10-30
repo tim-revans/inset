@@ -123,7 +123,7 @@
           "name": "entity.name.type.app.inset-req"
         },
         "2": {
-          "name": "keyword.operator.word.inset-req"
+          "name": "keyword.other.inset-req"
         },
         "3": {
           "name": "constant.language.http-method.inset-req"
@@ -145,7 +145,7 @@
           "name": "entity.name.type.app.inset-req"
         },
         "2": {
-          "name": "keyword.operator.word.inset-req"
+          "name": "keyword.other.inset-req"
         },
         "3": {
           "name": "constant.other.status.inset-req"
@@ -263,7 +263,7 @@
         },
         {
           "match": "\\b(with|is|empty|fails|via|where)\\b",
-          "name": "keyword.operator.word.inset-req"
+          "name": "keyword.other.inset-req"
         },
         {
           "match": "\\b(true|false)\\b",
