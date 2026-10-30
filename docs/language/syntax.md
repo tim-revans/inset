@@ -18,6 +18,7 @@ An AI writes Inset source, and a human reviews the diagrams and requirement test
 - **New concepts look new.** Rust has no components, capabilities, apps or requirements, so these get their own keywords, which a model cannot mistake for Rust.
 - **Data flow is written down.** Every value or capability that crosses a component boundary says whether it is moved, lent or copied, so the diagram can label each arrow truthfully.
 - **Capabilities have one origin and one holder.** Capabilities enter the program only through the app's `grant` statements, reach components only by being moved down, and are held by one component at a time, so every external access appears as exactly one diagram edge.
+- **Requirements see only the outside.** A requirement tests what the program does through its boundary: HTTP requests and replies, and what its granted capabilities hold. How the program is built is the diagram's job.
 - **Structure is a tree.** Components nest, and a component sends messages only to the children it started. The diagram reads from the outside in, and no two components can end up waiting on each other.
 
 ## Two dialects
@@ -27,7 +28,7 @@ An AI writes Inset source, and a human reviews the diagrams and requirement test
 | Code | `*.inset` | Rust: braces, semicolons, Rust's types and expressions | The AI that writes it |
 | Requirements | `*.req.inset` | Given/When/Then: one step per line, indented under the requirement | The software engineer who reviews it |
 
-A program is a directory of UTF-8 files of both kinds. All the files form one namespace, with no imports. The file name decides the dialect, so the two block styles never mix in one file. The Stock tracker splits its code across two files.
+A program is a directory of UTF-8 files of both kinds: code in `src/` and requirements in `requirements/` (see [Requirements and coverage](#requirements-and-coverage)). All the files form one namespace, with no imports. The file name decides the dialect, so the two block styles never mix in one file. The Stock tracker splits its code across two files.
 
 *Why two dialects:* each one is matched to its reader. Braces suit code, where a model writes them reliably and whitespace mistakes cannot change the meaning. Prose suits requirements, which a person must be able to read without knowing the code.
 
@@ -299,7 +300,7 @@ fn add_vat(net: Decimal) -> Decimal {
 - An algorithm inside a component can be called only by that component, as `Self::name(...)`. Its full name is `Component::name`, as with a Rust associated function. `Warehouse::reorder_quantity` lives in a component that has children, so algorithms are not limited to leaf components.
 - An algorithm is pure. With no `self`, it cannot reach a capability or a child, and it cannot be `async`. It can call other algorithms and use `fork`.
 
-*Why algorithms are pure:* the flowchart then shows the whole of what the algorithm does, and table and property tests need no fake capabilities. An algorithm that needs stored data is given it by the handler that calls it, so the capability edge stays on the component.
+*Why algorithms are pure:* the flowchart then shows the whole of what the algorithm does, with no effect hidden inside it. An algorithm that needs stored data is given it by the handler that calls it, so the capability edge stays on the component.
 
 ### Structured concurrency
 
@@ -339,7 +340,7 @@ extern component CsvReader {
 - Its fields are the capabilities it holds, as in any component. `CsvReader` has none. *(Draft: an external component with capabilities.)*
 - `#[rust(path = ..., crates = [...])]` names the Rust file that implements it, relative to the file declaring it, and the crates that file may use, as `name@version`.
 - The Rust file defines a type with the component's name and the declared functions. It may use the Inset types of the program, such as `Row`. The compiler checks it against the declaration. *(Draft: stage 13 fixes the exact Rust interface. See [open question 8](open-questions.md).)*
-- An external component is started, sent messages and tested like any component.
+- An external component is started and sent messages like any component. Like any component, requirements reach it only through the app, as CSV import's "A field in quotes may contain commas" does.
 
 *Why `extern`:* in Rust, `extern` declares something whose body is written elsewhere, which is what this is. `component` after it says what kind of thing is declared.
 
@@ -347,55 +348,49 @@ extern component CsvReader {
 
 **Status:** Used.
 
-Each requirement is exactly one test. The test opens with the requirement as a sentence, then names its subject, then states the behaviour.
+Each requirement is exactly one test of what the program does, seen from outside. The test opens with the requirement as a sentence, then states the behaviour in steps.
 
 ```
 requirement "Visitors are greeted by the name in the web address"
-  component Greeter
-  when Greeter receives GET /hello/Ada
-  then Greeter replies OK with "Hello, Ada!"
+  when HelloHttp receives GET /hello/Ada
+  then HelloHttp replies OK with "Hello, Ada!"
 ```
 
-**Layout.** A requirement starts at the left margin. Its lines are indented under it by two spaces, one line per step. A step continues onto following lines that are indented further, as in the `CsvReader` requirement. Tabs are an error. `//` starts a comment.
+**Layout.** A requirement starts at the left margin. Its lines are indented under it by two spaces, one line per step. A step continues onto following lines that are indented further. Tabs are an error. `//` starts a comment.
 
 **Name.** The text after `requirement` is the requirement. It is unique in the program, and it is what test reports show.
 
-**Subject.** The first line is one of:
+**What a requirement can see.** A requirement tests the app as a black box. It can send the app HTTP requests, set up what the app's granted capabilities hold, and observe the replies and what the capabilities hold afterwards. It cannot name a component, a message or an algorithm. The test starts the app with a fake for each `grant`, and every component starts for real.
 
-- `component Name`. The component is tested as a black box: the test can only send it messages and requests, and observe what it replies and what its capabilities hold. The test starts it with a fake for each capability field. Its children start for real, from its own `start` statements, and receive the fakes it hands them. So a test of `Warehouse` also exercises `Inventory` and `Reorders`. An external component is tested the same way. A component with fields that are not capabilities cannot be a subject yet. See [open question 10](open-questions.md).
-- `algorithm name`, or `algorithm Component::name` for an algorithm inside a component. The body is then a table or a property.
+*Why requirements see only the outside:* review splits into jobs. The diagrams show how the program is built, and the requirements state what it must do. A requirement that named `Inventory` or `reorder_quantity` would write the AI's own design into the statement of intent, which is where a hidden assumption does the most harm, because the reviewer approves it as a requirement. A requirement written against the outside also survives any restructuring of the inside. The cost is that a failure names the behaviour that broke, not the code that broke it. The diagram and the coverage overlay show where to look.
 
 ### Steps
 
-The compiler resolves every step against the program, so a step that names an unknown message, route or capability is a compile error, not a test failure.
+The compiler resolves every step against the program, so a step that names an unknown route or capability is a compile error, not a test failure.
 
 | Step | Meaning |
 | --- | --- |
-| `given <fact>` | Sets up the state of a fake capability before the test |
-| `when Component receives message(args)` | Delivers a message to the subject |
-| `when Component receives METHOD /path` | Delivers an HTTP request to the subject |
-| `when Component receives METHOD /path with body` | Delivers an HTTP request with a body |
-| `then Component replies value` | The subject's reply to the message equals `value` |
-| `then Component replies Status` | The subject's HTTP response has the status and an empty body |
-| `then Component replies Status with body` | The subject's HTTP response has the status, and its body equals `body` |
-| `then <fact>` | A fake capability holds this state now |
+| `given <fact>` | Sets up what a fake capability holds before the test |
+| `when App receives METHOD /path` | Delivers an HTTP request to the app |
+| `when App receives METHOD /path with body` | Delivers an HTTP request with a body |
+| `then App replies Status` | The response has the status and an empty body |
+| `then App replies Status with body` | The response has the status, and its body equals `body` |
+| `then <fact>` | A fake capability holds this now |
+| `then <check>` | A Rust condition on what fake capabilities hold is true |
 | `and ...` | Repeats the kind of the step before it |
 
-- Steps run in order. A requirement may have several `when` steps, each followed by the `then` steps that check it, as in "Stock is reordered once it falls to its reorder level".
+- `App` is the name of the program's app, so the steps read as sentences about the program.
+- Steps run in order. A requirement may have several `when` steps, each followed by the `then` steps that check it, as in "A new reorder for an item replaces its earlier one". A `then ... replies` step checks the reply to the most recent `when`.
 - A fake capability starts empty, so `given items is empty` states the default. It is written when the empty state is part of the requirement.
-- When the subject holds more than one `HttpServer`, the `when` step names the one to use: `when Greeter receives GET /hello/Ada via http`. *(Draft.)*
+- The path is written without quotes, as it would appear in a browser's address bar.
+- Statuses are written with their standard names in `UpperCamelCase`, such as `OK`, `NotFound`, `Conflict` and `BadRequest`.
+- When the app grants more than one `HttpServer`, the `when` step names the one to use: `when HelloHttp receives GET /hello/Ada via http`. *(Draft.)*
 
-**Messages.** A message step names the message exactly as declared, with its arguments as values: `when Inventory receives ship("bolt-m6", 5)`. The test lends or moves each argument as the message's parameter types require.
-
-*Why message steps use the declared name:* reviewers are software engineers, and the step is resolved by the compiler. Any friendlier spelling, such as `GetStock`, would need a mapping that is glue code under another name. The plain-English part of a requirement is its sentence.
-
-**HTTP.** The path is written without quotes, as it would appear in a browser's address bar. Statuses are written with their standard names in `UpperCamelCase`, such as `OK`, `NotFound`, `Conflict` and `BadRequest`. A `then` after an HTTP request expects a status; a `then` after a message expects a value.
-
-*Why HTTP steps use HTTP terms:* requirements are reviewed by software engineers, so steps use the precise terms of the boundary they test. At an HTTP boundary, the method and the status are often the requirement itself, such as a missing item giving `NotFound`. Plain verbs such as "asks for" would hide them behind a vocabulary the reviewer has to learn anyway. The plain-English part of a requirement is its sentence, which is what test reports show.
+*Why steps use HTTP terms:* requirements are reviewed by software engineers, so steps use the precise terms of the boundary they test. At an HTTP boundary, the method and the status are often the requirement itself, such as a missing item giving `NotFound`. Plain verbs such as "asks for" would hide them behind a vocabulary the reviewer has to learn anyway. The plain-English part of a requirement is its sentence, which is what test reports show.
 
 ### Capability facts
 
-A fact states what a fake capability holds. The capability is named by the subject's field. Each capability type defines the facts that can be stated about it, in a fixed form, so no phrase needs glue code.
+A fact states what a fake capability holds. The capability is named by its `grant`. Each capability type defines the facts that can be stated about it, in a fixed form, so no phrase needs glue code.
 
 | Capability | Fact | Meaning |
 | --- | --- | --- |
@@ -403,52 +398,92 @@ A fact states what a fake capability holds. The capability is named by the subje
 | `Table<K, V>` | `name is empty` | The table holds nothing |
 | `HttpServer` | None | Its requests and replies are the `when` and `then` steps |
 
-The same fact sets up state after `given`, and checks it after `then`. Facts after `then` are how a requirement observes what the subject did through its capabilities, such as `and items["bolt-m6"] is Item { on_hand: 35, ... }`. A subject can send messages only to its own children, which run inside the test, so capabilities and replies are everything it can do that a test could observe.
+The same fact sets up state after `given`, and checks it after `then`. Facts after `then` are how a requirement observes what the program did, such as `and items["bolt-m6"] is Item { on_hand: 35, ... }`. Replies and capabilities are everything a program can do that anyone outside it could observe.
+
+A **check** is a Rust condition, for a `then` step whose expected value is not known exactly, as in a property. In a check, `name[key]` is the value the table holds under `key`, and the test fails if it holds none: `and products["bolt-m6"].gross >= <net>`.
 
 *Why facts look like indexing:* `items["bolt-m6"]` is how a Rust programmer reads one entry of a map, and `is` reads as a statement of fact both when setting up and when checking.
 
 ### Values
 
-Values in steps, tables and facts are written as Rust literals and constructors: `"Hello, Ada!"`, `40`, `Some(12.50)`, `Ok(Item { ... })` and `[Row { ... }, ...]`.
+Values in facts are written as Rust literals and constructors: `40`, `"M6 bolt"`, `Item { on_hand: 40, ... }`.
 
-- A value takes the type the program expects in that place. `"M6 bolt"` is a `String` in a `String` field, `0.10` is a `Decimal` in a `Decimal` field, and `[...]` is a `Vec`.
+- A value takes the type the program expects in that place. `"M6 bolt"` is a `String` in a `String` field, and `0.10` is a `Decimal` in a `Decimal` field.
 - An HTTP body is text. It is written as a string literal, or as a text block.
 
 **Text blocks.** A body that spans lines is written as a text block, after `with` at the end of the step's line. The block starts and ends with `"""` on lines of their own, indented under the step. Each line between them is one line of the text, ending in a newline, with the block's indentation removed. Text blocks come from Gherkin's doc strings.
 
 ```
-  when Importer receives POST /price-lists with
+  when PriceImport receives POST /price-lists with
     """
     sku,name,net
     bolt-m6,M6 bolt,0.10
     """
 ```
 
-### Tables
+### Examples
 
-A requirement with several cases lists them in a table. Each column named after a parameter is an input. The one remaining column is the expected result, and its heading is free text. Each row is one case, and the report shows each row's result.
+A requirement with several cases writes its steps once, with `<name>` placeholders, and lists the cases in an `examples` table after the steps. Each heading names a placeholder, each row is one case, and the report shows each row's result. This is Gherkin's Scenario Outline.
 
 ```
-requirement "Stock at or below its reorder level is topped up to its target level"
-  algorithm Warehouse::reorder_quantity
-  | on_hand | reorder_level | target_level | quantity to order |
-  | 11      | 10            | 50           | 0                 |
-  | 10      | 10            | 50           | 40                |
+requirement "Stock that falls to its reorder level or below is reordered up to its target level"
+  given items["bolt-m6"] is Item { on_hand: <on hand>, reorder_level: 10, target_level: <target level> }
+  when StockTracker receives POST /items/bolt-m6/shipments with "1"
+  then StockTracker replies OK with "<left>"
+  when StockTracker receives GET /reorders
+  then StockTracker replies OK with <reorders>
+  examples
+  | on hand | target level | left | reorders       |
+  | 12      | 50           | 11   | ""             |
+  | 11      | 50           | 10   | "bolt-m6 40\n" |
 ```
+
+- Only `<name>` where `name` is a heading counts as a placeholder, so `<` and `>` keep their Rust meaning elsewhere in a step.
+- A placeholder is replaced by its cell's text before the step is read, so it may stand for a whole value, as `<reorders>` does, or for part of a path, a string or a text block, as `"<left>"` does.
+- Headings are free text, without `|`, `<` or `>`, so they can read as English.
+- The compiler checks every row's steps, so a cell of the wrong type is a compile error.
 
 ### Properties
 
-A rule that holds for every input is written with `for all`, and the compiler generates the inputs. The `where` condition limits the inputs, and the indented line below is the property itself. Both are Rust expressions, so they follow Rust's typing, as in `dec!(0)`.
+A rule that holds for every input is written with `for all` before the steps, and the compiler generates the inputs. The `where` condition limits them. Both are Rust, so they follow Rust's typing, as in `dec!(0)`. The steps use the generated value as the placeholder `<name>`, with the same replacement as in examples, using the value's `Display` text. In a check, the placeholder is the value itself.
 
 ```
-requirement "The gross price of a whole number of pence is never below the net price"
-  algorithm add_vat
+requirement "The gross price is never below the net price"
   for all net: Decimal where net >= dec!(0) && net.scale() <= 2
-    add_vat(net) >= net
+  given products is empty
+  when PriceImport receives POST /price-lists with
+    """
+    sku,name,net
+    bolt-m6,M6 bolt,<net>
+    """
+  then PriceImport replies OK with "Products imported: 1"
+  and products["bolt-m6"].gross >= <net>
 ```
 
 - `for all a: A, b: B where ...` generates several inputs. *(Draft.)*
 - A property that fails reports the smallest input it found that breaks it.
+
+## Requirements and coverage
+
+**Status:** The layout is Used. `#[defensive]` is Draft.
+
+A program's directory holds its code in `src/` and its requirements in `requirements/`. Together they are one program and one namespace. The compiler rejects a `*.req.inset` file in `src/` and a `*.inset` code file in `requirements/`.
+
+*Why requirements have their own directory:* the requirements are the statement of intent, which the reviewer reads and approves, and `src/` is what the diagram is drawn from, which the reviewer never reads. Separate directories make a change of intent visible in any diff, let a repository require a human to approve changes under `requirements/`, and guard against an AI quietly changing a requirement to match what it built. They also let requirements be agreed before the code exists.
+
+**Coverage.** Every branch of the code should be reached by some requirement. Code that no requirement reaches is either a missing requirement or behaviour nobody asked for, and the coverage overlay marks it on the diagram.
+
+Some code cannot be reached from outside by design, such as a check for a state that the rest of the program rules out. It is marked with `#[defensive("reason")]` on the statement or `match` arm. *(Draft.)*
+
+```rust
+let Some(net) = parse_price(&fields[2]) else {
+    #[defensive("parse_row has already checked every price")]
+    return Err(ImportError::Internal);
+};
+```
+
+- The overlay shows defensive code as excused, not as covered, with its reason, so the reviewer judges each excuse.
+- Defensive code that a requirement does reach is reported, because the reason given for it is then wrong.
 
 ## Grammar of the used subset
 
@@ -504,26 +539,22 @@ Requirements dialect (`*.req.inset`):
 
 ```
 file         = { requirement } ;
-requirement  = "requirement" STRING NEWLINE INDENT subject body DEDENT ;
-subject      = ( "component" Ident | "algorithm" [ Ident "::" ] ident ) NEWLINE ;
-body         = { step } | table | property ;
+requirement  = "requirement" STRING NEWLINE INDENT [ for_all ] step { step } [ examples ] DEDENT ;
+for_all      = "for" "all" ident ":" type [ "where" EXPR ] NEWLINE ;
 
 step         = ( "given" fact
-               | "when" Ident "receives" ( message | request )
-               | "then" ( Ident "replies" reply | fact )
+               | "when" Ident "receives" HTTP_METHOD path [ "with" text ]
+               | "then" ( Ident "replies" Ident [ "with" text ] | fact | EXPR )
                | "and" step_rest ) NEWLINE ;
 fact         = ident "[" value "]" "is" value | ident "is" "empty" ;
-message      = ident "(" [ value { "," value } ] ")" ;
-request      = HTTP_METHOD path [ "with" text ] ;
-reply        = Ident [ "with" text ] | value ;
 text         = STRING | NEWLINE INDENT '"""' NEWLINE { LINE NEWLINE } '"""' DEDENT ;
 path         = "/" segment { "/" segment } ;
 
-table        = row row { row } ;
+examples     = "examples" NEWLINE heading row { row } ;
+heading      = "|" HEADING { "|" HEADING } "|" NEWLINE ;
 row          = "|" CELL { "|" CELL } "|" NEWLINE ;
-property     = "for" "all" ident ":" type [ "where" EXPR ] NEWLINE INDENT EXPR NEWLINE DEDENT ;
 
 value        = a Rust literal, or a struct, enum or list built from values ;
 ```
 
-`HTTP_METHOD` is one of `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. A `segment` is one or more characters other than whitespace and `/`. `step_rest` is the rest of a step of the same kind as the one before. In `reply`, an `Ident` is a status after an HTTP request; otherwise the reply is a value. A `CELL` is a value, or free text in the heading row. `EXPR` is a Rust expression.
+`HTTP_METHOD` is one of `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. A `segment` is one or more characters other than whitespace and `/`. `step_rest` is the rest of a step of the same kind as the one before. `EXPR` is a Rust expression. A `HEADING` is free text, and a `CELL` the text that replaces its placeholder. Placeholders, `<` free text `>`, are replaced before a step is read, so they may appear anywhere in a step.

@@ -58,7 +58,7 @@ component Importer {
         for (sku, product) in products {
             self.products.insert(sku, product).await;
         }
-        Ok(format!("Imported {count} products"))
+        Ok(format!("Products imported: {count}"))
     }
 }
 

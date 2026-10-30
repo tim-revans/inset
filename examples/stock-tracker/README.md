@@ -15,7 +15,7 @@ Tracks how many of each item a warehouse holds. Staff record stock that arrives 
 | --- | --- |
 | `src/stock.inset` | The app, which is granted the network and the stock table, and the data types |
 | `src/warehouse.inset` | `Warehouse` and the two components nested in it, `Inventory` and `Reorders` |
-| `src/stock.req.inset` | The requirement tests |
+| `requirements/stock.req.inset` | The requirement tests, written against the app's HTTP boundary |
 
 The program is split across two files to show that all the files of a program share one namespace.
 
@@ -34,13 +34,13 @@ The program is split across two files to show that all the files of a program sh
 | Request bodies | `body = quantity` reads the request body as a `u32` |
 | Error replies | `Option` replies `404 Not Found` for `None`. `ShipError` names a status on each variant |
 | Algorithm in a non-leaf component | `Warehouse::reorder_quantity`, which takes no `self` and so touches no capability |
-| Table test | The last requirement, one row per case of `reorder_quantity` |
+| Examples table | "Stock that falls to its reorder level...", one row per case of reordering, which covers every branch of `reorder_quantity` from outside |
 | Capability facts in tests | `given items["bolt-m6"] is Item { ... }` and `and items is empty` |
-| Message-level test | `when Inventory receives ship("bolt-m6", 5)` |
+| Several requests in one test | "A new reorder for an item replaces its earlier one" |
 
-It covers the brief's Stock tracker row: several actors, a database capability, an algorithm flowchart, and table tests.
+It covers the brief's Stock tracker row: several actors, a database capability, an algorithm flowchart, and table tests (written as an examples table against the app).
 
-Every branch of the code is reached by some requirement, so the coverage overlay should leave nothing uncovered.
+No requirement names a component or an algorithm, yet every branch of the code is reached by some requirement, so the coverage overlay should leave nothing uncovered.
 
 ## Expected diagrams
 
@@ -99,4 +99,4 @@ Sketches of what each review level should show. Stage 3 replaces them with `expe
 
 - `items` enters at the app, passes through `Warehouse` without being used, and is used only by `Inventory`. The reviewer sees exactly one component touching the database.
 - Messages only go from a parent to its children, so every arrow inside `Warehouse` points away from the routes.
-- The table test covers both branches of the flowchart.
+- The examples table reaches both branches of the flowchart through HTTP requests alone.

@@ -1,0 +1,54 @@
+requirement "The stock level of an item is its quantity on hand"
+  given items["bolt-m6"] is Item { on_hand: 40, reorder_level: 10, target_level: 50 }
+  when StockTracker receives GET /items/bolt-m6
+  then StockTracker replies OK with "40"
+
+requirement "An item that is not stocked is not found"
+  given items is empty
+  when StockTracker receives GET /items/bolt-m6
+  then StockTracker replies NotFound
+  when StockTracker receives POST /items/bolt-m6/receipts with "20"
+  then StockTracker replies NotFound
+  when StockTracker receives POST /items/bolt-m6/shipments with "5"
+  then StockTracker replies NotFound
+  and items is empty
+
+requirement "Received stock is added to the quantity on hand"
+  given items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
+  when StockTracker receives POST /items/bolt-m6/receipts with "20"
+  then StockTracker replies OK with "23"
+  and items["bolt-m6"] is Item { on_hand: 23, reorder_level: 10, target_level: 50 }
+
+requirement "Shipping takes the shipped quantity off the quantity on hand"
+  given items["bolt-m6"] is Item { on_hand: 40, reorder_level: 10, target_level: 50 }
+  when StockTracker receives POST /items/bolt-m6/shipments with "5"
+  then StockTracker replies OK with "35"
+  and items["bolt-m6"] is Item { on_hand: 35, reorder_level: 10, target_level: 50 }
+
+requirement "Shipping more than the quantity on hand is refused and changes nothing"
+  given items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
+  when StockTracker receives POST /items/bolt-m6/shipments with "5"
+  then StockTracker replies Conflict
+  and items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
+
+requirement "Stock that falls to its reorder level or below is reordered up to its target level"
+  given items["bolt-m6"] is Item { on_hand: <on hand>, reorder_level: 10, target_level: <target level> }
+  when StockTracker receives POST /items/bolt-m6/shipments with "1"
+  then StockTracker replies OK with "<left>"
+  when StockTracker receives GET /reorders
+  then StockTracker replies OK with <reorders>
+  examples
+  | on hand | target level | left | reorders       |
+  | 12      | 50           | 11   | ""             |
+  | 11      | 50           | 10   | "bolt-m6 40\n" |
+  | 1       | 50           | 0    | "bolt-m6 50\n" |
+  | 11      | 5            | 10   | ""             |
+
+requirement "A new reorder for an item replaces its earlier one"
+  given items["bolt-m6"] is Item { on_hand: 12, reorder_level: 10, target_level: 50 }
+  when StockTracker receives POST /items/bolt-m6/shipments with "2"
+  then StockTracker replies OK with "10"
+  when StockTracker receives POST /items/bolt-m6/shipments with "4"
+  then StockTracker replies OK with "6"
+  when StockTracker receives GET /reorders
+  then StockTracker replies OK with "bolt-m6 44\n"

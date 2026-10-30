@@ -14,7 +14,7 @@ nut-m6,M6 nut,0.05
 | --- | --- |
 | `src/import.inset` | The app, the data types, the `CsvReader` declaration, the `Importer` component, and the algorithms |
 | `src/csv_reader.rs` | The Rust that implements `CsvReader` with the `csv` crate |
-| `src/import.req.inset` | The requirement tests |
+| `requirements/import.req.inset` | The requirement tests, written against the app's HTTP boundary |
 
 ## What it exercises
 
@@ -25,15 +25,16 @@ nut-m6,M6 nut,0.05
 | External component as a child | `Importer` starts it with `start csv: CsvReader {}` and sends it messages like any component |
 | Structured concurrency | `fork for row in rows { ... }` in `parse_price_list` reads every row concurrently and joins the results in order |
 | Top-level algorithms | `parse_price_list`, `parse_row`, `parse_price` and `add_vat`, which take no `self` |
-| Property tests | "Any price ... reads back as itself" and "The gross price ... is never below the net price" |
-| Table test | `parse_price`, with `Option` results |
-| Test against an external boundary | The `CsvReader` requirement, which treats the Rust code as a black box |
+| Property tests | "Any net price ... is stored exactly" and "The gross price is never below the net price", which generate prices and post them in a price list |
+| Examples table | The refused net prices, filled into a text block |
+| Checks | `and products["bolt-m6"].gross >= <net>`, for a result a property cannot state exactly |
+| External code tested from outside | "A field in quotes may contain commas" tests the `csv` crate's behaviour through the app |
 | Text blocks in tests | The `"""` blocks holding a CSV body and a multi-line reply |
 | Error replies with a body | `ImportError::InvalidRows(String)` replies `400 Bad Request` with the string as its body |
 
 It covers the brief's CSV import row: an external Rust crate, structured concurrency, and property tests.
 
-The `add_vat` property only holds for whole numbers of pence. For a net price of `0.001`, VAT rounds the gross price down to `0.00`. The property's `where` clause says so, and `parse_price` enforces it.
+The gross price property only holds for whole numbers of pence. For a net price of `0.001`, VAT would round the gross price down to `0.00`. `parse_price` refuses such prices, and the property's `where` clause generates only whole pence.
 
 ## Expected diagrams
 

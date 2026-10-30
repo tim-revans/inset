@@ -7,7 +7,7 @@ A web server with one address. A request for `/hello/Ada` gets the text reply `H
 | File | Contents |
 | --- | --- |
 | `src/hello.inset` | The app, which receives the network capability from the host, and the `Greeter` component it starts |
-| `src/hello.req.inset` | The one requirement test |
+| `requirements/hello.req.inset` | The one requirement test |
 
 ## What it exercises
 
@@ -18,9 +18,9 @@ A web server with one address. A request for `/hello/Ada` gets the text reply `H
 | Component | `Greeter`, whose fields list the only capability it holds |
 | Route | `#[get("/hello/{name}", via = http)]` on `fn hello`, a handler for requests arriving through `http` |
 | Reply | The function's value, `format!("Hello, {name}!")`, sent as `200 OK` text |
-| Requirement test | One `when` / `then` test at the HTTP boundary of `Greeter` |
+| Requirement test | One `when` / `then` test at the app's HTTP boundary |
 
-It covers the brief's Hello HTTP row: one component, one route, one requirement test, and the network capability. It has no `given` step because `Greeter` holds no state.
+It covers the brief's Hello HTTP row: one component, one route, one requirement test, and the network capability. It has no `given` step because the app is granted nothing that holds state.
 
 ## Expected diagram
 

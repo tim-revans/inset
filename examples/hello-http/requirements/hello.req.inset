@@ -1,0 +1,3 @@
+requirement "Visitors are greeted by the name in the web address"
+  when HelloHttp receives GET /hello/Ada
+  then HelloHttp replies OK with "Hello, Ada!"
