@@ -52,16 +52,11 @@ impl Parser<'_> {
             T::Keyword(Kw::Fn | Kw::Async) => {
                 ItemKind::Function(self.parse_function(docs.clone(), attrs.clone(), vis.clone())?)
             }
-            T::Keyword(
-                kw @ (Kw::Struct
-                | Kw::Enum
-                | Kw::Extern
-                | Kw::Mod
-                | Kw::Use
-                | Kw::Impl
-                | Kw::Const
-                | Kw::Type),
-            ) => {
+            T::Keyword(Kw::Struct) => ItemKind::Struct(self.parse_struct()?),
+            T::Keyword(Kw::Enum) => ItemKind::Enum(self.parse_enum()?),
+            T::Keyword(Kw::Mod) => ItemKind::Mod(self.parse_mod()?),
+            T::Keyword(Kw::Use) => ItemKind::Use(self.parse_use()?),
+            T::Keyword(kw @ (Kw::Extern | Kw::Impl | Kw::Const | Kw::Type)) => {
                 let what = format!("`{}`", kw.as_str());
                 let span = self.span();
                 return Err(self.unsupported(&what, span));
@@ -181,7 +176,27 @@ impl Parser<'_> {
             match name.as_str() {
                 "message" => AttributeKind::Message,
                 "handed_down" => AttributeKind::HandedDown,
-                "derive" | "status" | "rust" | "defensive" => {
+                "derive" => AttributeKind::Derive(self.parse_attr_names(&name, name_span)?),
+                "status" => {
+                    let names = self.parse_attr_names(&name, name_span)?;
+                    match <[Ident; 1]>::try_from(names) {
+                        Ok([status]) => AttributeKind::Status(status),
+                        Err(names) => {
+                            let span = names.first().map_or(name_span, |n| n.span);
+                            return Err(self.report(
+                                Diagnostic::new(
+                                    "`#[status]` names one status",
+                                    span,
+                                    "expected one status name",
+                                )
+                                .with_help(
+                                    "write the status by its name, such as `#[status(NotFound)]`",
+                                ),
+                            ));
+                        }
+                    }
+                }
+                "rust" | "defensive" => {
                     return Err(self.unsupported(&format!("`#[{name}]`"), name_span));
                 }
                 _ => {
@@ -271,6 +286,241 @@ impl Parser<'_> {
             path,
             via,
             body,
+        })
+    }
+
+    /// `(Name, Name, ...)` after `derive` or `status`.
+    pub(super) fn parse_attr_names(
+        &mut self,
+        attribute: &str,
+        name_span: Span,
+    ) -> PResult<Vec<Ident>> {
+        let Some(open) = self.at(P::LParen).then(|| self.bump().span) else {
+            return Err(self.report(
+                Diagnostic::new(
+                    format!("`#[{attribute}]` needs its names in `(` `)`"),
+                    name_span,
+                    "the names go after this",
+                )
+                .with_help(if attribute == "derive" {
+                    "write the traits to derive, such as `#[derive(Clone, Debug)]`"
+                } else {
+                    "write the status by its name, such as `#[status(NotFound)]`"
+                }),
+            ));
+        };
+        let mut names = Vec::new();
+        while !self.at(P::RParen) {
+            names.push(self.parse_ident("a name")?);
+            if !self.eat(P::Comma) {
+                break;
+            }
+        }
+        self.expect_close(P::RParen, open, "the names")?;
+        Ok(names)
+    }
+
+    // ---- Data types and modules ------------------------------------------
+
+    /// Reports `<` after a type's name: a generic type is not supported yet.
+    fn no_generics(&mut self) -> PResult<()> {
+        if self.at(P::Lt) {
+            let span = self.span();
+            return Err(self.unsupported("a generic type", span));
+        }
+        Ok(())
+    }
+
+    pub(super) fn parse_struct(&mut self) -> PResult<Struct> {
+        self.bump();
+        let name = self.parse_ident("the struct's name")?;
+        self.no_generics()?;
+        match self.kind() {
+            T::Punct(P::LBrace) => {}
+            T::Punct(P::Semi) => {
+                let span = self.span();
+                return Err(self.unsupported("a unit struct", span));
+            }
+            T::Punct(P::LParen) => {
+                let span = self.span();
+                return Err(self.unsupported("a tuple struct", span));
+            }
+            _ => return Err(self.expected("`{` and the struct's fields")),
+        }
+        let open = self.bump().span;
+        let mut fields = Vec::new();
+        while !self.at(P::RBrace) && *self.kind() != T::Eof {
+            let docs = self.parse_docs();
+            let start = docs.first().map_or(self.span(), |d| d.span);
+            if self.at(P::Pound) {
+                let span = self.span();
+                return Err(self.report(Diagnostic::new(
+                    "a struct field takes no attributes",
+                    span,
+                    "remove this attribute",
+                )));
+            }
+            let vis = self.parse_vis()?;
+            let name = self.parse_ident("a field name")?;
+            self.expect(P::Colon, "the field's name")?;
+            let ty = self.parse_type()?;
+            fields.push(StructField {
+                docs,
+                vis,
+                name,
+                span: start.to(ty.span),
+                ty,
+            });
+            if !self.at(P::RBrace) {
+                self.expect(P::Comma, "the field")?;
+            }
+        }
+        self.expect_close(P::RBrace, open, "the struct's fields")?;
+        Ok(Struct { name, fields })
+    }
+
+    pub(super) fn parse_enum(&mut self) -> PResult<Enum> {
+        self.bump();
+        let name = self.parse_ident("the enum's name")?;
+        self.no_generics()?;
+        let open = self.expect(P::LBrace, "the enum's name")?;
+        let mut variants = Vec::new();
+        while !self.at(P::RBrace) && *self.kind() != T::Eof {
+            let docs = self.parse_docs();
+            let attrs = self.parse_attrs()?;
+            let start = docs
+                .first()
+                .map(|d| d.span)
+                .or(attrs.first().map(|a| a.span))
+                .unwrap_or(self.span());
+            let name = self.parse_ident("a variant's name")?;
+            let mut fields = Vec::new();
+            match self.kind() {
+                T::Punct(P::LParen) => {
+                    let open = self.bump().span;
+                    while !self.at(P::RParen) {
+                        fields.push(self.parse_type()?);
+                        if !self.eat(P::Comma) {
+                            break;
+                        }
+                    }
+                    self.expect_close(P::RParen, open, "the variant's types")?;
+                }
+                T::Punct(P::LBrace) => {
+                    let span = self.span();
+                    return Err(self.unsupported("a variant with named fields", span));
+                }
+                T::Punct(P::Eq) => {
+                    let span = self.span();
+                    return Err(self.unsupported("a variant's discriminant", span));
+                }
+                _ => {}
+            }
+            variants.push(Variant {
+                docs,
+                attrs,
+                span: start.to(self.prev_span()),
+                name,
+                fields,
+            });
+            if !self.at(P::RBrace) {
+                self.expect(P::Comma, "the variant")?;
+            }
+        }
+        self.expect_close(P::RBrace, open, "the enum's variants")?;
+        Ok(Enum { name, variants })
+    }
+
+    /// `mod name;`. A module's items are in a file of its own.
+    pub(super) fn parse_mod(&mut self) -> PResult<Ident> {
+        self.bump();
+        let name = self.parse_ident("the module's name")?;
+        if self.at(P::LBrace) {
+            let span = self.span();
+            return Err(self.report(
+                Diagnostic::new(
+                    "an inline module is not supported yet",
+                    span,
+                    "the parser does not handle this yet",
+                )
+                .with_help(format!(
+                    "write `mod {};` and put the module's items in a file of its own",
+                    name.name
+                )),
+            ));
+        }
+        self.expect(P::Semi, "the module's name")?;
+        Ok(name)
+    }
+
+    /// `use tree;`
+    pub(super) fn parse_use(&mut self) -> PResult<UseTree> {
+        self.bump();
+        if self.at(P::PathSep) {
+            let span = self.span();
+            return Err(self.report(
+                Diagnostic::new(
+                    "a `use` path cannot start with `::`",
+                    span,
+                    "a program has no other crates to name",
+                )
+                .with_help("start the path with `crate::`, `super::`, `self::` or a module's name"),
+            ));
+        }
+        let tree = self.parse_use_tree()?;
+        self.expect(P::Semi, "the `use` declaration")?;
+        Ok(tree)
+    }
+
+    pub(super) fn parse_use_tree(&mut self) -> PResult<UseTree> {
+        self.nested(|p| {
+            if p.at(P::LBrace) {
+                let open = p.bump().span;
+                let mut trees = Vec::new();
+                while !p.at(P::RBrace) {
+                    trees.push(p.parse_use_tree()?);
+                    if !p.eat(P::Comma) {
+                        break;
+                    }
+                }
+                let close = p.expect_close(P::RBrace, open, "the names")?;
+                return Ok(UseTree::Group(trees, open.to(close)));
+            }
+            if p.at(P::Star) {
+                let span = p.span();
+                return Err(p.report(
+                    Diagnostic::new(
+                        "a glob import is not supported yet",
+                        span,
+                        "the checker does not handle this yet",
+                    )
+                    .with_help("name each item to import, such as `use crate::{Item, Reorder};`"),
+                ));
+            }
+            let segment = match p.kind().clone() {
+                T::Ident(name) => Ident::new(name, p.bump().span),
+                T::Keyword(kw @ (Kw::Crate | Kw::Super | Kw::SelfValue)) => {
+                    Ident::new(kw.as_str(), p.bump().span)
+                }
+                T::Keyword(kw) => return Err(p.keyword_as_name(kw, "a name to import")),
+                _ => return Err(p.expected("a name to import")),
+            };
+            if p.eat(P::PathSep) {
+                let rest = p.parse_use_tree()?;
+                return Ok(UseTree::Path {
+                    segment,
+                    rest: Box::new(rest),
+                });
+            }
+            let alias = if p.eat_kw(Kw::As) {
+                Some(p.parse_ident("a name")?)
+            } else {
+                None
+            };
+            Ok(UseTree::Name {
+                name: segment,
+                alias,
+            })
         })
     }
 

@@ -1,3 +1,7 @@
+mod sizes;
+
+use sizes::Size;
+
 /// Every shape of diagram the compiler draws so far.
 app Shapes {
     /// The port to serve on.
@@ -48,6 +52,17 @@ component Front {
             .map(|w| describe(w.len() as i32))
             .collect();
         format!("{label}: {doubled} {}", Self::count(&words))
+    }
+
+    /// Sorts a number by its size.
+    #[get("/measure/{n}", via = web)]
+    fn measure(n: i32) -> String {
+        let size = sizes::classify(n);
+        let label = match size {
+            Size::Small => "small",
+            Size::Large(_) => "large",
+        };
+        format!("{label} {}", sizes::total(&[size]))
     }
 
     fn count(words: &[String]) -> usize {

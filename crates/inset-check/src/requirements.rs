@@ -343,10 +343,25 @@ fn check_status(name: &Ident, route: Option<&RouteInfo>, report: &mut impl FnMut
     let Some(route) = route else {
         return;
     };
-    let (mut possible, why) = match route.decl.reply {
-        Reply::Fallible => return,
-        Reply::Text => (vec!["OK"], "it returns a `String`"),
-        Reply::Optional => (vec!["OK", "NotFound"], "it returns an `Option<String>`"),
+    let (mut possible, why): (Vec<&str>, String) = match &route.decl.reply {
+        Reply::Unknown => return,
+        Reply::Text => (vec!["OK"], "it returns a `String`".into()),
+        Reply::Optional => (
+            vec!["OK", "NotFound"],
+            "it returns an `Option<String>`".into(),
+        ),
+        Reply::Fallible(statuses) => {
+            let mut possible = vec!["OK"];
+            for status in statuses {
+                if !possible.contains(&status.as_str()) {
+                    possible.push(status);
+                }
+            }
+            (
+                possible,
+                "it returns a `Result` whose error variants name these statuses".into(),
+            )
+        }
     };
     if route.decl.body {
         possible.push("BadRequest");

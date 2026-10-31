@@ -35,7 +35,7 @@ mod svg;
 mod theme;
 mod validate;
 
-pub use emit::{Emitted, emit, emit_with_sources};
+pub use emit::{Emitted, Source, emit, emit_with_sources};
 pub use model::Diagram;
 pub use theme::Theme;
 pub use validate::validate;

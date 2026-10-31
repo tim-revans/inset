@@ -98,7 +98,7 @@ impl Server<'_> {
             sources: emitted
                 .sources
                 .iter()
-                .map(|(id, span)| (id.clone(), location(emitted.file, *span)))
+                .map(|(id, source)| (id.clone(), location(source.file, source.span)))
                 .collect(),
             ..Picture::default()
         };

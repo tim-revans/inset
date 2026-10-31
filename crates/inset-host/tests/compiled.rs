@@ -102,3 +102,30 @@ fn overflow_stops_a_program_without_a_failure_block() {
         ("Routes/Front", "Overflow")
     );
 }
+
+#[test]
+fn an_error_enum_replies_with_the_status_of_its_variant() {
+    let program = compile("crates/inset-host/tests/programs/types");
+    let mut running = program.start(&fake()).unwrap();
+    assert_eq!(
+        text(&mut running, "GET", "/lend/Dune"),
+        (200, "1 left".into())
+    );
+    assert_eq!(
+        text(&mut running, "GET", "/lend/SPQR"),
+        (409, "every copy of SPQR is out".into())
+    );
+    assert_eq!(
+        text(&mut running, "GET", "/lend/Ulysses"),
+        (404, String::new())
+    );
+    assert_eq!(text(&mut running, "GET", "/lend/It"), (400, String::new()));
+    assert_eq!(
+        text(&mut running, "GET", "/genres/fiction"),
+        (200, "Dune, Emma".into())
+    );
+    assert_eq!(
+        text(&mut running, "GET", "/genres/poetry"),
+        (404, String::new())
+    );
+}

@@ -22,6 +22,8 @@ const MAX_DEPTH: usize = 64;
 
 pub(crate) struct Parser<'a> {
     source: &'a str,
+    /// Where the source starts among the offsets of a whole program.
+    base: usize,
     tokens: Vec<Token>,
     pos: usize,
     depth: usize,
@@ -43,9 +45,10 @@ enum List {
 }
 
 impl<'a> Parser<'a> {
-    pub(crate) fn new(source: &'a str, tokens: Vec<Token>) -> Parser<'a> {
+    pub(crate) fn new(source: &'a str, base: usize, tokens: Vec<Token>) -> Parser<'a> {
         Parser {
             source,
+            base,
             tokens,
             pos: 0,
             depth: 0,
@@ -75,7 +78,7 @@ impl<'a> Parser<'a> {
 
     fn prev_span(&self) -> Span {
         if self.pos == 0 {
-            Span::new(0, 0)
+            Span::new(self.base, self.base)
         } else {
             self.tokens[self.pos - 1].span
         }
@@ -200,7 +203,7 @@ impl<'a> Parser<'a> {
     /// Whether the next token starts on a line after the one `prev` ends on.
     fn starts_later_line(&self, prev: Span) -> bool {
         self.source
-            .get(prev.end..self.span().start)
+            .get(prev.end - self.base..self.span().start - self.base)
             .is_some_and(|gap| gap.contains('\n'))
     }
 

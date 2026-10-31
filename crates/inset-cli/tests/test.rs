@@ -76,6 +76,15 @@ fn hello_http_meets_its_requirement() {
 }
 
 #[test]
+fn an_error_enum_gives_each_requirement_its_status() {
+    let dir = copy("crates/inset-host/tests/programs/types", "types");
+    let out = run(&mut inset(&["test"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(out.status.success(), "{}{}", stdout(&out), stderr(&out));
+    insta::assert_snapshot!("types_text", stdout(&out));
+}
+
+#[test]
 fn a_broken_hello_http_fails_its_requirement() {
     let dir = copy("examples/hello-http", "broken-hello");
     let main = dir.join("src/main.inset");

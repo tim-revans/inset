@@ -25,7 +25,9 @@ enum Value {
 
 /// The function a flowchart is drawn for.
 struct Context<'s> {
-    returns_option: bool,
+    /// What the error path of a `?` returns: `None` in a function that
+    /// returns an `Option`, `Err(error)` in one that returns a `Result`.
+    exit: Option<&'static str>,
     scope: Option<&'s Scope<'s>>,
 }
 
@@ -44,14 +46,15 @@ impl Emitter<'_> {
         function: &ast::Function,
         scope: Option<&Scope<'_>>,
     ) -> Vec<Step> {
-        let returns_option = function.ret.as_ref().is_some_and(|ty| match &ty.kind {
-            ast::TypeKind::Path(p) => p.segments.last().is_some_and(|s| s.ident.name == "Option"),
-            _ => false,
+        let exit = function.ret.as_ref().and_then(|ty| match &ty.kind {
+            ast::TypeKind::Path(p) => match p.segments.last()?.ident.name.as_str() {
+                "Option" => Some("None"),
+                "Result" => Some("Err(error)"),
+                _ => None,
+            },
+            _ => None,
         });
-        let cx = Context {
-            returns_option,
-            scope,
-        };
+        let cx = Context { exit, scope };
         let value = match function.ret {
             Some(_) => Value::Returned,
             None => Value::Discarded,
@@ -115,6 +118,20 @@ impl Emitter<'_> {
                     let head = Span::new(span.start, then_block.span.start);
                     Some(self.decision(cx, id, head, init, Value::Assigned))
                 }
+                Stmt::Let {
+                    init:
+                        Some(
+                            init @ Expr {
+                                kind: ExprKind::Match { scrutinee, .. },
+                                ..
+                            },
+                        ),
+                    span,
+                    ..
+                } => {
+                    let head = Span::new(span.start, scrutinee.span.end);
+                    Some(self.match_decision(cx, id, head, init, Value::Assigned))
+                }
                 Stmt::Let { init, span, .. } => {
                     let uses = self.uses(cx, init.as_ref());
                     Some(self.action(cx, id, *span, uses))
@@ -146,6 +163,22 @@ impl Emitter<'_> {
             ExprKind::If { then_block, .. } => {
                 let head = Span::new(expr.span.start, then_block.span.start);
                 Some(self.decision(cx, id, head, expr, value))
+            }
+            ExprKind::Match { scrutinee, .. } => {
+                let head = Span::new(expr.span.start, scrutinee.span.end);
+                Some(self.match_decision(cx, id, head, expr, value))
+            }
+            ExprKind::For { iter, body, .. } => {
+                let head = Span::new(expr.span.start, body.span.start);
+                let uses = self.uses(cx, Some(iter));
+                self.no_exit(&uses, iter.span, "in a loop's head");
+                Some(self.loop_step(cx, id, head, uses, body, "each"))
+            }
+            ExprKind::While { cond, body } => {
+                let head = Span::new(expr.span.start, body.span.start);
+                let uses = self.uses(cx, Some(cond));
+                self.no_exit(&uses, cond.span, "in a loop's head");
+                Some(self.loop_step(cx, id, head, uses, body, "repeat"))
             }
             ExprKind::Return(returned) => {
                 let uses = self.uses(cx, returned.as_deref());
@@ -182,16 +215,16 @@ impl Emitter<'_> {
     fn action(&mut self, cx: &Context<'_>, id: String, span: Span, uses: Uses) -> Step {
         let exit = (uses.tries > 0).then(|| {
             self.locate(&format!("{id}/err"), span);
-            if !cx.returns_option {
+            if cx.exit.is_none() {
                 self.unsupported(
-                    "`?` in a function that does not return an `Option`",
+                    "`?` in a function that returns neither an `Option` nor a `Result`",
                     span,
                     "returns early here",
                 );
             }
             Exit {
                 id: format!("{id}/err"),
-                text: "None".into(),
+                text: cx.exit.unwrap_or("None").into(),
                 defensive: None,
             }
         });
@@ -265,6 +298,100 @@ impl Emitter<'_> {
                     defensive: None,
                 },
             ],
+            id,
+        }
+    }
+
+    /// A `match`, whose head, `match value` or `let name = match value`, is
+    /// `head`. Each arm is a branch, labelled with its pattern and guard.
+    fn match_decision(
+        &mut self,
+        cx: &Context<'_>,
+        id: String,
+        head: Span,
+        expr: &Expr,
+        value: Value,
+    ) -> Step {
+        let ExprKind::Match { scrutinee, arms } = &expr.kind else {
+            unreachable!("a match decision is drawn for a `match`");
+        };
+        let uses = self.uses(cx, Some(scrutinee));
+        self.no_exit(&uses, scrutinee.span, "in a `match`'s value");
+        self.locate(&id, head);
+        let mut branches = Vec::new();
+        for (i, arm) in arms.iter().enumerate() {
+            let branch = format!("{id}/b{i}");
+            let label_end = arm.guard.as_ref().map_or(arm.pattern.span, |g| g.span);
+            if let Some(guard) = &arm.guard {
+                let uses = self.uses(cx, Some(guard));
+                self.no_exit(&uses, guard.span, "in a `match` guard");
+            }
+            self.locate(&branch, arm.body.span);
+            let steps = self.arm(cx, &branch, &arm.body, value);
+            branches.push(Branch {
+                label: self.text(Span::new(arm.pattern.span.start, label_end.end)),
+                id: branch,
+                steps,
+                defensive: None,
+            });
+        }
+        Step::Decision {
+            text: self.text(head),
+            id,
+            links: uses.links,
+            branches,
+        }
+    }
+
+    /// The steps of a `match` arm: its block, or its expression as the
+    /// block's final value.
+    fn arm(&mut self, cx: &Context<'_>, prefix: &str, body: &Expr, value: Value) -> Vec<Step> {
+        if let ExprKind::Block(block) = &body.kind {
+            return self.block(cx, prefix, block, value);
+        }
+        let id = format!("{prefix}/0");
+        let step = self.statement(cx, id, body, true, value);
+        step.into_iter()
+            .inspect(|step| {
+                self.sources
+                    .entry(step.id().to_string())
+                    .or_insert(body.span);
+            })
+            .collect()
+    }
+
+    /// A `for` or `while` loop: its head, its body, and the way past it
+    /// that runs the body no times.
+    fn loop_step(
+        &mut self,
+        cx: &Context<'_>,
+        id: String,
+        head: Span,
+        uses: Uses,
+        body: &Block,
+        label: &str,
+    ) -> Step {
+        let body_id = format!("{id}/body");
+        let skip_id = format!("{id}/skip");
+        self.locate(&id, head);
+        self.locate(&body_id, body.span);
+        self.locate(&skip_id, head);
+        Step::Loop {
+            text: self.text(head),
+            links: uses.links,
+            concurrent: false,
+            body: Branch {
+                steps: self.block(cx, &body_id, body, Value::Discarded),
+                id: body_id,
+                label: label.into(),
+                defensive: None,
+            },
+            skip: Branch {
+                id: skip_id,
+                label: "none".into(),
+                steps: Vec::new(),
+                defensive: None,
+            },
             id,
         }
     }
@@ -354,6 +481,35 @@ impl Emitter<'_> {
                 self.walk(cx, inner, uses, in_closure);
             }
             ExprKind::Closure(closure) => self.walk(cx, &closure.body, uses, true),
+            ExprKind::Let { expr: inner, .. } => self.walk(cx, inner, uses, in_closure),
+            ExprKind::Range { start, end, .. } => {
+                for part in [start, end].into_iter().flatten() {
+                    self.walk(cx, part, uses, in_closure);
+                }
+            }
+            ExprKind::Match { scrutinee, arms } if in_closure => {
+                self.walk(cx, scrutinee, uses, true);
+                for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        self.walk(cx, guard, uses, true);
+                    }
+                    self.walk(cx, &arm.body, uses, true);
+                }
+            }
+            ExprKind::For { iter, body, .. } if in_closure => {
+                self.walk(cx, iter, uses, true);
+                self.walk_block(cx, body, uses);
+            }
+            ExprKind::While { cond, body } if in_closure => {
+                self.walk(cx, cond, uses, true);
+                self.walk_block(cx, body, uses);
+            }
+            ExprKind::Match { .. } => {
+                self.unsupported("a `match` inside an expression", expr.span, "this `match`");
+            }
+            ExprKind::For { .. } | ExprKind::While { .. } => {
+                self.unsupported("a loop inside an expression", expr.span, "this loop");
+            }
             ExprKind::Await(_) => self.unsupported("`.await`", expr.span, "awaited here"),
             ExprKind::Send(_) => self.unsupported("`send`", expr.span, "sent here"),
             ExprKind::Move(_) => {
@@ -423,7 +579,6 @@ impl Emitter<'_> {
             .map(|s| s.ident.name.as_str())
             .collect();
         match names.as_slice() {
-            [name] if self.algorithms.contains(name) => Some(format!("{}/fn:{name}", self.app)),
             ["Self", name] => {
                 let scope = cx.scope?;
                 scope
@@ -433,7 +588,11 @@ impl Emitter<'_> {
                     .any(|f| f.name.name == *name)
                     .then(|| format!("{}/fn:{name}", scope.component))
             }
-            _ => None,
+            _ => {
+                let last = &path.segments[path.segments.len() - 1].ident;
+                let target = self.refs.get(&last.span)?;
+                self.algorithms.get(target).cloned()
+            }
         }
     }
 

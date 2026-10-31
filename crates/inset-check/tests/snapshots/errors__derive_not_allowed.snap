@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: Inset cannot derive `Display`
+    ╭─[ src/main.inset:12:35 ]
+    │
+ 12 │ #[derive(Clone, Debug, PartialEq, Display)]
+    │                                   ───┬───  
+    │                                      ╰───── not a trait `#[derive]` may list
+    │ 
+    │ Help: derive any of `Clone`, `Copy`, `Debug`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash`, `Default`, `Serialize` and `Deserialize`
+────╯

@@ -402,10 +402,10 @@ impl Server<'_> {
         let (root, program, analysis, file, offset) =
             self.analysis(&at.text_document.uri, at.position)?;
         let symbol = analysis.index.at(file, offset)?;
-        let main = &program.files[analysis.index.main?];
-        let lines = LineIndex::new(&main.text, self.encoding);
+        let file = &program.files[symbol.file];
+        let lines = LineIndex::new(&file.text, self.encoding);
         Some(GotoDefinitionResponse::Scalar(Location {
-            uri: self.uri_of(&root.join(&main.path)),
+            uri: self.uri_of(&root.join(&file.path)),
             range: lines.range(symbol.name.span),
         }))
     }

@@ -6,8 +6,10 @@
 
 use std::fmt;
 
-use inset_syntax::Diagnostic;
 use inset_syntax::ast::{self, TypeKind};
+use inset_syntax::{Diagnostic, Ident};
+
+use crate::names::{Def, Names, Ns};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Ty {
@@ -35,9 +37,17 @@ pub(crate) enum Ty {
     Std(&'static str, Vec<Ty>),
     HttpServer,
     Table(Box<Ty>, Box<Ty>),
-    /// `Handle<C>`, naming the component.
-    Handle(String),
+    /// `Handle<C>`: the component's index and its name.
+    Handle(usize, String),
     Outlet(Box<Ty>),
+    /// A struct or enum the program declares: its index, its name, and
+    /// whether it derives `Copy` and `Clone`.
+    Data {
+        id: usize,
+        name: String,
+        copy: bool,
+        clone: bool,
+    },
 }
 
 pub(crate) const INTS: [&str; 12] = [
@@ -87,7 +97,7 @@ impl Ty {
 
     /// A capability, handle or outlet: something only a component may hold.
     pub(crate) fn is_effect(&self) -> bool {
-        self.is_capability() || matches!(self, Ty::Handle(_) | Ty::Outlet(_))
+        self.is_capability() || matches!(self, Ty::Handle(..) | Ty::Outlet(_))
     }
 
     /// Whether the type is `Copy`, or `None` if that is not known.
@@ -99,6 +109,7 @@ impl Ty {
             Ty::Tuple(elems) => elems
                 .iter()
                 .try_fold(true, |all, t| Some(all && t.is_copy()?)),
+            Ty::Data { copy, .. } => Some(*copy),
             _ => Some(false),
         }
     }
@@ -107,7 +118,10 @@ impl Ty {
     pub(crate) fn is_clone(&self) -> Option<bool> {
         match self {
             Ty::Unknown => None,
-            Ty::HttpServer | Ty::Table(..) | Ty::Handle(_) | Ty::Outlet(_) | Ty::Str => Some(false),
+            Ty::HttpServer | Ty::Table(..) | Ty::Handle(..) | Ty::Outlet(_) | Ty::Str => {
+                Some(false)
+            }
+            Ty::Data { clone, .. } => Some(*clone),
             Ty::Slice(_) => Some(false),
             Ty::Ref { mutable, .. } => Some(!mutable),
             Ty::Tuple(elems) | Ty::Std(_, elems) => elems
@@ -247,19 +261,20 @@ impl fmt::Display for Ty {
             }
             Ty::HttpServer => f.write_str("HttpServer"),
             Ty::Table(k, v) => write!(f, "Table<{k}, {v}>"),
-            Ty::Handle(component) => write!(f, "Handle<{component}>"),
+            Ty::Handle(_, component) => write!(f, "Handle<{component}>"),
             Ty::Outlet(inner) => write!(f, "Outlet<{inner}>"),
+            Ty::Data { name, .. } => f.write_str(name),
         }
     }
 }
 
-/// Resolves written types, reporting names that are not types.
-pub(crate) struct Resolver<'a> {
-    /// The program's component names, which `Handle<C>` may name.
-    pub components: &'a [&'a str],
+/// Resolves written types in one module, reporting names that are not types.
+pub(crate) struct Resolver<'c, 'a> {
+    pub names: &'c Names<'a>,
+    pub module: usize,
 }
 
-impl Resolver<'_> {
+impl Resolver<'_, '_> {
     pub(crate) fn resolve(&self, ty: &ast::Type, diagnostics: &mut Vec<Diagnostic>) -> Ty {
         match &ty.kind {
             TypeKind::Infer => Ty::Unknown,
@@ -276,21 +291,52 @@ impl Resolver<'_> {
     }
 
     fn resolve_path(&self, path: &ast::Path, diagnostics: &mut Vec<Diagnostic>) -> Ty {
-        // `std::collections::HashMap<K, V>` names the same type as `HashMap<K, V>`.
-        let segment = match path.segments.as_slice() {
-            [segment] => segment,
-            [std, collections, segment]
-                if std.ident.name == "std" && collections.ident.name == "collections" =>
-            {
-                segment
+        let idents: Vec<Ident> = path.segments.iter().map(|s| s.ident.clone()).collect();
+        let last = &path.segments[path.segments.len() - 1];
+        let name = match self.names.resolve_in(self.module, &idents, Ns::Type) {
+            Err(diagnostic) => {
+                diagnostics.push(diagnostic);
+                return Ty::Unknown;
             }
-            _ => {
+            Ok(Some(Def::Std(name))) => name,
+            Ok(Some(def)) => {
+                if !last.generics.is_empty() {
+                    diagnostics.push(Diagnostic::new(
+                        format!("`{}` takes no type arguments", last.ident.name),
+                        path.span,
+                        "a program's own types are not generic",
+                    ));
+                }
+                return match def {
+                    Def::Data(id) => data_ty(self.names, id),
+                    Def::Component(_) | Def::App => {
+                        diagnostics.push(
+                            Diagnostic::new(
+                                format!("`{}` is a component, not a type", last.ident.name),
+                                path.span,
+                                "a component is started, not held as a value",
+                            )
+                            .with_help(format!(
+                                "a component's handle is a `Handle<{}>`",
+                                last.ident.name
+                            )),
+                        );
+                        Ty::Unknown
+                    }
+                    _ => {
+                        diagnostics.push(unknown_type(path));
+                        Ty::Unknown
+                    }
+                };
+            }
+            Ok(None) if path.segments.len() == 1 => last.ident.name.clone(),
+            Ok(None) => {
                 diagnostics.push(unknown_type(path));
                 return Ty::Unknown;
             }
         };
-        let name = segment.ident.name.as_str();
-        let args = &segment.generics;
+        let name = name.as_str();
+        let args = &last.generics;
         let arity = |expected: usize, diagnostics: &mut Vec<Diagnostic>| {
             if args.len() == expected {
                 return true;
@@ -355,13 +401,18 @@ impl Resolver<'_> {
             }
             "Handle" if arity(1, diagnostics) => {
                 let target = match &args[0].kind {
-                    TypeKind::Path(p) if p.segments.len() == 1 => {
-                        Some(p.segments[0].ident.name.as_str())
+                    TypeKind::Path(p) => {
+                        let idents: Vec<Ident> =
+                            p.segments.iter().map(|s| s.ident.clone()).collect();
+                        match self.names.resolve_in(self.module, &idents, Ns::Type) {
+                            Ok(Some(Def::Component(c))) => Some(c),
+                            _ => None,
+                        }
                     }
                     _ => None,
                 };
                 match target {
-                    Some(c) if self.components.contains(&c) => Ty::Handle(c.to_string()),
+                    Some(c) => Ty::Handle(c, self.names.components[c].ast.name.name.clone()),
                     _ => {
                         diagnostics.push(
                             Diagnostic::new(
@@ -405,7 +456,31 @@ fn unknown_type(path: &ast::Path) -> Diagnostic {
         "not a type this program knows",
     )
     .with_help(
-        "the checker knows Rust's primitive and standard types, `Decimal`, the capability \
-         types and `Handle` and `Outlet`; declaring `struct` and `enum` types is not supported yet",
+        "declare it as a `struct` or `enum`, or import it with `use`; the checker also knows \
+         Rust's primitive and standard types, `Decimal`, the capability types and `Handle` and `Outlet`",
     )
+}
+
+/// The type of a struct or enum the program declares.
+pub(crate) fn data_ty(names: &Names, id: usize) -> Ty {
+    let decl = &names.datas[id];
+    let derives = derives(decl.item);
+    Ty::Data {
+        id,
+        name: decl.ast.name().name.clone(),
+        copy: derives.iter().any(|d| d.name == "Copy"),
+        clone: derives.iter().any(|d| d.name == "Clone"),
+    }
+}
+
+/// The traits an item's `#[derive]` attributes list.
+pub(crate) fn derives(item: &ast::Item) -> Vec<&Ident> {
+    item.attrs
+        .iter()
+        .filter_map(|a| match &a.kind {
+            ast::AttributeKind::Derive(names) => Some(names.iter()),
+            _ => None,
+        })
+        .flatten()
+        .collect()
 }

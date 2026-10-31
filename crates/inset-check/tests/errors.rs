@@ -4,25 +4,32 @@
 
 mod cases;
 
-use cases::{COUNTING, COUNTING_REQ, HELLO, HELLO_REQ, edit};
+use cases::{COUNTING, COUNTING_REQ, HELLO, HELLO_REQ, SHELF, SHELF_LIBRARY, SHELF_REQ, edit};
 use inset_check::{Program, SourceFile, check};
 
-/// Checks the program and renders its diagnostics.
-fn rendered(main: &str, requirements: &str) -> String {
-    let program = Program::from_files(vec![
-        SourceFile {
-            path: "src/main.inset".into(),
-            text: main.into(),
-        },
-        SourceFile {
-            path: "requirements/main.req.inset".into(),
-            text: requirements.into(),
-        },
-    ]);
+/// Checks the program made of these files and renders its diagnostics.
+fn rendered_files(files: &[(&str, &str)]) -> String {
+    let program = Program::from_files(
+        files
+            .iter()
+            .map(|(path, text)| SourceFile {
+                path: path.to_string(),
+                text: text.to_string(),
+            })
+            .collect(),
+    );
     check(&program)
         .iter()
         .map(|r| program.render(r, false))
         .collect()
+}
+
+/// Checks a program of one code file and renders its diagnostics.
+fn rendered(main: &str, requirements: &str) -> String {
+    rendered_files(&[
+        ("src/main.inset", main),
+        ("requirements/main.req.inset", requirements),
+    ])
 }
 
 /// Snapshots the diagnostics of a case, which must not be empty.
@@ -31,7 +38,7 @@ fn errors(name: &str) {
         .into_iter()
         .find(|c| c.name == name)
         .unwrap_or_else(|| panic!("no case `{name}`"));
-    let rendered = rendered(&case.main, &case.requirements);
+    let rendered = rendered_files(&case.files());
     assert!(!rendered.is_empty(), "{name}: expected diagnostics");
     insta::with_settings!({ omit_expression => true }, {
         insta::assert_snapshot!(name, rendered);
@@ -51,6 +58,14 @@ fn bases_check_clean() {
          send self.log.record(doubled[0]);",
     );
     assert_eq!(rendered(&main, COUNTING_REQ), "");
+    assert_eq!(
+        rendered_files(&[
+            ("src/main.inset", SHELF),
+            ("src/library.inset", SHELF_LIBRARY),
+            ("requirements/main.req.inset", SHELF_REQ),
+        ]),
+        ""
+    );
 }
 
 // ---- The cases Stage 6 of the plan names ------------------------------------
@@ -170,4 +185,51 @@ fn statuses() {
 #[test]
 fn self_without_receiver() {
     errors("self_without_receiver");
+}
+
+// ---- Types and modules ---------------------------------------------------------
+
+#[test]
+fn variant_without_status() {
+    errors("variant_without_status");
+}
+
+#[test]
+fn error_variant_holding_a_number() {
+    errors("error_variant_holding_a_number");
+}
+
+#[test]
+fn unknown_status_name() {
+    errors("unknown_status_name");
+}
+
+#[test]
+fn private_item_from_another_module() {
+    errors("private_item_from_another_module");
+}
+
+#[test]
+fn private_field_from_another_module() {
+    errors("private_field_from_another_module");
+}
+
+#[test]
+fn module_without_a_file() {
+    errors("module_without_a_file");
+}
+
+#[test]
+fn file_not_a_module() {
+    errors("file_not_a_module");
+}
+
+#[test]
+fn derive_not_allowed() {
+    errors("derive_not_allowed");
+}
+
+#[test]
+fn match_leaves_out_a_case() {
+    errors("match_leaves_out_a_case");
 }

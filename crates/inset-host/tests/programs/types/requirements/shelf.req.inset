@@ -1,0 +1,23 @@
+requirement "A book with a copy on the shelf is lent"
+    when Shelf receives GET /lend/Dune
+    then Shelf replies OK with "1 left"
+
+requirement "A book whose every copy is out is not lent"
+    when Shelf receives GET /lend/SPQR
+    then Shelf replies Conflict with "every copy of SPQR is out"
+
+requirement "A title the shelf does not hold is not found"
+    when Shelf receives GET /lend/Ulysses
+    then Shelf replies NotFound
+
+requirement "A title too short to look for is refused"
+    when Shelf receives GET /lend/It
+    then Shelf replies BadRequest
+
+requirement "The titles of a genre are listed in shelf order"
+    when Shelf receives GET /genres/fiction
+    then Shelf replies OK with "Dune, Emma"
+
+requirement "A genre the shelf does not know is not found"
+    when Shelf receives GET /genres/poetry
+    then Shelf replies NotFound

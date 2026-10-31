@@ -186,10 +186,10 @@ fn chained_comparison() {
 fn unsupported_construct() {
     code(
         "unsupported_construct",
-        r#"fn greeting(name: Option<String>) -> String {
-    match name {
-        Some(name) => format!("Hello, {name}!"),
-        None => "Hello!".to_string(),
+        r#"fn spin() -> u32 {
+    let mut n = 0;
+    loop {
+        n += 1;
     }
 }
 "#,

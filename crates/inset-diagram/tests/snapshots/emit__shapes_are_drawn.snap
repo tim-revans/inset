@@ -267,6 +267,56 @@ expression: json
                 }
               ]
             }
+          },
+          {
+            "method": "GET",
+            "path": "/measure/{n}",
+            "via": "Shapes/front/field:web",
+            "handler": {
+              "id": "Shapes/front/fn:measure",
+              "name": "measure",
+              "doc": "Sorts a number by its size.",
+              "params": [
+                {
+                  "name": "n",
+                  "type": "i32"
+                }
+              ],
+              "returns": "String",
+              "body": [
+                {
+                  "kind": "action",
+                  "id": "Shapes/front/fn:measure/0",
+                  "text": "let size = sizes::classify(n)",
+                  "links": [
+                    "Shapes/mod:sizes/fn:classify"
+                  ]
+                },
+                {
+                  "kind": "decision",
+                  "id": "Shapes/front/fn:measure/1",
+                  "text": "let label = match size",
+                  "branches": [
+                    {
+                      "id": "Shapes/front/fn:measure/1/b0",
+                      "label": "Size::Small"
+                    },
+                    {
+                      "id": "Shapes/front/fn:measure/1/b1",
+                      "label": "Size::Large(_)"
+                    }
+                  ]
+                },
+                {
+                  "kind": "return",
+                  "id": "Shapes/front/fn:measure/2",
+                  "text": "format!(\"{label} {}\", sizes::total(&[size]))",
+                  "links": [
+                    "Shapes/mod:sizes/fn:total"
+                  ]
+                }
+              ]
+            }
           }
         ],
         "algorithms": [
@@ -365,6 +415,141 @@ expression: json
           "kind": "return",
           "id": "Shapes/fn:describe/0",
           "text": "format!(\"{n}\")"
+        }
+      ]
+    },
+    {
+      "id": "Shapes/mod:sizes/fn:classify",
+      "name": "classify",
+      "doc": "Sorts a number by its size.",
+      "params": [
+        {
+          "name": "n",
+          "type": "i32"
+        }
+      ],
+      "returns": "Size",
+      "body": [
+        {
+          "kind": "decision",
+          "id": "Shapes/mod:sizes/fn:classify/0",
+          "text": "match n",
+          "branches": [
+            {
+              "id": "Shapes/mod:sizes/fn:classify/0/b0",
+              "label": "0",
+              "steps": [
+                {
+                  "kind": "return",
+                  "id": "Shapes/mod:sizes/fn:classify/0/b0/0",
+                  "text": "Size::Small"
+                }
+              ]
+            },
+            {
+              "id": "Shapes/mod:sizes/fn:classify/0/b1",
+              "label": "n if n > 100",
+              "steps": [
+                {
+                  "kind": "return",
+                  "id": "Shapes/mod:sizes/fn:classify/0/b1/0",
+                  "text": "Size::Large(n as u32)"
+                }
+              ]
+            },
+            {
+              "id": "Shapes/mod:sizes/fn:classify/0/b2",
+              "label": "_",
+              "steps": [
+                {
+                  "kind": "return",
+                  "id": "Shapes/mod:sizes/fn:classify/0/b2/0",
+                  "text": "Size::Small"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Shapes/mod:sizes/fn:total",
+      "name": "total",
+      "doc": "Adds up the large sizes, then takes away thousands until under one.",
+      "params": [
+        {
+          "name": "sizes",
+          "type": "&[Size]"
+        }
+      ],
+      "returns": "u32",
+      "body": [
+        {
+          "kind": "action",
+          "id": "Shapes/mod:sizes/fn:total/0",
+          "text": "let mut sum = 0"
+        },
+        {
+          "kind": "loop",
+          "id": "Shapes/mod:sizes/fn:total/1",
+          "text": "for size in sizes",
+          "body": {
+            "id": "Shapes/mod:sizes/fn:total/1/body",
+            "label": "each",
+            "steps": [
+              {
+                "kind": "decision",
+                "id": "Shapes/mod:sizes/fn:total/1/body/0",
+                "text": "if let Size::Large(n) = size",
+                "branches": [
+                  {
+                    "id": "Shapes/mod:sizes/fn:total/1/body/0/b0",
+                    "label": "yes",
+                    "steps": [
+                      {
+                        "kind": "action",
+                        "id": "Shapes/mod:sizes/fn:total/1/body/0/b0/0",
+                        "text": "sum += n"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "Shapes/mod:sizes/fn:total/1/body/0/b1",
+                    "label": "no"
+                  }
+                ]
+              }
+            ]
+          },
+          "skip": {
+            "id": "Shapes/mod:sizes/fn:total/1/skip",
+            "label": "none"
+          }
+        },
+        {
+          "kind": "loop",
+          "id": "Shapes/mod:sizes/fn:total/2",
+          "text": "while sum >= 1000",
+          "body": {
+            "id": "Shapes/mod:sizes/fn:total/2/body",
+            "label": "repeat",
+            "steps": [
+              {
+                "kind": "action",
+                "id": "Shapes/mod:sizes/fn:total/2/body/0",
+                "text": "sum -= 1000"
+              }
+            ]
+          },
+          "skip": {
+            "id": "Shapes/mod:sizes/fn:total/2/skip",
+            "label": "none"
+          }
+        },
+        {
+          "kind": "return",
+          "id": "Shapes/mod:sizes/fn:total/3",
+          "text": "sum"
         }
       ]
     }

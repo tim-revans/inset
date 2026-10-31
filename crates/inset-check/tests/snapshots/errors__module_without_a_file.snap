@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: no file for the module `archive`
+   ╭─[ src/main.inset:2:5 ]
+   │
+ 2 │ mod archive;
+   │     ───┬───  
+   │        ╰───── neither `src/archive.inset` nor `src/archive/mod.inset` exists
+   │ 
+   │ Help: create `src/archive.inset` with the module's items, or remove this `mod`
+───╯

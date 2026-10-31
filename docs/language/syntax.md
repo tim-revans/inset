@@ -1,6 +1,6 @@
 # Inset syntax
 
-The living reference for Inset's syntax. It is a draft: the parser in [`crates/inset-syntax/`](../../crates/inset-syntax/) and the checker in [`crates/inset-check/`](../../crates/inset-check/) cover what Hello HTTP uses, with closures, `failure` blocks, outlets and messages around it, and report the rest as not supported yet. The syntax changes as each example program is compiled.
+The living reference for Inset's syntax. It is a draft: the parser in [`crates/inset-syntax/`](../../crates/inset-syntax/) and the checker in [`crates/inset-check/`](../../crates/inset-check/) cover what Hello HTTP uses, with closures, `failure` blocks, outlets and messages around it, and the code of the Stock tracker: modules, structs and enums, error enums, `match` and loops. They report the rest as not supported yet. The syntax changes as each example program is compiled.
 
 Each construct is marked with its status:
 
@@ -55,6 +55,8 @@ Some of these carry a restriction, so that every effect stays visible:
 - A closure cannot `await`, `send`, or call a capability. Every message arrow and capability edge is then a statement of its own, which the flowchart can show. A flowchart draws an iterator chain such as `map` as one "for each" step.
 - A method on a data type is an algorithm. Data types cannot hold capabilities or component handles, so such methods are pure.
 - Components and messages are not generic and have no lifetimes, so every diagram arrow has a concrete type.
+
+A `match` must cover every case, as in Rust. The compiler reports one that leaves out a variant of an enum, `Some`, `None`, `Ok`, `Err`, `true` or `false`, or that matches a number or text with no arm for the other values. The ranges `a..b` and `a..=b`, `if let` and `while let` are kept. `loop`, `break` and `continue` are not supported yet.
 
 ### Rust features Inset leaves out
 
@@ -236,6 +238,9 @@ The return type decides the response:
 
 The error type `E` is an enum whose every variant has a `#[status(Name)]` attribute, using the status names of the requirements dialect. A unit variant replies with an empty body. A variant holding one `String` replies with that string as the body.
 
+- An enum with `#[status]` on any variant needs it on every variant, and each variant holds nothing or one `String`, whether or not a route uses the enum yet. The compiler reports a variant without a status, a status name that is not one of the requirements dialect's, and a variant holding anything else.
+- A route whose error type has no statuses is an error, because the compiler could not say what it replies.
+
 ```inset
 enum ShipError {
     #[status(NotFound)]
@@ -245,7 +250,7 @@ enum ShipError {
 }
 ```
 
-**JSON, query parameters and headers.** *(Draft: no example uses them yet. Stage 9 confirms them against the typed API contract.)* They take the forms of Rust web frameworks.
+**JSON, query parameters and headers.** *(Draft: no example uses them yet. They are confirmed against the typed API contract when an example needs them.)* They take the forms of Rust web frameworks.
 
 ```inset
 #[put("/products/{sku}?{dry_run}", via = http, body = product, header("If-Match") = version)]
@@ -423,9 +428,13 @@ use warehouse::Warehouse;
 
 - The root module is `src/main.inset`, which holds the app.
 - `mod name;` declares a module, found where Rust would find it: `src/name.inset`, or `src/name/mod.inset`.
-- `use` brings names into scope, with Rust's paths: `crate::`, `super::` and `self::`.
-- `pub`, `pub(crate)` and `pub(super)` mean what they mean in Rust. An item without `pub` is visible in its own module and the modules inside it, so the Stock tracker's `warehouse` module can `use crate::{Item, Reorder, ShipError}`.
+- `use` brings names into scope, with Rust's paths: `crate::`, `super::` and `self::`. A path starts at the module the `use` is written in, as in Rust 2018 and later. `as` renames, and `{` `}` groups.
+- `pub`, `pub(crate)` and `pub(super)` mean what they mean in Rust. An item without `pub` is visible in its own module and the modules inside it, so the Stock tracker's `warehouse` module can `use crate::{Item, Reorder, ShipError}`. A struct's fields follow the same rules, each with a visibility of its own.
+- Paths into the standard library, such as `use std::collections::HashMap;`, are allowed, apart from the parts Inset leaves out, such as `std::fs`.
 - Modules organise the source. They do not appear on the diagrams, which show components.
+- The compiler reports a `mod` with no file, a `mod` with both possible files, and a file under `src/` that no `mod` declares. Rust ignores such a file, but a reviewer would expect it to be part of the program.
+- The app is in the root module.
+- *(Not supported yet.)* A module written inline, `mod name { ... }`, and a glob import, `use name::*`.
 
 *Why Rust's modules exactly:* every model that writes Rust writes `mod`, `use` and `pub` without thinking. Any other module system would be one more thing to get wrong, and a look-alike with different rules would be worse.
 
@@ -445,8 +454,11 @@ struct Item {
 }
 ```
 
-- `struct` and `enum` are declared at the top level, as in Rust.
+- `struct` and `enum` are declared at the top level of a module, as in Rust. A struct has named fields, and an enum's variants hold nothing or a list of types.
+- A struct or enum holds data. It cannot hold a capability, a handle or an outlet.
 - `#[derive(...)]` may list `Clone`, `Copy`, `Debug`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash` and `Default`, and serde's `Serialize` and `Deserialize` for JSON bodies *(Draft)*. Other standard traits are implemented by hand (see [What Inset keeps from Rust](#what-inset-keeps-from-rust)).
+- A derive needs what Rust needs: `Copy` needs `Clone`, `Eq` and `PartialOrd` need `PartialEq`, and `Ord` needs `PartialOrd` and `Eq`. Each field must have the trait too, so a struct holding a `String` cannot derive `Copy`, and one holding an `f64` cannot derive `Eq`. The compiler reports these, rather than leaving them to rustc.
+- *(Not supported yet.)* Generic structs and enums, tuple and unit structs, variants with named fields, and deriving `Default` for an enum.
 - A type compared in a requirement step must derive `PartialEq` and `Debug`, so that a failed test can show both values.
 - The compiler decides how a stored type is written to a `Table`. No derive is needed for it, because the stored form is never seen outside the program. A JSON body is seen outside, so its form is stated with serde, as in Rust.
 
@@ -592,7 +604,7 @@ The compiler resolves every step against the program, so a step that names an un
 - Statuses are written with their standard names from the HTTP specification (RFC 9110) in `UpperCamelCase`, such as `OK`, `NotFound`, `Conflict`, `BadRequest` and `InternalServerError`.
 - When the app grants more than one `HttpServer`, the `when` step names the one to use: `when HelloHttp receives GET /hello/Ada via http`. `via` comes before any `with`. *(Draft.)*
 - The request must match a route, with each path parameter converting to its type, so a requirement cannot ask for a path the program has no route for. A route that returns `Option<String>` is how a requirement tests `NotFound`.
-- The status must be one the route can reply: `OK` for a `String`, `OK` or `NotFound` for an `Option<String>`, `BadRequest` too when the route reads a body, and `InternalServerError` for any route, since a rolled-back failure replies with it.
+- The status must be one the route can reply: `OK` for a `String`, `OK` or `NotFound` for an `Option<String>`, `OK` or any status named on the error type for a `Result<String, E>`, `BadRequest` too when the route reads a body, and `InternalServerError` for any route, since a rolled-back failure replies with it.
 
 *Why steps use HTTP terms:* requirements are reviewed by software engineers, so steps use the precise terms of the boundary they test. At an HTTP boundary, the method and the status are often the requirement itself, such as a missing item giving `NotFound`. Plain verbs such as "asks for" would hide them behind a vocabulary the reviewer has to learn anyway. The plain-English part of a requirement is its sentence, which is what test reports show.
 
@@ -743,7 +755,8 @@ extern_comp  = rust_attr "extern" "component" Ident "{" [ field_decls ] { { doc 
 rust_attr    = "#[" "rust" "(" "path" "=" STRING "," "crates" "=" "[" STRING { "," STRING } "]" ")" "]" ;
 signature    = "#[message]" [ "pub" ] [ "async" ] "fn" ident "(" fn_params ")" [ "->" type ] ";" ;
 
-struct       = [ derive ] "struct" Ident "{" [ field_decls ] "}" ;
+struct       = [ derive ] "struct" Ident "{" [ struct_field { "," struct_field } [ "," ] ] "}" ;
+struct_field = { doc } [ "pub" [ "(" ( "crate" | "super" ) ")" ] ] ident ":" type ;
 enum         = [ derive ] "enum" Ident "{" variant { "," variant } [ "," ] "}" ;
 variant      = { doc } [ "#[" "status" "(" Ident ")" "]" ] Ident [ "(" type { "," type } ")" ] ;
 derive       = "#[" "derive" "(" Ident { "," Ident } ")" "]" ;
@@ -759,7 +772,7 @@ type         = [ "&" ] Ident [ "<" type { "," type } ">" ] | "(" type { "," type
 place        = ident { "." ident } ;
 
 block        = a Rust block, using the features Inset keeps ;
-expr         = a Rust expression, using the features Inset keeps
+expr         = a Rust expression, using the features Inset keeps, such as `match`, `for` and `while`
              | "send" expr
              | "move" place, as an argument of a message
              | "fork" "for" pattern "in" expr block ;

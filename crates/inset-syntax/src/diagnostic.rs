@@ -25,6 +25,18 @@ impl Diagnostic {
         }
     }
 
+    /// The diagnostic with its span moved on by `offset` bytes.
+    pub fn shifted(mut self, offset: usize) -> Diagnostic {
+        self.span = self.span.shifted(offset);
+        self
+    }
+
+    /// The diagnostic with its span moved back by `offset` bytes.
+    pub fn unshifted(mut self, offset: usize) -> Diagnostic {
+        self.span = self.span.unshifted(offset);
+        self
+    }
+
     pub fn with_help(mut self, help: impl Into<String>) -> Diagnostic {
         self.help = Some(help.into());
         self

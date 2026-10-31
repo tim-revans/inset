@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:3:14-3:18
+`Desk` is private to `crate::library`
+`Desk` is declared in `crate::library` without `pub`
+help: make it `pub(crate)` where it is declared to use it from anywhere in the program, or use it only inside `crate::library`

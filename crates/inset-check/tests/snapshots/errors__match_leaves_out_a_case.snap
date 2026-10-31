@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: this `match` does not cover every case
+    ╭─[ src/library.inset:17:15 ]
+    │
+ 17 │         match book.copies {
+    │               ─────┬─────  
+    │                    ╰─────── a `u32` has more values than these arms name
+    │ 
+    │ Help: add a `_ =>` arm for every other value
+────╯

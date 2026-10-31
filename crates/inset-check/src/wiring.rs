@@ -8,6 +8,7 @@ use inset_syntax::ast::*;
 use inset_syntax::{Diagnostic, Ident, Span};
 
 use crate::body::Body;
+use crate::names::{Def, Ns};
 use crate::types::{INTS, Resolver, Ty, fits};
 use crate::{Checker, FnKind, RouteInfo, Segment, names};
 
@@ -24,14 +25,14 @@ enum Named {
     Setting(Ty),
     Grant(Ty),
     Field(Ty),
-    Child(String),
+    Child(usize, String),
 }
 
 impl Named {
     fn ty(&self) -> Ty {
         match self {
             Named::Setting(ty) | Named::Grant(ty) | Named::Field(ty) => ty.clone(),
-            Named::Child(c) => Ty::Handle(c.clone()),
+            Named::Child(c, name) => Ty::Handle(*c, name.clone()),
         }
     }
 }
@@ -52,14 +53,27 @@ impl<'a> Checker<'a> {
         let Some(app) = self.app else {
             return;
         };
-        let component_names = self.component_names();
-        let resolver = Resolver {
-            components: &component_names,
+        let mut resolved = Vec::new();
+        let (setting_tys, grant_tys): (Vec<Ty>, Vec<Ty>) = {
+            let resolver = Resolver {
+                names: &self.names,
+                module: 0,
+            };
+            (
+                app.settings
+                    .iter()
+                    .map(|s| resolver.resolve(&s.ty, &mut resolved))
+                    .collect(),
+                app.grants
+                    .iter()
+                    .map(|g| resolver.resolve(&g.ty, &mut resolved))
+                    .collect(),
+            )
         };
+        self.diagnostics.extend(resolved);
         let mut used: HashSet<&str> = HashSet::new();
         let mut settings: HashMap<&str, Ty> = HashMap::new();
-        for setting in &app.settings {
-            let ty = resolver.resolve(&setting.ty, &mut self.diagnostics);
+        for (setting, ty) in app.settings.iter().zip(setting_tys) {
             if !used.insert(&setting.name.name) {
                 self.name_used_twice(&setting.name);
             }
@@ -80,8 +94,7 @@ impl<'a> Checker<'a> {
             }
             settings.insert(&setting.name.name, ty);
         }
-        for grant in &app.grants {
-            let ty = resolver.resolve(&grant.ty, &mut self.diagnostics);
+        for (grant, ty) in app.grants.iter().zip(grant_tys) {
             if !used.insert(&grant.name.name) {
                 self.name_used_twice(&grant.name);
             }
@@ -257,9 +270,9 @@ impl<'a> Checker<'a> {
         match scope {
             Scope::App => {
                 let app = self.app?;
-                let resolver = self.resolver_names();
                 let resolver = Resolver {
-                    components: &resolver,
+                    names: &self.names,
+                    module: 0,
                 };
                 let mut sink = Vec::new();
                 if let Some(s) = app.settings.iter().find(|s| s.name.name == name) {
@@ -268,23 +281,29 @@ impl<'a> Checker<'a> {
                 if let Some(g) = app.grants.iter().find(|g| g.name.name == name) {
                     return Some(Named::Grant(resolver.resolve(&g.ty, &mut sink)));
                 }
-                app.starts
+                let start = app
+                    .starts
                     .iter()
-                    .find(|s| s.binding.as_ref().is_some_and(|b| b.name == name))
-                    .map(|s| Named::Child(s.component.name.clone()))
+                    .find(|s| s.binding.as_ref().is_some_and(|b| b.name == name))?;
+                let child = self.started(start)?;
+                Some(Named::Child(
+                    child,
+                    self.components[child].name().to_string(),
+                ))
             }
             Scope::Component(index) => {
                 let comp = &self.components[index];
                 if let Some(f) = comp.field(name) {
                     return Some(Named::Field(f.ty.clone()));
                 }
-                comp.child(name).map(|c| Named::Child(c.name.clone()))
+                let start = comp.start_of(name)?;
+                let child = self.started(start)?;
+                Some(Named::Child(
+                    child,
+                    self.components[child].name().to_string(),
+                ))
             }
         }
-    }
-
-    fn resolver_names(&self) -> Vec<&'a str> {
-        self.component_names()
     }
 
     /// Checks the `start` statements of one body. Returns the names moved
@@ -310,23 +329,46 @@ impl<'a> Checker<'a> {
                     .with_help("rename one of the two"),
                 );
             }
-            let Some(child) = self.component(&start.component.name) else {
-                let all = self.component_names();
-                let help = if all.is_empty() {
-                    "the program declares no components".to_string()
-                } else {
-                    format!("the components are {}", names(all))
-                };
-                errors.push(
-                    Diagnostic::new(
-                        format!("no component `{}`", start.component.name),
-                        start.component.span,
-                        "not a component of this program",
-                    )
-                    .with_help(help),
-                );
-                continue;
+            let module = match scope {
+                Scope::App => 0,
+                Scope::Component(index) => self.components[index].module,
             };
+            let path = [start.component.clone()];
+            let child = match self.names.resolve_in(module, &path, Ns::Type) {
+                Ok(Some(Def::Component(child))) => child,
+                Err(diagnostic) => {
+                    errors.push(diagnostic);
+                    continue;
+                }
+                Ok(other) => {
+                    let all: Vec<&str> = self
+                        .names
+                        .components
+                        .iter()
+                        .map(|c| c.ast.name.name.as_str())
+                        .collect();
+                    let help = if all.is_empty() {
+                        "the program declares no components".to_string()
+                    } else if other.is_none() && all.contains(&start.component.name.as_str()) {
+                        format!(
+                            "`{}` is declared in another module; import it with `use`",
+                            start.component.name
+                        )
+                    } else {
+                        format!("the components are {}", names(all))
+                    };
+                    errors.push(
+                        Diagnostic::new(
+                            format!("no component `{}`", start.component.name),
+                            start.component.span,
+                            "not a component of this program",
+                        )
+                        .with_help(help),
+                    );
+                    continue;
+                }
+            };
+            self.started.insert(start.component.span, child);
             let child_name = self.components[child].name().to_string();
             let mut supplied: Vec<&str> = Vec::new();
             for handoff in &start.handoffs {
@@ -419,7 +461,7 @@ impl<'a> Checker<'a> {
         let field = &handoff.field.name;
         let lent_handle = match field_ty {
             Ty::Ref { inner, .. } => match &**inner {
-                Ty::Handle(c) => Some(c.as_str()),
+                Ty::Handle(_, c) => Some(c.as_str()),
                 _ => None,
             },
             _ => None,
@@ -518,7 +560,7 @@ impl<'a> Checker<'a> {
                     errors.push(self.unknown_name(scope, name));
                     return;
                 };
-                if let Named::Child(_) = named {
+                if let Named::Child(..) = named {
                     errors.push(
                         Diagnostic::new(
                             "a component handle cannot be moved",
@@ -588,7 +630,7 @@ impl<'a> Checker<'a> {
             let sibling = starts
                 .iter()
                 .find(|s| s.binding.as_ref().is_some_and(|b| b.name == target.name));
-            match sibling.and_then(|s| self.component(&s.component.name)) {
+            match sibling.and_then(|s| self.started(s)) {
                 Some(index) => index,
                 None => {
                     if sibling.is_none() {
@@ -710,7 +752,7 @@ impl<'a> Checker<'a> {
                 let name = &path.segments[0].ident;
                 if let Some(named) = self.named(scope, &name.name) {
                     let ty = named.ty();
-                    if let Named::Child(_) = named {
+                    if let Named::Child(..) = named {
                         errors.push(
                             Diagnostic::new(
                                 "a component handle cannot be moved or copied",
@@ -821,7 +863,7 @@ impl<'a> Checker<'a> {
         state[index] = 1;
         stack.push(index);
         for start in &self.components[index].ast.starts {
-            let Some(child) = self.component(&start.component.name) else {
+            let Some(child) = self.started(start) else {
                 continue;
             };
             if state[child] == 1 {
@@ -877,7 +919,7 @@ impl<'a> Checker<'a> {
                     (h.field.name.as_str(), grant)
                 })
                 .collect();
-            if let Some(child) = self.component(&start.component.name) {
+            if let Some(child) = self.started(start) {
                 self.instance(child, &origins, &mut Vec::new(), &mut routes);
             }
         }
@@ -952,7 +994,7 @@ impl<'a> Checker<'a> {
                     (h.field.name.as_str(), grant)
                 })
                 .collect();
-            if let Some(child) = self.component(&start.component.name) {
+            if let Some(child) = self.started(start) {
                 self.instance(child, &child_origins, stack, routes);
             }
         }

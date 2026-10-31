@@ -100,7 +100,7 @@ fn drawn_ids(svg: &str) -> Vec<String> {
 
 /// Every element any view draws has a place in the source, and the places
 /// are pinned for the program with every shape, one line each: the ID, the
-/// line and column, and the start of the source there.
+/// file, line and column, and the start of the source there.
 #[test]
 fn every_drawn_element_has_a_source() {
     let mut pinned = String::new();
@@ -119,8 +119,9 @@ fn every_drawn_element_has_a_source() {
             }
         }
         if dir.ends_with("shapes") {
-            let text = &program.files[emitted.file].text;
-            for (id, span) in &emitted.sources {
+            for (id, source) in &emitted.sources {
+                let text = &program.files[source.file].text;
+                let span = source.span;
                 let before = &text[..span.start];
                 let line = before.matches('\n').count() + 1;
                 let column = before.len() - before.rfind('\n').map_or(0, |i| i + 1) + 1;
@@ -128,7 +129,8 @@ fn every_drawn_element_has_a_source() {
                     .lines()
                     .next()
                     .unwrap_or_default();
-                pinned.push_str(&format!("{id}  {line}:{column}  {start}\n"));
+                let path = &program.files[source.file].path;
+                pinned.push_str(&format!("{id}  {path}:{line}:{column}  {start}\n"));
             }
         }
     }
@@ -145,6 +147,39 @@ fn shapes_are_drawn() {
     let json = to_json(&diagram);
     assert_eq!(to_json(&drawn(&program)), json, "emitting is deterministic");
     insta::assert_snapshot!(json);
+}
+
+/// The flowcharts of a `match`, and of `for` and `while` loops, are pinned
+/// as SVGs beside the program, where a reviewer can open them. Run with
+/// `INSET_BLESS=1` to rewrite them after a deliberate change.
+#[test]
+fn match_and_loop_flowcharts_are_pinned() {
+    let dir = repo().join("crates/inset-diagram/tests/programs/shapes");
+    let program = Program::load(&dir).expect("load shapes");
+    let diagram = drawn(&program);
+    for (file, function) in [
+        ("classify.svg", "Shapes/mod:sizes/fn:classify"),
+        ("total.svg", "Shapes/mod:sizes/fn:total"),
+        ("measure.svg", "Shapes/front/fn:measure"),
+    ] {
+        let view = View {
+            flowchart: Some(function.into()),
+            ..View::default()
+        };
+        let svg = render(&diagram, &view).unwrap();
+        let path = dir.join("expected").join(file);
+        if std::env::var_os("INSET_BLESS").is_some() {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, &svg).unwrap();
+            continue;
+        }
+        let committed = std::fs::read_to_string(&path).unwrap_or_default();
+        assert!(
+            committed == svg,
+            "{} is out of date; run the tests with INSET_BLESS=1 and review the difference",
+            path.display()
+        );
+    }
 }
 
 /// Messages, an outlet, `send`, `.await`, and the shapes of body that
@@ -195,9 +230,11 @@ fn double(n: u32) -> u32 {
     n * 2
 }
 
-fn parse(text: &str) -> Result<u32, String> {
-    let n: u32 = text.parse().map_err(|_| String::from("not a number"))?;
-    Ok(n)
+fn size(text: &str) -> u32 {
+    double(match text.len() {
+        0 => 0,
+        _ => 1,
+    })
 }
 "#;
 

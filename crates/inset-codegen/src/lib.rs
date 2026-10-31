@@ -19,7 +19,10 @@
 //! **What is covered.** The constructs Hello HTTP uses: settings,
 //! `HttpServer` grants, `start` statements in the app that move grants into
 //! components, components whose fields are all `HttpServer`s, route
-//! handlers, algorithms, and the Rust inside function bodies. Anything else
+//! handlers, algorithms, and the Rust inside function bodies. Also modules,
+//! each emitted as a Rust module of the same name, so paths and privacy
+//! mean the same in both, and structs and enums, with an error enum's
+//! `#[status]` attributes becoming the runtime's `Status`. Anything else
 //! that `inset check` accepts gets a diagnostic saying it cannot be compiled
 //! yet, at the construct, rather than Rust that would not build. Messages,
 //! children, state, tables and `failure` blocks follow with the Stock
@@ -41,9 +44,9 @@ mod body;
 mod items;
 mod project;
 
-use inset_check::{MAIN, Program, Report};
+use inset_check::{Program, Report};
 use inset_syntax::ast::ItemKind;
-use inset_syntax::{Diagnostic, Span, parse_code};
+use inset_syntax::{Diagnostic, Span};
 use quote::quote;
 
 pub use project::{BuildError, Built, build, cargo_toml};
@@ -60,17 +63,10 @@ pub struct Generated {
 /// Checks the program and emits its Rust. The reports are the checker's,
 /// or else one for each construct that cannot be compiled yet.
 pub fn generate(program: &Program) -> Result<Generated, Vec<Report>> {
-    let reports = inset_check::check(program);
-    if !reports.is_empty() {
-        return Err(reports);
-    }
-    let main = program
-        .files
-        .iter()
-        .position(|f| f.path == MAIN)
-        .expect("a checked program has its main file");
-    let module = parse_code(&program.files[main].text).ast;
-    let app = module
+    let resolved = inset_check::resolve(program)?;
+    let modules = &resolved.modules;
+    let app = modules.list[0]
+        .ast
         .items
         .iter()
         .find_map(|item| match &item.kind {
@@ -80,15 +76,12 @@ pub fn generate(program: &Program) -> Result<Generated, Vec<Report>> {
         .expect("a checked program has an app");
 
     let mut emitter = Emitter::default();
-    let items = emitter.module(&module);
+    let items = emitter.module(modules, 0);
     if !emitter.diagnostics.is_empty() {
         return Err(emitter
             .diagnostics
             .into_iter()
-            .map(|diagnostic| Report {
-                file: main,
-                diagnostic,
-            })
+            .filter_map(|diagnostic| modules.report(diagnostic))
             .collect());
     }
     let header = format!(" The Rust that `inset build` generated for the app `{app}`.");
@@ -105,28 +98,38 @@ pub fn generate(program: &Program) -> Result<Generated, Vec<Report>> {
     })
 }
 
-/// Puts a blank line between items, and between the members of an `impl`
-/// block, which `prettyplease` leaves out.
+/// Puts a blank line between items, in the file and in each module, and
+/// between the members of an `impl` block, which `prettyplease` leaves out.
 fn spaced(source: &str) -> String {
     let indent = |line: &str| line.len() - line.trim_start().len();
     let mut out = String::new();
-    let mut in_impl = false;
+    // The indentation of each block whose entries are items or members.
+    let mut containers = vec![0];
     let mut prev: Option<&str> = None;
     for line in source.lines() {
-        if indent(line) == 0 && line.starts_with("impl") {
-            in_impl = true;
+        let depth = indent(line);
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('}') {
+            containers.retain(|&c| c < depth + 4);
         }
         if let Some(prev) = prev {
             let ends_item = prev.ends_with('}') || prev.ends_with(';');
-            let starts_item = !line.trim_start().starts_with('}');
-            let same = |depth| indent(prev) == depth && indent(line) == depth;
+            let starts_item = !trimmed.starts_with('}');
+            let same = indent(prev) == depth && containers.last() == Some(&depth);
             let crate_docs_end = prev.starts_with("//!") && !line.starts_with("//!");
-            if crate_docs_end || (ends_item && starts_item && (same(0) || (in_impl && same(4)))) {
+            if crate_docs_end || (ends_item && starts_item && same) {
                 out.push('\n');
             }
         }
-        if line == "}" {
-            in_impl = false;
+        let opens_container = line.ends_with('{')
+            && containers.last() == Some(&depth)
+            && (trimmed.starts_with("impl")
+                || trimmed.starts_with("mod ")
+                || trimmed
+                    .split_once(" mod ")
+                    .is_some_and(|(vis, _)| vis.starts_with("pub")));
+        if opens_container {
+            containers.push(depth + 4);
         }
         out.push_str(line);
         out.push('\n');

@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/library.inset:7:14-7:19
+unknown status `Taken`
+not an HTTP status
+help: name a status by its standard name, such as `NotFound` or `Conflict`

@@ -123,6 +123,35 @@ pub(crate) fn pattern(p: &Pattern) -> TokenStream {
             quote!(#p(#(#elems),*))
         }
         PatternKind::Path(p) => path(p, true),
+        PatternKind::Struct {
+            path: p,
+            fields,
+            rest,
+        } => {
+            let p = path(p, true);
+            let fields: Vec<_> = fields
+                .iter()
+                .map(|f| {
+                    let name = ident(&f.name.name);
+                    match &f.pattern {
+                        Some(inner) => {
+                            let inner = pattern(inner);
+                            quote!(#name: #inner)
+                        }
+                        None => quote!(#name),
+                    }
+                })
+                .collect();
+            match (fields.is_empty(), rest) {
+                (true, true) => quote!(#p { .. }),
+                (false, true) => quote!(#p { #(#fields,)* .. }),
+                (_, false) => quote!(#p { #(#fields),* }),
+            }
+        }
+        PatternKind::Or(alternatives) => {
+            let alternatives = alternatives.iter().map(pattern);
+            quote!(#(#alternatives)|*)
+        }
         PatternKind::Lit(l) => lit(l),
     }
 }
@@ -147,6 +176,30 @@ fn lit(l: &Lit) -> TokenStream {
 }
 
 impl Emitter {
+    /// A type, reporting the ones that cannot be compiled yet.
+    pub(crate) fn ty(&mut self, t: &Type) -> TokenStream {
+        self.check_type(t);
+        ty(t)
+    }
+
+    fn check_type(&mut self, t: &Type) {
+        match &t.kind {
+            TypeKind::Path(p) => {
+                for segment in &p.segments {
+                    if segment.ident.name == "Decimal" {
+                        self.unsupported("`Decimal`", segment.ident.span, "this type");
+                    }
+                    for generic in &segment.generics {
+                        self.check_type(generic);
+                    }
+                }
+            }
+            TypeKind::Ref { inner, .. } | TypeKind::Slice(inner) => self.check_type(inner),
+            TypeKind::Tuple(elems) => elems.iter().for_each(|e| self.check_type(e)),
+            TypeKind::Infer => {}
+        }
+    }
+
     pub(crate) fn block(&mut self, block: &Block) -> TokenStream {
         let stmts: Vec<_> = block.stmts.iter().map(|s| self.stmt(s)).collect();
         quote!({ #(#stmts)* })
@@ -163,7 +216,7 @@ impl Emitter {
             } => {
                 let p = pattern(p);
                 let t = t.as_ref().map(|t| {
-                    let t = ty(t);
+                    let t = self.ty(t);
                     quote!(: #t)
                 });
                 let init = init.as_ref().map(|e| {
@@ -190,8 +243,16 @@ impl Emitter {
     pub(crate) fn expr(&mut self, e: &Expr) -> TokenStream {
         match &e.kind {
             ExprKind::Lit(l) => lit(l),
-            ExprKind::Path(p) => path(p, true),
+            ExprKind::Path(p) => {
+                if p.segments[0].ident.name == "Decimal" {
+                    self.unsupported("`Decimal`", p.segments[0].ident.span, "this type");
+                }
+                path(p, true)
+            }
             ExprKind::Macro { name, args } => {
+                if matches!(name.segments.as_slice(), [only] if only.ident.name == "dec") {
+                    self.unsupported("`dec!`", name.span, "this macro");
+                }
                 let args = self.exprs(args);
                 let is_vec = matches!(name.segments.as_slice(), [only] if only.ident.name == "vec");
                 let name = path(name, true);
@@ -273,7 +334,7 @@ impl Emitter {
             }
             ExprKind::Cast { expr, ty: t } => {
                 let expr = self.expr(expr);
-                let t = ty(t);
+                let t = self.ty(t);
                 quote!(#expr as #t)
             }
             ExprKind::Struct {
@@ -342,23 +403,76 @@ impl Emitter {
                 quote!(())
             }
             ExprKind::Closure(closure) => self.closure(closure),
+            ExprKind::Match { scrutinee, arms } => {
+                let scrutinee = self.expr(scrutinee);
+                let arms: Vec<_> = arms
+                    .iter()
+                    .map(|arm| {
+                        let pat = pattern(&arm.pattern);
+                        let guard = arm.guard.as_ref().map(|g| {
+                            let g = self.expr(g);
+                            quote!(if #g)
+                        });
+                        let body = self.expr(&arm.body);
+                        quote!(#pat #guard => #body,)
+                    })
+                    .collect();
+                quote!(match #scrutinee { #(#arms)* })
+            }
+            ExprKind::For {
+                pattern: p,
+                iter,
+                body,
+            } => {
+                let p = pattern(p);
+                let iter = self.expr(iter);
+                let body = self.block(body);
+                quote!(for #p in #iter #body)
+            }
+            ExprKind::While { cond, body } => {
+                let cond = self.expr(cond);
+                let body = self.block(body);
+                quote!(while #cond #body)
+            }
+            ExprKind::Let { pattern: p, expr } => {
+                let p = pattern(p);
+                let expr = self.expr(expr);
+                quote!(let #p = #expr)
+            }
+            ExprKind::Range {
+                start,
+                end,
+                inclusive,
+            } => {
+                let start = start.as_ref().map(|e| self.expr(e));
+                let end = end.as_ref().map(|e| self.expr(e));
+                if *inclusive {
+                    quote!(#start..=#end)
+                } else {
+                    quote!(#start..#end)
+                }
+            }
         }
     }
 
     fn closure(&mut self, closure: &Closure) -> TokenStream {
         let is_move = closure.is_move.then(|| quote!(move));
-        let params = closure.params.iter().map(|p| {
-            let pat = pattern(&p.pattern);
-            match &p.ty {
-                Some(t) => {
-                    let t = ty(t);
-                    quote!(#pat: #t)
+        let params: Vec<_> = closure
+            .params
+            .iter()
+            .map(|p| {
+                let pat = pattern(&p.pattern);
+                match &p.ty {
+                    Some(t) => {
+                        let t = self.ty(t);
+                        quote!(#pat: #t)
+                    }
+                    None => pat,
                 }
-                None => pat,
-            }
-        });
+            })
+            .collect();
         let ret = closure.ret.as_ref().map(|t| {
-            let t = ty(t);
+            let t = self.ty(t);
             quote!(-> #t)
         });
         let body = self.expr(&closure.body);

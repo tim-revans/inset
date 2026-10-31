@@ -22,16 +22,18 @@ The host starts one instance of the program and keeps it for as long as the prog
 
 ## The emitted Rust
 
-Each Inset item becomes Rust items in source order, each with its doc comment.
+Each Inset item becomes Rust items in source order, each with its doc comment. Each Inset module becomes a Rust module of the same name, written inline in the one generated `lib.rs`, so `crate::`, `super::`, `use` and `pub` mean in the emitted Rust exactly what they mean in the source, and rustc's privacy rules agree with the checker's.
 
 - **The app** becomes a type implementing `App`: its settings and grants as constants, which `describe` returns, and its `start` statements as `start`.
 - **A component** becomes a struct of its fields, implementing `Component`. The trait carries what the runtime needs to know: `save` and `restore` for the fields that hold state, `respond` for the `failure` block, `label` to name capability fields, and `servers` and `route` for route handlers. Handlers and algorithms stay as they were written, in an `impl` block of their own.
 - **A child** is started with `scope.start_as("name", |scope| Child { ... })`, which returns its `Handle`. The closure gets the child's scope, for the child's own children.
 - **Messages** become one method each on a trait implemented for `Handle<C>`. A method returns a `Message`, which `.await` sends and waits for, and `send(...)` sends without waiting. A lent parameter is cloned in that method, so the receiver's handler gets `&T` to a copy (see [Lending](#lending)).
+- **A struct or an enum** is emitted as written, with its derives. An enum with `#[status(...)]` on its variants also implements `Status`, which replies with each variant's status: an empty body for a unit variant, and the `String` a variant holds as a text body. A route that returns `Result<String, E>` replies through it.
+- **A component's fields** take the component's own visibility, because whoever can name the component can start it, and must supply its fields.
 - **Routes** become `route`, which matches the request against each route attribute in order, converts the path parameters, and returns the handler to call. A parameter that does not convert means the route does not match, so the request gets `404 Not Found`, as `syntax.md` says. A body that does not convert gets `400 Bad Request`.
 - `inset_runtime::export!(App)` exports the program.
 
-The compiler emits the app, components with `HttpServer` fields, routes and algorithms so far. Children, messages, state and `failure` blocks are shown by the spike fixture, and the compiler reports each as not compiled yet.
+The compiler emits the app, components with `HttpServer` fields, routes, algorithms, structs, enums and modules so far. Children, messages, state and `failure` blocks are shown by the spike fixture, and the compiler reports each as not compiled yet.
 
 The emitted Rust names everything from the runtime by its full path, such as `::inset_runtime::Route`, rather than importing a prelude, so a component may have any name, `Route` included, without clashing with the runtime. It is printed by `prettyplease`, which drops comments, so unlike the hand-written fixture it does not repeat each Inset statement above what it became. Each piece is still recognisable from its source: a setting's name, type and default, a grant's fields, and `scope.start(...)` for each `start`.
 

@@ -40,12 +40,14 @@ Error: a block in a body cannot be drawn yet
     │     
     │     Help: `inset check` accepts this, but the diagram generator does not draw it yet
 ────╯
-Error: `?` in a function that does not return an `Option` cannot be drawn yet
-    ╭─[ src/main.inset:48:5 ]
+Error: a `match` inside an expression cannot be drawn yet
+    ╭─[ src/main.inset:48:12 ]
     │
- 48 │     let n: u32 = text.parse().map_err(|_| String::from("not a number"))?;
-    │     ──────────────────────────────────┬──────────────────────────────────  
-    │                                       ╰──────────────────────────────────── returns early here
-    │ 
-    │ Help: `inset check` accepts this, but the diagram generator does not draw it yet
+ 48 │ ╭─▶     double(match text.len() {
+    ┆ ┆   
+ 51 │ ├─▶     })
+    │ │            
+    │ ╰──────────── this `match`
+    │     
+    │     Help: `inset check` accepts this, but the diagram generator does not draw it yet
 ────╯

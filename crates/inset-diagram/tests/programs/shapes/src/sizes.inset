@@ -1,0 +1,30 @@
+/// How big a number is.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Size {
+    Small,
+    /// Holds the number.
+    Large(u32),
+}
+
+/// Sorts a number by its size.
+pub fn classify(n: i32) -> Size {
+    match n {
+        0 => Size::Small,
+        n if n > 100 => Size::Large(n as u32),
+        _ => Size::Small,
+    }
+}
+
+/// Adds up the large sizes, then takes away thousands until under one.
+pub fn total(sizes: &[Size]) -> u32 {
+    let mut sum = 0;
+    for size in sizes {
+        if let Size::Large(n) = size {
+            sum += n;
+        }
+    }
+    while sum >= 1000 {
+        sum -= 1000;
+    }
+    sum
+}

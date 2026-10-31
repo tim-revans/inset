@@ -1,0 +1,12 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&out)
+---
+pass  A book with a copy on the shelf is lent
+pass  A book whose every copy is out is not lent
+pass  A title the shelf does not hold is not found
+pass  A title too short to look for is refused
+pass  The titles of a genre are listed in shelf order
+pass  A genre the shelf does not know is not found
+
+6 requirements passed

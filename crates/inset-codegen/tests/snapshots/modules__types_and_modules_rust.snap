@@ -1,0 +1,186 @@
+---
+source: crates/inset-codegen/tests/modules.rs
+expression: generated.source
+---
+//! The Rust that `inset build` generated for the app `Shelf`.
+//! It is written again on every build, so a change to it would be lost.
+
+mod library {
+    use crate::{Book, Genre};
+
+    /// Why a book is not lent.
+    #[derive(Debug)]
+    pub enum LendError {
+        /// No book has the title.
+        Unknown,
+        /// Every copy is out. Says which book.
+        AllOut(String),
+        /// The title is too short to look for.
+        TooShort,
+    }
+
+    impl ::inset_runtime::Status for LendError {
+        fn into_reply(self) -> ::inset_runtime::Reply {
+            match self {
+                Self::Unknown => ::inset_runtime::Reply::empty(404),
+                Self::AllOut(text) => ::inset_runtime::Reply::text(409, text),
+                Self::TooShort => ::inset_runtime::Reply::empty(400),
+            }
+        }
+    }
+
+    /// The lending desk.
+    pub struct Desk {
+        pub http: ::inset_runtime::HttpServer,
+    }
+
+    impl Desk {
+        /// Lends a copy of a book, and replies with how many copies are left.
+        fn lend(title: String) -> Result<String, LendError> {
+            let book = find(&title)?;
+            if book.copies == 0 {
+                return Err(
+                    LendError::AllOut(format!("every copy of {} is out", book.title)),
+                );
+            }
+            Ok(format!("{} left", book.copies - 1))
+        }
+
+        /// Lists the titles of a genre, in shelf order.
+        fn genre(name: String) -> Option<String> {
+            let genre = match name.as_str() {
+                "fiction" => Genre::Fiction,
+                "science" => Genre::Science,
+                "history" => Genre::History,
+                _ => return None,
+            };
+            let mut titles = Vec::new();
+            for book in shelf() {
+                if book.genre == genre {
+                    titles.push(book.title);
+                }
+            }
+            Some(titles.join(", "))
+        }
+    }
+
+    impl ::inset_runtime::Component for Desk {
+        const NAME: &'static str = "Desk";
+
+        type Saved = ();
+
+        fn save(&self) {}
+
+        fn restore(&mut self, (): ()) {}
+
+        fn servers(&self) -> Vec<(&'static str, &::inset_runtime::HttpServer)> {
+            Vec::from([("http", &self.http)])
+        }
+
+        fn route(
+            field: &str,
+            request: &::inset_runtime::Request,
+        ) -> ::inset_runtime::Route<Self> {
+            if field == "http" {
+                if let Some(path) = request
+                    .route(::inset_runtime::Method::Get, "/lend/{title}")
+                {
+                    let Some(title) = path.get("title") else {
+                        return ::inset_runtime::Route::NotFound;
+                    };
+                    return ::inset_runtime::Route::to(move |_: &mut Self| {
+                        Box::pin(async move { Self::lend(title) })
+                    });
+                }
+                if let Some(path) = request
+                    .route(::inset_runtime::Method::Get, "/genres/{name}")
+                {
+                    let Some(name) = path.get("name") else {
+                        return ::inset_runtime::Route::NotFound;
+                    };
+                    return ::inset_runtime::Route::to(move |_: &mut Self| {
+                        Box::pin(async move { Self::genre(name) })
+                    });
+                }
+            }
+            ::inset_runtime::Route::NotFound
+        }
+    }
+
+    /// Every book on the shelf.
+    fn shelf() -> Vec<Book> {
+        vec![
+            Book { title : "Dune".to_string(), copies : 2, genre : Genre::Fiction }, Book
+            { title : "Cosmos".to_string(), copies : 1, genre : Genre::Science }, Book {
+            title : "Emma".to_string(), copies : 3, genre : Genre::Fiction }, Book {
+            title : "SPQR".to_string(), copies : 0, genre : Genre::History }
+        ]
+    }
+
+    /// The book with this title.
+    fn find(title: &str) -> Result<Book, LendError> {
+        if title.len() < 3 {
+            return Err(LendError::TooShort);
+        }
+        for book in shelf() {
+            if book.title == title {
+                return Ok(book);
+            }
+        }
+        Err(LendError::Unknown)
+    }
+}
+
+use library::Desk;
+
+/// Lends books over HTTP.
+struct Shelf;
+
+impl ::inset_runtime::App for Shelf {
+    const NAME: &'static str = "Shelf";
+
+    const SETTINGS: &'static [::inset_runtime::Setting] = &[
+        ::inset_runtime::Setting {
+            name: "port",
+            ty: ::inset_runtime::SettingType::U16,
+            default: "8080",
+        },
+    ];
+
+    const GRANTS: &'static [::inset_runtime::Grant] = &[
+        ::inset_runtime::Grant {
+            name: "http",
+            capability: "HttpServer",
+            fields: &[("port", ::inset_runtime::GrantValue::Setting("port"))],
+        },
+    ];
+
+    fn start(
+        scope: &::inset_runtime::Scope,
+        grants: &mut ::inset_runtime::Grants,
+    ) -> Result<(), ::inset_runtime::Stopped> {
+        let http = grants.http_server("http");
+        scope.start(|_| Desk { http });
+        Ok(())
+    }
+}
+
+::inset_runtime::export!(Shelf);
+
+/// A book on the shelf.
+#[derive(Clone, Debug, PartialEq)]
+struct Book {
+    /// The title, as printed on the cover.
+    title: String,
+    /// How many copies are on the shelf.
+    copies: u32,
+    genre: Genre,
+}
+
+/// What a book is about.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Genre {
+    Fiction,
+    Science,
+    History,
+}

@@ -36,6 +36,51 @@ pub(crate) fn outline(text: &str, requirements: bool, lines: &LineIndex) -> Vec<
             ItemKind::App(app) => outline.app(app, item.span),
             ItemKind::Component(component) => outline.component(component, item.span),
             ItemKind::Function(function) => outline.function(function),
+            ItemKind::Struct(s) => {
+                let fields = s
+                    .fields
+                    .iter()
+                    .filter_map(|f| {
+                        let detail = Some(outline.source(f.ty.span));
+                        outline.named(&f.name, SymbolKind::FIELD, detail, f.span, Vec::new())
+                    })
+                    .collect();
+                outline.named(
+                    &s.name,
+                    SymbolKind::STRUCT,
+                    Some("struct".into()),
+                    item.span,
+                    fields,
+                )
+            }
+            ItemKind::Enum(e) => {
+                let variants = e
+                    .variants
+                    .iter()
+                    .filter_map(|v| {
+                        let status = v.attrs.iter().find_map(|a| match &a.kind {
+                            AttributeKind::Status(status) => Some(status.name.clone()),
+                            _ => None,
+                        });
+                        outline.named(&v.name, SymbolKind::ENUM_MEMBER, status, v.span, Vec::new())
+                    })
+                    .collect();
+                outline.named(
+                    &e.name,
+                    SymbolKind::ENUM,
+                    Some("enum".into()),
+                    item.span,
+                    variants,
+                )
+            }
+            ItemKind::Mod(name) => outline.named(
+                name,
+                SymbolKind::MODULE,
+                Some("mod".into()),
+                item.span,
+                Vec::new(),
+            ),
+            ItemKind::Use(_) => None,
         })
         .collect()
 }

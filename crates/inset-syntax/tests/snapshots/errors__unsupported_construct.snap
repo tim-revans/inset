@@ -1,11 +1,11 @@
 ---
 source: crates/inset-syntax/tests/errors.rs
-description: "fn greeting(name: Option<String>) -> String {\n    match name {\n        Some(name) => format!(\"Hello, {name}!\"),\n        None => \"Hello!\".to_string(),\n    }\n}\n"
+description: "fn spin() -> u32 {\n    let mut n = 0;\n    loop {\n        n += 1;\n    }\n}\n"
 ---
-Error: `match` is not supported yet
-   ╭─[ main.inset:2:5 ]
+Error: `loop` is not supported yet
+   ╭─[ main.inset:3:5 ]
    │
- 2 │     match name {
-   │     ──┬──  
-   │       ╰──── the parser does not handle this yet
+ 3 │     loop {
+   │     ──┬─  
+   │       ╰─── the parser does not handle this yet
 ───╯

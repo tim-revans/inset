@@ -1,88 +1,62 @@
 //! The app, components, their fields and functions, routes and `failure`
 //! blocks: everything checked from declarations alone.
 
-use std::collections::HashSet;
-
 use inset_syntax::ast::*;
 use inset_syntax::{Diagnostic, Span};
 
+use crate::data::Data;
 use crate::types::{Resolver, Ty};
 use crate::{Checker, Comp, Field, FnKind, Reply, RouteDecl, Segment, Sig, names};
 
 impl<'a> Checker<'a> {
     pub(crate) fn collect_items(&mut self) {
-        let component_names = self.component_names();
-        let resolver = Resolver {
-            components: &component_names,
-        };
-        let mut types: HashSet<&str> = HashSet::new();
-        let mut functions: HashSet<&str> = HashSet::new();
-        for item in &self.module.items {
-            match &item.kind {
-                ItemKind::App(app) => {
-                    self.no_item_attrs(item, "an app");
-                    if let Some(first) = self.app {
-                        self.error(
-                            Diagnostic::new(
-                                "a program has one app",
-                                app.name.span,
-                                "this is a second app",
-                            )
-                            .with_help(format!(
-                                "put its settings, grants and starts in `app {}`",
-                                first.name.name
-                            )),
-                        );
-                        continue;
-                    }
-                    if !types.insert(&app.name.name) {
-                        self.defined_twice(&app.name.name, app.name.span);
-                    }
-                    self.app = Some(app);
-                }
-                ItemKind::Component(component) => {
-                    self.no_item_attrs(item, "a component");
-                    if !types.insert(&component.name.name) {
-                        self.defined_twice(&component.name.name, component.name.span);
-                        continue;
-                    }
-                    let comp = self.component_decl(component, &resolver);
-                    self.components.push(comp);
-                }
-                ItemKind::Function(function) => {
-                    if !functions.insert(&function.name.name) {
-                        self.defined_twice(&function.name.name, function.name.span);
-                        continue;
-                    }
-                    let sig = self.signature(function, None, &resolver);
-                    self.algorithms.push(sig);
-                }
+        if let Some(app) = &self.names.app {
+            let item = app.item;
+            self.no_item_attrs(item, "an app");
+        }
+        let mut components = Vec::new();
+        for decl in &self.names.components {
+            let mut errors = Vec::new();
+            if let Some(attr) = decl.item.attrs.first() {
+                errors.push(Diagnostic::new(
+                    "a component takes no attributes",
+                    attr.span,
+                    "remove this attribute",
+                ));
             }
+            let resolver = Resolver {
+                names: &self.names,
+                module: decl.module,
+            };
+            components.push(component_decl(
+                decl.ast,
+                decl.module,
+                &resolver,
+                &mut errors,
+            ));
+            self.diagnostics.extend(errors);
         }
-        if self.app.is_none() {
-            self.error(
-                Diagnostic::new(
-                    "the program has no app",
-                    Span::new(0, 0),
-                    "no `app` in this file",
-                )
-                .with_help("add `app Name { ... }` with the program's settings, grants and starts"),
-            );
+        self.components = components;
+        let mut algorithms = Vec::new();
+        for decl in &self.names.algorithms {
+            let resolver = Resolver {
+                names: &self.names,
+                module: decl.module,
+            };
+            let mut errors = Vec::new();
+            algorithms.push(signature(
+                decl.ast,
+                decl.module,
+                None,
+                &resolver,
+                &mut errors,
+            ));
+            self.diagnostics.extend(errors);
         }
+        self.algorithms = algorithms;
         for index in 0..self.components.len() {
             self.check_routes(index);
         }
-    }
-
-    fn defined_twice(&mut self, name: &str, span: Span) {
-        self.error(
-            Diagnostic::new(
-                format!("the name `{name}` is defined twice"),
-                span,
-                "this repeats an earlier name",
-            )
-            .with_help("rename one of the two"),
-        );
     }
 
     fn no_item_attrs(&mut self, item: &Item, what: &str) {
@@ -94,224 +68,254 @@ impl<'a> Checker<'a> {
             ));
         }
     }
+}
 
-    fn component_decl(&mut self, component: &'a Component, resolver: &Resolver) -> Comp<'a> {
-        let mut fields: Vec<Field<'a>> = Vec::new();
-        for decl in &component.fields {
-            let mut handed_down = false;
-            for attr in &decl.attrs {
-                match attr.kind {
-                    AttributeKind::HandedDown => handed_down = true,
-                    _ => self.error(Diagnostic::new(
-                        "a field takes no attribute but `#[handed_down]`",
-                        attr.span,
-                        "this attribute goes on a function",
-                    )),
-                }
-            }
-            if fields.iter().any(|f| f.decl.name.name == decl.name.name) {
-                self.error(Diagnostic::new(
-                    format!("the field `{}` is declared twice", decl.name.name),
-                    decl.name.span,
-                    "this repeats an earlier field",
-                ));
-                continue;
-            }
-            let ty = resolver.resolve(&decl.ty, &mut self.diagnostics);
-            self.check_field_type(decl, &ty);
-            fields.push(Field {
-                decl,
-                ty,
-                handed_down,
-            });
-        }
-        let mut functions: Vec<Sig<'a>> = Vec::new();
-        for function in &component.functions {
-            if functions.iter().any(|f| f.name() == function.name.name) {
-                self.defined_twice(&function.name.name, function.name.span);
-                continue;
-            }
-            functions.push(self.signature(function, Some(&component.name.name), resolver));
-        }
-        Comp {
-            ast: component,
-            fields,
-            functions,
-            routes: Vec::new(),
-        }
-    }
-
-    /// What a component field may hold: anything a parent can hand it, and
-    /// nothing that shares state across the boundary.
-    fn check_field_type(&mut self, decl: &FieldDecl, ty: &Ty) {
-        let span = decl.ty.span;
-        match ty {
-            Ty::Handle(c) => self.error(
-                Diagnostic::new(
-                    "a component handle cannot be moved",
-                    span,
-                    "a field cannot own a handle",
-                )
-                .with_help(format!(
-                    "a sibling lent with `&` is declared as `&Handle<{c}>`; a component \
-                     reaches its own children through their `start` names"
-                )),
-            ),
-            Ty::Ref {
-                mutable: false,
-                inner,
-            } if matches!(**inner, Ty::Handle(_)) => {}
-            Ty::Ref { .. } => self.error(
-                Diagnostic::new(
-                    "a field cannot hold a borrow",
-                    span,
-                    "only a lent sibling, `&Handle<C>`, is borrowed",
-                )
-                .with_help("make the field own its value; the parent moves or copies it in"),
-            ),
-            _ => {}
-        }
-        if let Some(inner) = ty.effect_inside()
-            && !matches!(ty, Ty::Ref { .. })
-        {
-            self.error(held_in_data(inner, span));
-        }
-        if let Some(shared) = ty.shared_state() {
-            self.error(shared_across(shared, span));
-        }
-    }
-
-    fn signature(
-        &mut self,
-        function: &'a Function,
-        component: Option<&str>,
-        resolver: &Resolver,
-    ) -> Sig<'a> {
-        let mut routes = 0;
-        let mut message = false;
-        for attr in &function.attrs {
-            match &attr.kind {
-                AttributeKind::Route(_) => routes += 1,
-                AttributeKind::Message => message = true,
-                AttributeKind::HandedDown => self.error(Diagnostic::new(
-                    "`#[handed_down]` goes on a field",
+fn component_decl<'a>(
+    component: &'a Component,
+    module: usize,
+    resolver: &Resolver,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Comp<'a> {
+    let mut fields: Vec<Field<'a>> = Vec::new();
+    for decl in &component.fields {
+        let mut handed_down = false;
+        for attr in &decl.attrs {
+            match attr.kind {
+                AttributeKind::HandedDown => handed_down = true,
+                _ => diagnostics.push(Diagnostic::new(
+                    "a field takes no attribute but `#[handed_down]`",
                     attr.span,
-                    "a function is not handed down",
+                    "this attribute goes on a function",
                 )),
             }
-            let handler = matches!(attr.kind, AttributeKind::Route(_) | AttributeKind::Message);
-            if handler && component.is_none() {
-                self.error(
-                    Diagnostic::new(
-                        "a handler belongs to a component",
-                        attr.span,
-                        "this function is at the top level of the module",
-                    )
-                    .with_help("move the function into the component whose fields it uses"),
-                );
+        }
+        if fields.iter().any(|f| f.decl.name.name == decl.name.name) {
+            diagnostics.push(Diagnostic::new(
+                format!("the field `{}` is declared twice", decl.name.name),
+                decl.name.span,
+                "this repeats an earlier field",
+            ));
+            continue;
+        }
+        let ty = resolver.resolve(&decl.ty, diagnostics);
+        check_field_type(decl, &ty, diagnostics);
+        fields.push(Field {
+            decl,
+            ty,
+            handed_down,
+        });
+    }
+    let mut functions: Vec<Sig<'a>> = Vec::new();
+    for function in &component.functions {
+        if functions.iter().any(|f| f.name() == function.name.name) {
+            diagnostics.push(defined_twice(&function.name.name, function.name.span));
+            continue;
+        }
+        functions.push(signature(
+            function,
+            module,
+            Some(&component.name.name),
+            resolver,
+            diagnostics,
+        ));
+    }
+    Comp {
+        ast: component,
+        module,
+        fields,
+        functions,
+        routes: Vec::new(),
+    }
+}
+
+/// What a component field may hold: anything a parent can hand it, and
+/// nothing that shares state across the boundary.
+fn check_field_type(decl: &FieldDecl, ty: &Ty, diagnostics: &mut Vec<Diagnostic>) {
+    let span = decl.ty.span;
+    match ty {
+        Ty::Handle(_, c) => diagnostics.push(
+            Diagnostic::new(
+                "a component handle cannot be moved",
+                span,
+                "a field cannot own a handle",
+            )
+            .with_help(format!(
+                "a sibling lent with `&` is declared as `&Handle<{c}>`; a component \
+                     reaches its own children through their `start` names"
+            )),
+        ),
+        Ty::Ref {
+            mutable: false,
+            inner,
+        } if matches!(**inner, Ty::Handle(..)) => {}
+        Ty::Ref { .. } => diagnostics.push(
+            Diagnostic::new(
+                "a field cannot hold a borrow",
+                span,
+                "only a lent sibling, `&Handle<C>`, is borrowed",
+            )
+            .with_help("make the field own its value; the parent moves or copies it in"),
+        ),
+        _ => {}
+    }
+    if let Some(inner) = ty.effect_inside()
+        && !matches!(ty, Ty::Ref { .. })
+    {
+        diagnostics.push(held_in_data(inner, span));
+    }
+    if let Some(shared) = ty.shared_state() {
+        diagnostics.push(shared_across(shared, span));
+    }
+}
+
+fn signature<'a>(
+    function: &'a Function,
+    module: usize,
+    component: Option<&str>,
+    resolver: &Resolver,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Sig<'a> {
+    let mut routes = 0;
+    let mut message = false;
+    for attr in &function.attrs {
+        match &attr.kind {
+            AttributeKind::Route(_) => routes += 1,
+            AttributeKind::Message => message = true,
+            AttributeKind::HandedDown => diagnostics.push(Diagnostic::new(
+                "`#[handed_down]` goes on a field",
+                attr.span,
+                "a function is not handed down",
+            )),
+            AttributeKind::Derive(_) | AttributeKind::Status(_) => {
+                diagnostics.push(Diagnostic::new(
+                    "this attribute does not go on a function",
+                    attr.span,
+                    "`#[derive]` goes on a struct or enum, and `#[status]` on an enum's variant",
+                ));
             }
         }
-        if routes > 1 || (routes == 1 && message) {
-            self.error(
+        let handler = matches!(attr.kind, AttributeKind::Route(_) | AttributeKind::Message);
+        if handler && component.is_none() {
+            diagnostics.push(
                 Diagnostic::new(
-                    "a function is one kind of handler",
+                    "a handler belongs to a component",
+                    attr.span,
+                    "this function is at the top level of the module",
+                )
+                .with_help("move the function into the component whose fields it uses"),
+            );
+        }
+    }
+    if routes > 1 || (routes == 1 && message) {
+        diagnostics.push(
+            Diagnostic::new(
+                "a function is one kind of handler",
+                function.name.span,
+                "this function has more than one route or message attribute",
+            )
+            .with_help("give each route or message a function of its own"),
+        );
+    }
+    let kind = if component.is_none() {
+        FnKind::Algorithm
+    } else if routes > 0 {
+        FnKind::Route
+    } else if message {
+        FnKind::Message
+    } else {
+        FnKind::Algorithm
+    };
+    if kind == FnKind::Algorithm {
+        if let Some(receiver) = &function.receiver {
+            diagnostics.push(
+                Diagnostic::new(
+                    format!("the algorithm `{}` cannot take `self`", function.name.name),
+                    receiver.span,
+                    "only a route handler or a `#[message]` takes `self`",
+                )
+                .with_help("pass the algorithm what it needs as parameters, or make it a handler"),
+            );
+        }
+        if function.is_async {
+            diagnostics.push(
+                Diagnostic::new(
+                    format!("the algorithm `{}` cannot be `async`", function.name.name),
                     function.name.span,
-                    "this function has more than one route or message attribute",
+                    "an algorithm is pure, so it has nothing to wait for",
                 )
-                .with_help("give each route or message a function of its own"),
+                .with_help("remove `async`, or make the function a handler"),
             );
         }
-        let kind = if component.is_none() {
-            FnKind::Algorithm
-        } else if routes > 0 {
-            FnKind::Route
-        } else if message {
-            FnKind::Message
-        } else {
-            FnKind::Algorithm
-        };
-        if kind == FnKind::Algorithm {
-            if let Some(receiver) = &function.receiver {
-                self.error(
-                    Diagnostic::new(
-                        format!("the algorithm `{}` cannot take `self`", function.name.name),
-                        receiver.span,
-                        "only a route handler or a `#[message]` takes `self`",
-                    )
-                    .with_help(
-                        "pass the algorithm what it needs as parameters, or make it a handler",
-                    ),
-                );
-            }
-            if function.is_async {
-                self.error(
-                    Diagnostic::new(
-                        format!("the algorithm `{}` cannot be `async`", function.name.name),
-                        function.name.span,
-                        "an algorithm is pure, so it has nothing to wait for",
-                    )
-                    .with_help("remove `async`, or make the function a handler"),
-                );
-            }
-        }
-        let params: Vec<Ty> = function
-            .params
-            .iter()
-            .map(|p| resolver.resolve(&p.ty, &mut self.diagnostics))
-            .collect();
-        let ret = match &function.ret {
-            Some(ty) => resolver.resolve(ty, &mut self.diagnostics),
-            None => Ty::unit(),
-        };
-        for (param, ty) in function.params.iter().zip(&params) {
-            self.check_passed_type(ty, param.ty.span, kind);
-            if kind == FnKind::Message && matches!(ty, Ty::Ref { mutable: true, .. }) {
-                self.error(
-                    Diagnostic::new(
-                        "a message cannot take `&mut`",
-                        param.ty.span,
-                        "`&mut` cannot cross a component boundary",
-                    )
-                    .with_help("take the value, or `&` to read it, and reply with any change"),
-                );
-            }
-        }
-        if let Some(ty) = &function.ret {
-            self.check_passed_type(&ret, ty.span, kind);
-        }
-        Sig {
-            ast: function,
-            kind,
-            params,
-            ret,
-        }
     }
-
-    /// Function parameters and replies cannot carry capabilities, handles or
-    /// outlets, and a message's cannot share state.
-    fn check_passed_type(&mut self, ty: &Ty, span: Span, kind: FnKind) {
-        if ty.is_effect() || ty.effect_inside().is_some() {
-            let effect = if ty.is_effect() {
-                ty
-            } else {
-                ty.effect_inside().unwrap_or(ty)
-            };
-            self.error(
+    let params: Vec<Ty> = function
+        .params
+        .iter()
+        .map(|p| resolver.resolve(&p.ty, diagnostics))
+        .collect();
+    let ret = match &function.ret {
+        Some(ty) => resolver.resolve(ty, diagnostics),
+        None => Ty::unit(),
+    };
+    for (param, ty) in function.params.iter().zip(&params) {
+        check_passed_type(diagnostics, ty, param.ty.span, kind);
+        if kind == FnKind::Message && matches!(ty, Ty::Ref { mutable: true, .. }) {
+            diagnostics.push(
                 Diagnostic::new(
-                    format!("`{effect}` cannot be passed to or from a function"),
-                    span,
-                    "only a component's fields hold capabilities, handles and outlets",
+                    "a message cannot take `&mut`",
+                    param.ty.span,
+                    "`&mut` cannot cross a component boundary",
                 )
-                .with_help("use the field from a handler through `self`"),
+                .with_help("take the value, or `&` to read it, and reply with any change"),
             );
         }
-        if kind == FnKind::Message
-            && let Some(shared) = ty.shared_state()
-        {
-            self.error(shared_across(shared, span));
-        }
     }
+    if let Some(ty) = &function.ret {
+        check_passed_type(diagnostics, &ret, ty.span, kind);
+    }
+    Sig {
+        ast: function,
+        module,
+        kind,
+        params,
+        ret,
+    }
+}
 
+/// Function parameters and replies cannot carry capabilities, handles or
+/// outlets, and a message's cannot share state.
+fn check_passed_type(diagnostics: &mut Vec<Diagnostic>, ty: &Ty, span: Span, kind: FnKind) {
+    if ty.is_effect() || ty.effect_inside().is_some() {
+        let effect = if ty.is_effect() {
+            ty
+        } else {
+            ty.effect_inside().unwrap_or(ty)
+        };
+        diagnostics.push(
+            Diagnostic::new(
+                format!("`{effect}` cannot be passed to or from a function"),
+                span,
+                "only a component's fields hold capabilities, handles and outlets",
+            )
+            .with_help("use the field from a handler through `self`"),
+        );
+    }
+    if kind == FnKind::Message
+        && let Some(shared) = ty.shared_state()
+    {
+        diagnostics.push(shared_across(shared, span));
+    }
+}
+
+fn defined_twice(name: &str, span: Span) -> Diagnostic {
+    Diagnostic::new(
+        format!("the name `{name}` is defined twice"),
+        span,
+        "this repeats an earlier name",
+    )
+    .with_help("rename one of the two")
+}
+
+impl<'a> Checker<'a> {
     /// Checks each route of a component and records it.
     fn check_routes(&mut self, index: usize) {
         let mut routes = Vec::new();
@@ -320,7 +324,8 @@ impl<'a> Checker<'a> {
         for sig in &comp.functions {
             for attr in &sig.ast.attrs {
                 if let AttributeKind::Route(route) = &attr.kind
-                    && let Some(decl) = route_decl(comp, sig, route, attr.span, &mut errors)
+                    && let Some(decl) =
+                        route_decl(&self.datas, comp, sig, route, attr.span, &mut errors)
                 {
                     routes.push(decl);
                 }
@@ -395,7 +400,7 @@ impl<'a> Checker<'a> {
                 },
                 FailureConditionKind::Message(name) => {
                     let lent = comp.field(&name.name).is_some_and(|f| {
-                        matches!(&f.ty, Ty::Ref { inner, .. } if matches!(**inner, Ty::Handle(_)))
+                        matches!(&f.ty, Ty::Ref { inner, .. } if matches!(**inner, Ty::Handle(..)))
                     });
                     if comp.child(&name.name).is_none() && !lent {
                         errors.push(
@@ -430,6 +435,7 @@ impl<'a> Checker<'a> {
 /// Checks one route attribute, returning it as a declaration if it can be
 /// resolved far enough to serve requests.
 fn route_decl(
+    datas: &[Data],
     comp: &Comp,
     sig: &Sig,
     route: &Route,
@@ -596,20 +602,32 @@ fn route_decl(
     let reply = match &sig.ret {
         Ty::String => Reply::Text,
         Ty::Std("Option", args) if args[0] == Ty::String => Reply::Optional,
-        Ty::Std("Result", args) if args[0] == Ty::String => {
-            if args[1].is_known() {
+        Ty::Std("Result", args) if args[0] == Ty::String => match &args[1] {
+            Ty::Data { id, .. } if datas[*id].statuses().is_some() => {
+                Reply::Fallible(datas[*id].statuses().unwrap_or_default())
+            }
+            Ty::Unknown => Reply::Unknown,
+            other => {
+                let help = match other {
+                    Ty::Data { id, .. } if datas[*id].is_enum => format!(
+                        "write `#[status(Name)]` above each variant of `{other}`, naming the status it replies with"
+                    ),
+                    _ => "declare an enum with a variant for each way the route can fail, \
+                          and a `#[status(Name)]` on each variant"
+                        .to_string(),
+                };
                 errors.push(
                     Diagnostic::new(
                         "a route's error type is an enum with a `#[status]` on each variant",
                         function.ret.as_ref().map_or(function.name.span, |t| t.span),
-                        format!("`{}` names no statuses", args[1]),
+                        format!("`{other}` names no statuses"),
                     )
-                    .with_help("declaring enums is not supported yet"),
+                    .with_help(help),
                 );
+                Reply::Unknown
             }
-            Reply::Fallible
-        }
-        Ty::Unknown => Reply::Fallible,
+        },
+        Ty::Unknown => Reply::Unknown,
         other => {
             let (span, label) = match &function.ret {
                 Some(ty) => (ty.span, format!("a route cannot reply with `{other}`")),
@@ -619,7 +637,7 @@ fn route_decl(
                 Diagnostic::new("a route returns its reply", span, label)
                     .with_help("return a `String`, an `Option<String>` or a `Result<String, E>`"),
             );
-            Reply::Fallible
+            Reply::Unknown
         }
     };
     ok.then(|| RouteDecl {

@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: the field `days` of `Loan` is private
+    ╭─[ src/main.inset:20:10 ]
+    │
+ 20 │     loan.days
+    │          ──┬─  
+    │            ╰─── declared in `crate::library` without `pub`
+    │ 
+    │ Help: make the field `pub(crate)` to use it from anywhere in the program
+────╯

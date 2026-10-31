@@ -1,0 +1,58 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+```inset
+on_hand: u32
+```
+
+How many the warehouse holds.
+
+A field of `Item`.
+
+----
+
+```inset
+on_hand: u32
+```
+
+How many the warehouse holds.
+
+A field of `Item`.
+
+----
+
+```inset
+struct Item
+```
+
+A stocked item, stored under its SKU.
+
+Derives `Clone`, `Debug` and `PartialEq`.
+
+----
+
+```inset
+enum ShipError
+```
+
+Why stock could not be shipped.
+
+Derives `Clone`, `Debug` and `PartialEq`. An error that replies `NotFound` and `Conflict`.
+
+----
+
+```inset
+ShipError::UnknownItem
+```
+
+No item has the SKU.
+
+Replies `NotFound`.
+
+----
+
+```inset
+mod warehouse
+```
+
+The module `crate::warehouse`, in `src/warehouse.inset`.

@@ -11,3 +11,20 @@ src/main.inset
     hello (GET /hello/{name}) line 15
 requirements/hello.req.inset
   Visitors are greeted by the name in the web address (requirement) line 1
+src/main.inset
+  warehouse (mod) line 1
+  StockTracker (app) line 6
+    port (u16) line 8
+    http (HttpServer) line 9
+    items (Table<String, Item>) line 11
+    Warehouse (Warehouse) line 12
+  Item (struct) line 17
+    on_hand (u32) line 19
+    reorder_level (u32) line 21
+    target_level (u32) line 23
+  Reorder (struct) line 28
+    sku (String) line 29
+    quantity (u32) line 30
+  ShipError (enum) line 35
+    UnknownItem (NotFound) line 38
+    NotEnoughStock (Conflict) line 41

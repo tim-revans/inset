@@ -1,7 +1,8 @@
 //! The negative cases of the semantic checks, shared by the checker's tests
 //! and the language server's, which must report the same diagnostics. Each
-//! case is a small change to Hello HTTP, or to `COUNTING`, a program with
-//! messages and an outlet between three components.
+//! case is a small change to Hello HTTP, to `COUNTING`, a program with
+//! messages and an outlet between three components, or to `SHELF`, a
+//! program of two modules with a struct and an error enum.
 
 pub const HELLO: &str = r#"app HelloHttp {
     setting port: u16 = 8080;
@@ -78,11 +79,88 @@ pub const COUNTING_REQ: &str = r#"requirement "Each count adds to the total"
     then Counting replies OK with "2"
 "#;
 
+pub const SHELF: &str = r#"mod library;
+
+use library::Desk;
+
+app Shelf {
+    setting port: u16 = 8080;
+    grant http: HttpServer { port };
+    start Desk { http: move http };
+}
+
+/// A book on the shelf.
+#[derive(Clone, Debug, PartialEq)]
+struct Book {
+    title: String,
+    /// How many copies are on the shelf.
+    copies: u32,
+}
+"#;
+
+pub const SHELF_LIBRARY: &str = r#"use crate::Book;
+
+/// Why a book is not lent.
+pub enum LendError {
+    #[status(NotFound)]
+    Unknown,
+    #[status(Conflict)]
+    AllOut(String),
+}
+
+pub component Desk {
+    http: HttpServer,
+
+    #[get("/lend/{title}", via = http)]
+    fn lend(title: String) -> Result<String, LendError> {
+        let book = find(&title)?;
+        match book.copies {
+            0 => Err(LendError::AllOut(book.title)),
+            n => Ok(format!("{} left", n - 1)),
+        }
+    }
+}
+
+fn find(title: &str) -> Result<Book, LendError> {
+    for book in shelf() {
+        if book.title == title {
+            return Ok(book);
+        }
+    }
+    Err(LendError::Unknown)
+}
+
+fn shelf() -> Vec<Book> {
+    vec![Book { title: "Dune".to_string(), copies: 2 }]
+}
+"#;
+
+pub const SHELF_REQ: &str = r#"requirement "A book with a copy on the shelf is lent"
+    when Shelf receives GET /lend/Dune
+    then Shelf replies OK with "1 left"
+"#;
+
 /// A broken program: its code and its requirements.
 pub struct Case {
     pub name: &'static str,
     pub main: String,
+    /// Its other code files, by path.
+    pub modules: Vec<(&'static str, String)>,
     pub requirements: String,
+}
+
+impl Case {
+    /// Every file of the program, by path.
+    pub fn files(&self) -> Vec<(&'static str, &str)> {
+        let mut files = vec![("src/main.inset", self.main.as_str())];
+        files.extend(
+            self.modules
+                .iter()
+                .map(|(path, text)| (*path, text.as_str())),
+        );
+        files.push(("requirements/main.req.inset", self.requirements.as_str()));
+        files
+    }
 }
 
 /// Replaces one piece of `source`, which must be there.
@@ -94,13 +172,74 @@ pub fn edit(source: &str, from: &str, to: &str) -> String {
 /// Every case, each of which has diagnostics.
 pub fn all() -> Vec<Case> {
     let mut cases = Vec::new();
+    let mut modules = Vec::new();
     let mut add = |name, main: String, requirements: String| {
         cases.push(Case {
             name,
             main,
+            modules: Vec::new(),
             requirements,
         })
     };
+    // A change to the shelf's library module, or with `main` its root.
+    let mut shelf = |name, main: String, library: String| {
+        modules.push(Case {
+            name,
+            main,
+            modules: vec![("src/library.inset", library)],
+            requirements: SHELF_REQ.to_string(),
+        })
+    };
+    let library = |from: &str, to: &str| edit(SHELF_LIBRARY, from, to);
+    shelf(
+        "variant_without_status",
+        SHELF.to_string(),
+        library("    #[status(Conflict)]\n", ""),
+    );
+    shelf(
+        "error_variant_holding_a_number",
+        SHELF.to_string(),
+        edit(
+            &library("AllOut(String)", "AllOut(u32)"),
+            "LendError::AllOut(book.title)",
+            "LendError::AllOut(book.copies)",
+        ),
+    );
+    shelf(
+        "unknown_status_name",
+        SHELF.to_string(),
+        library("#[status(Conflict)]", "#[status(Taken)]"),
+    );
+    shelf(
+        "private_item_from_another_module",
+        SHELF.to_string(),
+        library("pub component Desk", "component Desk"),
+    );
+    shelf(
+        "module_without_a_file",
+        edit(SHELF, "mod library;", "mod library;\nmod archive;"),
+        SHELF_LIBRARY.to_string(),
+    );
+    shelf(
+        "derive_not_allowed",
+        edit(SHELF, "PartialEq)]", "PartialEq, Display)]"),
+        SHELF_LIBRARY.to_string(),
+    );
+    shelf(
+        "match_leaves_out_a_case",
+        SHELF.to_string(),
+        library(
+            "n => Ok(format!(\"{} left\", n - 1)),",
+            "1 => Ok(String::from(\"0 left\")),",
+        ),
+    );
+    shelf(
+        "private_field_from_another_module",
+        format!("{SHELF}\nfn days(loan: &library::Loan) -> u32 {{\n    loan.days\n}}\n"),
+        format!(
+            "{SHELF_LIBRARY}\n/// A book lent out.\npub struct Loan {{\n    pub title: String,\n    days: u32,\n}}\n"
+        ),
+    );
     {
         let main = edit(
             HELLO,
@@ -275,5 +414,18 @@ pub fn all() -> Vec<Case> {
         );
         add("self_without_receiver", main, HELLO_REQ.to_string());
     }
+    {
+        let case = Case {
+            name: "file_not_a_module",
+            main: SHELF.to_string(),
+            modules: vec![
+                ("src/library.inset", SHELF_LIBRARY.to_string()),
+                ("src/archive.inset", "struct Old {}\n".to_string()),
+            ],
+            requirements: SHELF_REQ.to_string(),
+        };
+        cases.push(case);
+    }
+    cases.extend(modules);
     cases
 }

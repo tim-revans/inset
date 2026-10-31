@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: the variant `AllOut` has no `#[status]`
+   ╭─[ src/library.inset:7:5 ]
+   │
+ 7 │     AllOut(String),
+   │     ───┬──  
+   │        ╰──── other variants of `LendError` have one
+   │ 
+   │ Help: an error enum names the status each variant replies with; write one above `AllOut`, such as `#[status(BadRequest)]`
+───╯

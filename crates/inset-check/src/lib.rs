@@ -11,13 +11,25 @@
 //!
 //! The type check is partial on purpose. A type the checker cannot work out
 //! is unknown and fits anywhere, so it reports only mismatches it is sure
-//! of. Rust's own checks still run on the generated code. The checker covers
-//! what Hello HTTP uses, and the structure of components, outlets, messages
-//! and `failure` blocks around it, because those decide what the diagram
-//! draws.
+//! of. Rust's own checks still run on the generated code, but an error
+//! there is a compiler bug, so what rustc would surely refuse, such as a
+//! derive a field cannot have or a `match` that leaves out a variant, is
+//! reported here. The checker covers the code of the Stock tracker: the
+//! structure of components, outlets, messages and `failure` blocks, which
+//! decide what the diagram draws, and the modules and data types around it.
+//!
+//! A program's files are its modules (`modules`), parsed with spans that
+//! are unique across the program, so the checker compares spans without
+//! asking which file each is in, and turns them back into a file and an
+//! offset only to report. [`resolve`] hands the modules, and what each name
+//! resolved to, to the stages that emit from a checked program.
 //!
 //! The work is split by what is checked:
 //!
+//! - `modules`: which files are modules, from the `mod` declarations;
+//! - `names`: what each module declares and imports, how paths resolve, and
+//!   where `pub` lets an item be named from;
+//! - `data`: structs and enums, their derives, and error enums' statuses;
 //! - `items`: the app, components, fields, function kinds, routes and
 //!   `failure` blocks;
 //! - `wiring`: settings, grants, `start` statements and their handoffs, and
@@ -29,18 +41,25 @@
 //! Diagnostic wording is pinned by `insta` snapshot tests in `tests/`.
 
 mod body;
+mod data;
 mod index;
 mod items;
+mod modules;
+mod names;
 mod program;
 mod requirements;
 pub mod status;
 mod types;
 mod wiring;
 
+use std::collections::HashMap;
+
 use inset_syntax::ast::{self, HttpMethod};
-use inset_syntax::{Diagnostic, Ident, Span, is_requirements_file, parse_code, parse_requirements};
+use inset_syntax::{Diagnostic, Ident, Span, is_requirements_file, parse_requirements};
 
 pub use index::{Index, Reference, Symbol, SymbolKind};
+pub use modules::{Module, Modules};
+use names::Names;
 pub use program::{MAIN, Program, SourceFile};
 use types::Ty;
 
@@ -67,41 +86,68 @@ pub fn check(program: &Program) -> Vec<Report> {
     analyze(program).reports
 }
 
+/// A program that checked clean, for the stages that emit from it: its
+/// modules, and what each name in its code refers to.
+#[derive(Clone, Debug)]
+pub struct Resolved {
+    pub modules: Modules,
+    /// For each name in the code that refers to a declaration, the name of
+    /// that declaration. Both spans are program-wide (see [`Modules`]).
+    pub refs: HashMap<Span, Span>,
+}
+
+/// Checks the program, and returns its modules and resolved names if it
+/// checks clean, or its reports if not.
+pub fn resolve(program: &Program) -> Result<Resolved, Vec<Report>> {
+    let (modules, mut reports) = Modules::load(program);
+    let refs = {
+        let mut checker = Checker::new(&modules);
+        checker.check();
+        finish(program, &modules, &mut checker, &mut reports);
+        let mut refs: HashMap<Span, Span> = checker.refs.iter().copied().collect();
+        refs.extend(checker.names.refs.borrow().iter().copied());
+        refs
+    };
+    if !reports.is_empty() {
+        return Err(reports);
+    }
+    Ok(Resolved { modules, refs })
+}
+
 /// Parses and checks every file of the program, and indexes its names.
 pub fn analyze(program: &Program) -> Analysis {
-    let mut reports = Vec::new();
-    let mut code = None;
+    let (modules, mut reports) = Modules::load(program);
+    let index = {
+        let mut checker = Checker::new(&modules);
+        checker.check();
+        finish(program, &modules, &mut checker, &mut reports)
+    };
+    Analysis { reports, index }
+}
+
+/// Checks the requirements against a checked program, and gathers the reports.
+fn finish(
+    program: &Program,
+    modules: &Modules,
+    checker: &mut Checker,
+    reports: &mut Vec<Report>,
+) -> Index {
     let mut requirement_files = Vec::new();
     for (index, file) in program.files.iter().enumerate() {
+        let is_req = is_requirements_file(&file.path);
         let mut report = |diagnostic| {
             reports.push(Report {
                 file: index,
                 diagnostic,
             })
         };
-        let is_req = is_requirements_file(&file.path);
-        if file.path.starts_with("src/") {
-            if is_req {
-                report(misplaced(
-                    &file.path,
-                    "requirements",
-                    "src/",
-                    "requirements/",
-                ));
-            } else if file.path == MAIN {
-                let parsed = parse_code(&file.text);
-                parsed.diagnostics.into_iter().for_each(&mut report);
-                code = Some((index, parsed.ast));
-            } else {
-                report(
-                    Diagnostic::new(
-                        "modules are not supported yet",
-                        Span::new(0, 0),
-                        "this file is not part of the program",
-                    )
-                    .with_help(format!("move its items into {MAIN}")),
-                );
-            }
+        if file.path.starts_with("src/") && is_req {
+            report(misplaced(
+                &file.path,
+                "requirements",
+                "src/",
+                "requirements/",
+            ));
         } else if file.path.starts_with("requirements/") {
             if is_req {
                 let parsed = parse_requirements(&file.text);
@@ -112,30 +158,22 @@ pub fn analyze(program: &Program) -> Analysis {
             }
         }
     }
-    let empty = ast::Module { items: Vec::new() };
-    let (main, module) = match &code {
-        Some((index, module)) => (Some(*index), module),
-        None => (None, &empty),
-    };
-    let mut checker = Checker::new(module);
-    checker.check();
-    if let Some(main) = main {
-        reports.extend(checker.diagnostics.drain(..).map(|diagnostic| Report {
-            file: main,
-            diagnostic,
-        }));
-    }
+    reports.extend(
+        checker
+            .diagnostics
+            .drain(..)
+            .filter_map(|diagnostic| modules.report(diagnostic)),
+    );
     let mut refs = Vec::new();
     reports.extend(requirements::check(
-        &checker,
+        checker,
         program,
         &requirement_files,
         &mut refs,
     ));
     reports.sort_by_key(|r| (r.file, r.diagnostic.span.start));
-    let main = main.map(|i| (i, program.files[i].text.as_str()));
-    let index = index::build(&checker, main, refs);
-    Analysis { reports, index }
+    reports.dedup();
+    index::build(checker, refs)
 }
 
 fn misplaced(path: &str, what: &str, here: &str, there: &str) -> Diagnostic {
@@ -150,10 +188,17 @@ fn misplaced(path: &str, what: &str, here: &str, there: &str) -> Diagnostic {
 
 /// What the checker knows about the program's code, built up as it checks.
 pub(crate) struct Checker<'a> {
+    pub names: Names<'a>,
     pub app: Option<&'a ast::App>,
+    /// In the order of [`Names::components`].
     pub components: Vec<Comp<'a>>,
-    /// The algorithms at the top level of the module.
+    /// The algorithms at the top level of each module, in the order of
+    /// [`Names::algorithms`].
     pub algorithms: Vec<Sig<'a>>,
+    /// The structs and enums, in the order of [`Names::datas`].
+    pub datas: Vec<data::Data>,
+    /// The component each `start` statement starts, by the span of its name.
+    pub started: HashMap<Span, usize>,
     /// Every route of every running component, with the grant it serves.
     pub routes: Vec<RouteInfo>,
     pub diagnostics: Vec<Diagnostic>,
@@ -161,12 +206,13 @@ pub(crate) struct Checker<'a> {
     pub locals: Vec<(Ident, Ty)>,
     /// Each name in a body resolved, with the name of what it refers to.
     pub refs: Vec<(Span, Span)>,
-    module: &'a ast::Module,
 }
 
 /// A component and what it declares.
 pub(crate) struct Comp<'a> {
     pub ast: &'a ast::Component,
+    /// The module it is declared in.
+    pub module: usize,
     pub fields: Vec<Field<'a>>,
     pub functions: Vec<Sig<'a>>,
     /// Its routes, in the order of its functions.
@@ -189,6 +235,8 @@ pub(crate) enum FnKind {
 /// A function's kind and resolved signature.
 pub(crate) struct Sig<'a> {
     pub ast: &'a ast::Function,
+    /// The module it is declared in.
+    pub module: usize,
     pub kind: FnKind,
     pub params: Vec<Ty>,
     pub ret: Ty,
@@ -209,12 +257,14 @@ pub(crate) enum Segment {
 }
 
 /// How a route's return type replies.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Reply {
     Text,
     Optional,
-    /// `Result<String, E>`, whose statuses are not known yet.
-    Fallible,
+    /// `Result<String, E>`, with the statuses named on `E`'s variants.
+    Fallible(Vec<String>),
+    /// A reply whose statuses are not known.
+    Unknown,
 }
 
 /// A route as its component declares it.
@@ -243,20 +293,25 @@ pub(crate) struct RouteInfo {
 }
 
 impl<'a> Checker<'a> {
-    fn new(module: &'a ast::Module) -> Checker<'a> {
+    fn new(modules: &'a Modules) -> Checker<'a> {
+        let mut diagnostics = Vec::new();
+        let names = Names::build(modules, &mut diagnostics);
         Checker {
-            app: None,
+            app: names.app.as_ref().map(|a| a.ast),
+            names,
             components: Vec::new(),
             algorithms: Vec::new(),
+            datas: Vec::new(),
+            started: HashMap::new(),
             routes: Vec::new(),
-            diagnostics: Vec::new(),
+            diagnostics,
             locals: Vec::new(),
             refs: Vec::new(),
-            module,
         }
     }
 
     fn check(&mut self) {
+        self.collect_datas();
         self.collect_items();
         self.check_app();
         for index in 0..self.components.len() {
@@ -272,19 +327,9 @@ impl<'a> Checker<'a> {
         self.diagnostics.push(diagnostic);
     }
 
-    pub(crate) fn component(&self, name: &str) -> Option<usize> {
-        self.components.iter().position(|c| c.ast.name.name == name)
-    }
-
-    pub(crate) fn component_names(&self) -> Vec<&'a str> {
-        self.module
-            .items
-            .iter()
-            .filter_map(|item| match &item.kind {
-                ast::ItemKind::Component(c) => Some(c.name.name.as_str()),
-                _ => None,
-            })
-            .collect()
+    /// The component a `start` statement starts, once it has been resolved.
+    pub(crate) fn started(&self, start: &ast::Start) -> Option<usize> {
+        self.started.get(&start.component.span).copied()
     }
 }
 
@@ -302,12 +347,7 @@ impl Comp<'_> {
         self.start_of(name).map(|s| &s.component)
     }
 
-    /// The name a child is started under, where the `start` binds it.
-    pub(crate) fn child_binding(&self, name: &str) -> Option<&Ident> {
-        self.start_of(name).and_then(|s| s.binding.as_ref())
-    }
-
-    fn start_of(&self, name: &str) -> Option<&ast::Start> {
+    pub(crate) fn start_of(&self, name: &str) -> Option<&ast::Start> {
         self.ast
             .starts
             .iter()

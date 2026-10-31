@@ -25,6 +25,16 @@ impl Span {
     pub fn is_empty(self) -> bool {
         self.start == self.end
     }
+
+    /// The span moved on by `offset` bytes.
+    pub fn shifted(self, offset: usize) -> Span {
+        Span::new(self.start + offset, self.end + offset)
+    }
+
+    /// The span moved back by `offset` bytes, which it must start after.
+    pub fn unshifted(self, offset: usize) -> Span {
+        Span::new(self.start - offset, self.end - offset)
+    }
 }
 
 // Short, so syntax tree snapshots stay readable.

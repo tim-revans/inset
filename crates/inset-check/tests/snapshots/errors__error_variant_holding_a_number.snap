@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: the variant `AllOut` replies with a `u32`
+   ╭─[ src/library.inset:8:12 ]
+   │
+ 8 │     AllOut(u32),
+   │            ─┬─  
+   │             ╰─── an error variant's reply is its body, which is text
+   │ 
+   │ Help: hold nothing, for an empty body, or one `String`, which is the body
+───╯

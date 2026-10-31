@@ -1,8 +1,8 @@
 //! Diagram data emitted from a checked program, which `inset diagram` draws.
 //!
-//! [`emit`] checks the program with `inset-check`, parses its code again and
-//! walks the syntax tree in source order, so the same source always gives
-//! the same data. Every label is the source text of what it labels, because
+//! [`emit`] checks the program with `inset-check`, takes its modules and
+//! resolved names from the checker, and walks the syntax trees in source
+//! order, so the same source always gives the same data. Every label is the source text of what it labels, because
 //! that is what the compiler knows to be true; text that spans lines is
 //! joined onto one.
 //!
@@ -10,23 +10,24 @@
 //! starts and the children they start, with every field, `failure` arm,
 //! route, message handler and algorithm, capability edges with the
 //! operations called on each capability, and a flowchart for every function
-//! whose body uses statements, `let ... else`, `if`, `return` and `?` in a
-//! function that returns an `Option`. Anything else that `inset check`
-//! accepts gets a diagnostic saying it cannot be drawn yet, at the
-//! construct, rather than a diagram that leaves it out. Message and emit
-//! edges, which need `send` and `.await`, follow with the Stock tracker, as
-//! do `match`, `for` and modules, which the parser does not read yet.
+//! whose body uses statements, `let ... else`, `if`, `if let`, `match`,
+//! `for`, `while`, `return`, and `?` in a function that returns an `Option`
+//! or a `Result`. Algorithms in every module are drawn, each owned by the
+//! app and its module's path. Anything else that `inset check` accepts gets
+//! a diagnostic saying it cannot be drawn yet, at the construct, rather
+//! than a diagram that leaves it out. Message and emit edges, which need
+//! `send` and `.await`, follow with the Stock tracker.
 
 mod flow;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use inset_check::{MAIN, Program, Report};
+use inset_check::{Modules, Program, Report, Resolved};
 use inset_syntax::ast::{
     self, AttributeKind, ExprKind, FailureConditionKind, FailureResponse, HandoffValue, ItemKind,
     LitKind, TypeKind,
 };
-use inset_syntax::{Diagnostic, Span, parse_code};
+use inset_syntax::{Diagnostic, Span};
 
 use crate::model::{
     App, Component, Condition, Config, Diagram, Edge, FailureArm, Field, FieldKind, Function,
@@ -43,57 +44,59 @@ pub fn emit(program: &Program) -> Result<Diagram, Vec<Report>> {
 #[derive(Debug, Clone)]
 pub struct Emitted {
     pub diagram: Diagram,
-    /// The program's main file, by its index in the program.
+    /// For every element a picture can draw, by ID, where in the source a
+    /// reader should be taken: a declaration's name, a step's statement, a
+    /// branch's block. An instance of a component goes to the component's
+    /// declaration, a capability edge to the field that holds the
+    /// capability, and what a grant reaches outside the app to the grant.
+    pub sources: BTreeMap<String, Source>,
+}
+
+/// A place in a program's source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Source {
+    /// The file, by its index in the program.
     pub file: usize,
-    /// For every element a picture can draw, by ID, the span in the main
-    /// file a reader should be taken to: a declaration's name, a step's
-    /// statement, a branch's block. An instance of a component goes to the
-    /// component's declaration, a capability edge to the field that holds
-    /// the capability, and what a grant reaches outside the app to the grant.
-    pub sources: BTreeMap<String, Span>,
+    pub span: Span,
 }
 
 /// As [`emit`], and records where each element is in the source, so an
 /// editor can take a reader from a picture to the code.
 pub fn emit_with_sources(program: &Program) -> Result<Emitted, Vec<Report>> {
-    let reports = inset_check::check(program);
-    if !reports.is_empty() {
-        return Err(reports);
-    }
-    let main = program
-        .files
-        .iter()
-        .position(|f| f.path == MAIN)
-        .expect("a checked program has its main file");
-    let source = &program.files[main].text;
-    let module = parse_code(source).ast;
-    let mut emitter = Emitter::new(source, &module);
+    let resolved = inset_check::resolve(program)?;
+    let mut emitter = Emitter::new(&resolved);
     let diagram = emitter.diagram();
+    let modules = &resolved.modules;
     if emitter.diagnostics.is_empty() {
-        Ok(Emitted {
-            diagram,
-            file: main,
-            sources: emitter.sources,
-        })
+        let sources = emitter
+            .sources
+            .into_iter()
+            .filter_map(|(id, span)| {
+                let (file, span) = modules.locate(span)?;
+                Some((id, Source { file, span }))
+            })
+            .collect();
+        Ok(Emitted { diagram, sources })
     } else {
         Err(emitter
             .diagnostics
             .into_iter()
-            .map(|diagnostic| Report {
-                file: main,
-                diagnostic,
-            })
+            .filter_map(|diagnostic| modules.report(diagnostic))
             .collect())
     }
 }
 
 /// Walks the syntax tree, collecting what cannot be drawn yet.
 struct Emitter<'a> {
-    source: &'a str,
-    module: &'a ast::Module,
+    modules: &'a Modules,
+    /// What each name in the code refers to, as the checker resolved it.
+    refs: &'a HashMap<Span, Span>,
     app: String,
-    /// The algorithms at the top level of the module.
-    algorithms: BTreeSet<&'a str>,
+    /// Every component declared, by the span of its name, with its module.
+    components: HashMap<Span, (&'a ast::Item, &'a ast::Component, usize)>,
+    /// The ID of every algorithm at the top level of a module, by the span
+    /// of its name.
+    algorithms: HashMap<Span, String>,
     /// The names of the app's settings.
     app_settings: BTreeSet<&'a str>,
     /// For each capability field a component received, where it came from:
@@ -103,26 +106,27 @@ struct Emitter<'a> {
     operations: BTreeMap<String, BTreeSet<String>>,
     /// Capability fields that are used, in the order the components are drawn.
     used_capabilities: Vec<String>,
-    /// Where each element is, as [`Emitted::sources`].
+    /// Where each element is, by program-wide span.
     sources: BTreeMap<String, Span>,
     diagnostics: Vec<Diagnostic>,
 }
 
 impl<'a> Emitter<'a> {
-    fn new(source: &'a str, module: &'a ast::Module) -> Emitter<'a> {
-        let algorithms = module
-            .items
-            .iter()
-            .filter_map(|item| match &item.kind {
-                ItemKind::Function(f) => Some(f.name.name.as_str()),
-                _ => None,
-            })
-            .collect();
+    fn new(resolved: &'a Resolved) -> Emitter<'a> {
+        let mut components = HashMap::new();
+        for (index, module) in resolved.modules.list.iter().enumerate() {
+            for item in &module.ast.items {
+                if let ItemKind::Component(c) = &item.kind {
+                    components.insert(c.name.span, (item, c, index));
+                }
+            }
+        }
         Emitter {
-            source,
-            module,
+            modules: &resolved.modules,
+            refs: &resolved.refs,
             app: String::new(),
-            algorithms,
+            components,
+            algorithms: HashMap::new(),
             app_settings: BTreeSet::new(),
             moved_from: BTreeMap::new(),
             operations: BTreeMap::new(),
@@ -147,12 +151,13 @@ impl<'a> Emitter<'a> {
 
     /// The source text of a span, on one line.
     fn text(&self, span: Span) -> String {
-        one_line(&self.source[span.start..span.end])
+        one_line(self.modules.text(span))
     }
 
     fn diagram(&mut self) -> Diagram {
-        let (item, app) = self
-            .module
+        let modules = self.modules;
+        let (item, app) = modules.list[0]
+            .ast
             .items
             .iter()
             .find_map(|item| match &item.kind {
@@ -182,16 +187,26 @@ impl<'a> Emitter<'a> {
             .collect();
         let grants = app.grants.iter().map(|g| self.grant(app, g)).collect();
         let app_id = self.app.clone();
+        // Every algorithm's ID is known before any flowchart links to it.
+        let mut algorithms = Vec::new();
+        for module in &modules.list {
+            let owner = if module.path.is_empty() {
+                app_id.clone()
+            } else {
+                format!("{app_id}/mod:{}", module.path.join("::"))
+            };
+            for item in &module.ast.items {
+                if let ItemKind::Function(f) = &item.kind {
+                    self.algorithms
+                        .insert(f.name.span, format!("{owner}/fn:{}", f.name.name));
+                    algorithms.push((owner.clone(), item, f));
+                }
+            }
+        }
         let components = self.starts(&app_id, &app.starts, None);
-        let algorithms = self
-            .module
-            .items
-            .iter()
-            .filter_map(|item| match &item.kind {
-                ItemKind::Function(f) => Some((item, f)),
-                _ => None,
-            })
-            .map(|(item, f)| self.function(&app_id, f, &item.docs, None))
+        let algorithms = algorithms
+            .into_iter()
+            .map(|(owner, item, f)| self.function(&owner, f, &item.docs, None))
             .collect();
         let edges = self.capability_edges();
         Diagram {
@@ -312,7 +327,12 @@ impl<'a> Emitter<'a> {
     ) -> Vec<Component> {
         let mut components = Vec::new();
         for start in starts {
-            let Some((item, component)) = self.component_item(&start.component.name) else {
+            let Some((item, component, module)) = self
+                .refs
+                .get(&start.component.span)
+                .and_then(|target| self.components.get(target))
+                .copied()
+            else {
                 continue;
             };
             let segment = start
@@ -325,16 +345,14 @@ impl<'a> Emitter<'a> {
                 .iter()
                 .filter_map(|h| self.handoff(parent, &id, h, owner))
                 .collect();
-            components.push(self.component(id, start, item, component, handoffs));
+            let definition = format!(
+                "{}::{}",
+                self.modules.list[module].rust_path(),
+                component.name.name
+            );
+            components.push(self.component(id, start, item, component, handoffs, definition));
         }
         components
-    }
-
-    fn component_item(&self, name: &str) -> Option<(&'a ast::Item, &'a ast::Component)> {
-        self.module.items.iter().find_map(|item| match &item.kind {
-            ItemKind::Component(c) if c.name.name == name => Some((item, c)),
-            _ => None,
-        })
     }
 
     fn handoff(
@@ -406,6 +424,7 @@ impl<'a> Emitter<'a> {
         item: &'a ast::Item,
         component: &'a ast::Component,
         start_handoffs: Vec<Handoff>,
+        definition: String,
     ) -> Component {
         self.locate(&id, component.name.span);
         let fields: Vec<Field> = component
@@ -474,7 +493,7 @@ impl<'a> Emitter<'a> {
         Component {
             name: start.binding.as_ref().map(|b| b.name.clone()),
             ty: component.name.name.clone(),
-            definition: format!("crate::{}", component.name.name),
+            definition,
             doc: doc(&item.docs),
             external: None,
             start: start_handoffs,

@@ -1,0 +1,202 @@
+---
+source: crates/inset-check/tests/examples.rs
+expression: "remaining(\"csv-import\")"
+---
+Error: `given` is not supported yet
+   ╭─[ requirements/import.req.inset:2:5 ]
+   │
+ 2 │     given products is empty
+   │     ──┬──  
+   │       ╰──── the parser does not handle this yet
+───╯
+Error: expected the app's name, found `products["bolt-m6"]`
+    ╭─[ requirements/import.req.inset:10:9 ]
+    │
+ 10 │     and products["bolt-m6"] is Product { name: "M6 bolt", net: 0.10, gross: 0.12 }
+    │         ─────────┬─────────  
+    │                  ╰─────────── the step names the app, such as `HelloHttp`
+────╯
+Error: expected the app's name, found `products["nut-m6"]`
+    ╭─[ requirements/import.req.inset:11:9 ]
+    │
+ 11 │     and products["nut-m6"] is Product { name: "M6 nut", net: 0.05, gross: 0.06 }
+    │         ─────────┬────────  
+    │                  ╰────────── the step names the app, such as `HelloHttp`
+────╯
+Error: `given` is not supported yet
+    ╭─[ requirements/import.req.inset:14:5 ]
+    │
+ 14 │     given products is empty
+    │     ──┬──  
+    │       ╰──── the parser does not handle this yet
+────╯
+Error: expected the app's name, found `products["bolt-m6"]`
+    ╭─[ requirements/import.req.inset:21:9 ]
+    │
+ 21 │     and products["bolt-m6"] is Product { name: "Bolt, M6", net: 0.10, gross: 0.12 }
+    │         ─────────┬─────────  
+    │                  ╰─────────── the step names the app, such as `HelloHttp`
+────╯
+Error: `given` is not supported yet
+    ╭─[ requirements/import.req.inset:24:5 ]
+    │
+ 24 │     given products is empty
+    │     ──┬──  
+    │       ╰──── the parser does not handle this yet
+────╯
+Error: expected the app's name, found `products`
+    ╭─[ requirements/import.req.inset:27:9 ]
+    │
+ 27 │     and products is empty
+    │         ────┬───  
+    │             ╰───── the step names the app, such as `HelloHttp`
+────╯
+Error: `given` is not supported yet
+    ╭─[ requirements/import.req.inset:30:5 ]
+    │
+ 30 │     given products is empty
+    │     ──┬──  
+    │       ╰──── the parser does not handle this yet
+────╯
+Error: expected the app's name, found `products`
+    ╭─[ requirements/import.req.inset:43:9 ]
+    │
+ 43 │     and products is empty
+    │         ────┬───  
+    │             ╰───── the step names the app, such as `HelloHttp`
+────╯
+Error: `given` is not supported yet
+    ╭─[ requirements/import.req.inset:46:5 ]
+    │
+ 46 │     given products is empty
+    │     ──┬──  
+    │       ╰──── the parser does not handle this yet
+────╯
+Error: expected the app's name, found `products`
+    ╭─[ requirements/import.req.inset:56:9 ]
+    │
+ 56 │     and products is empty
+    │         ────┬───  
+    │             ╰───── the step names the app, such as `HelloHttp`
+────╯
+Error: `examples` is not supported yet
+    ╭─[ requirements/import.req.inset:57:5 ]
+    │
+ 57 │     examples
+    │     ────┬───  
+    │         ╰───── the parser does not handle this yet
+────╯
+Error: expected a step, found `|`
+    ╭─[ requirements/import.req.inset:58:5 ]
+    │
+ 58 │     | net   |
+    │     ┬  
+    │     ╰── a step starts with `given`, `when`, `then` or `and`
+────╯
+Error: expected a step, found `|`
+    ╭─[ requirements/import.req.inset:59:5 ]
+    │
+ 59 │     | -1.00 |
+    │     ┬  
+    │     ╰── a step starts with `given`, `when`, `then` or `and`
+────╯
+Error: expected a step, found `|`
+    ╭─[ requirements/import.req.inset:60:5 ]
+    │
+ 60 │     | 0.125 |
+    │     ┬  
+    │     ╰── a step starts with `given`, `when`, `then` or `and`
+────╯
+Error: expected a step, found `|`
+    ╭─[ requirements/import.req.inset:61:5 ]
+    │
+ 61 │     | free  |
+    │     ┬  
+    │     ╰── a step starts with `given`, `when`, `then` or `and`
+────╯
+Error: `for all` is not supported yet
+    ╭─[ requirements/import.req.inset:64:5 ]
+    │
+ 64 │     for all net: Decimal where net >= dec!(0) && net.scale() <= 2
+    │     ─┬─  
+    │      ╰─── the parser does not handle this yet
+────╯
+Error: `given` is not supported yet
+    ╭─[ requirements/import.req.inset:65:5 ]
+    │
+ 65 │     given products is empty
+    │     ──┬──  
+    │       ╰──── the parser does not handle this yet
+────╯
+Error: expected the app's name, found `products["bolt-m6"].net`
+    ╭─[ requirements/import.req.inset:72:9 ]
+    │
+ 72 │     and products["bolt-m6"].net == <net>
+    │         ───────────┬───────────  
+    │                    ╰───────────── the step names the app, such as `HelloHttp`
+────╯
+Error: `for all` is not supported yet
+    ╭─[ requirements/import.req.inset:75:5 ]
+    │
+ 75 │     for all net: Decimal where net >= dec!(0) && net.scale() <= 2
+    │     ─┬─  
+    │      ╰─── the parser does not handle this yet
+────╯
+Error: `given` is not supported yet
+    ╭─[ requirements/import.req.inset:76:5 ]
+    │
+ 76 │     given products is empty
+    │     ──┬──  
+    │       ╰──── the parser does not handle this yet
+────╯
+Error: expected the app's name, found `products["bolt-m6"].gross`
+    ╭─[ requirements/import.req.inset:83:9 ]
+    │
+ 83 │     and products["bolt-m6"].gross >= <net>
+    │         ────────────┬────────────  
+    │                     ╰────────────── the step names the app, such as `HelloHttp`
+────╯
+Error: `#[rust]` is not supported yet
+    ╭─[ src/main.inset:39:3 ]
+    │
+ 39 │ #[rust(path = "csv_reader.rs", crates = ["csv@1.3"])]
+    │   ──┬─  
+    │     ╰─── the parser does not handle this yet
+────╯
+Error: `extern` is not supported yet
+    ╭─[ src/main.inset:40:1 ]
+    │
+ 40 │ extern component CsvReader {
+    │ ───┬──  
+    │    ╰──── the parser does not handle this yet
+────╯
+Error: expected the function's body, in `{` `}`, found `;`
+    ╭─[ src/main.inset:43:43 ]
+    │
+ 43 │     fn read(&self, text: &str) -> Vec<Row>;
+    │                                           ┬  
+    │                                           ╰── expected the function's body, in `{` `}`
+────╯
+Error: `CsvReader` has no message `read`
+    ╭─[ src/main.inset:57:29 ]
+    │
+ 57 │         let rows = self.csv.read(&text).await;
+    │                             ──┬─  
+    │                               ╰─── `CsvReader` has no function `read`
+    │ 
+    │ Help: `CsvReader` has no `#[message]` functions
+────╯
+Error: `fork` is not supported yet
+    ╭─[ src/main.inset:72:19 ]
+    │
+ 72 │     let results = fork for row in rows {
+    │                   ──┬─  
+    │                     ╰─── the parser does not handle this yet
+────╯
+Error: cannot find `results` in this scope
+    ╭─[ src/main.inset:77:19 ]
+    │
+ 77 │     for result in results {
+    │                   ───┬───  
+    │                      ╰───── not a variable, parameter or function here
+────╯

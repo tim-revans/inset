@@ -17,17 +17,21 @@
 //! to check that it never panics.
 //!
 //! The grammar covers the part of "Grammar of the used subset" in
-//! `docs/language/syntax.md` that Hello HTTP needs, built so the rest slots
-//! in: apps, components with fields, `start` statements, `failure` blocks
-//! and functions, route and message attributes, and Rust's operators,
-//! calls, closures, `let` and `if`. It also reads `move` in a message's
-//! arguments and `via` in a `when` step, which the checks in `inset-check`
-//! need. Other constructs in the spec, such as `match`, `struct` and
-//! requirement facts, are reported as "not supported yet" at the keyword,
-//! so an author learns it is the compiler's limit and not their mistake.
-//! They are added as the examples that use them are compiled.
+//! `docs/language/syntax.md` that the Stock tracker's code needs, built so
+//! the rest slots in: apps, components with fields, `start` statements,
+//! `failure` blocks and functions, route, message, `derive` and `status`
+//! attributes, `struct`, `enum`, `mod` and `use`, and Rust's operators,
+//! calls, closures, ranges, `let`, `if`, `if let`, `match`, `for` and
+//! `while`. It also reads `move` in a message's arguments and `via` in a
+//! `when` step, which the checks in `inset-check` need. Other constructs in
+//! the spec, such as `fork`, `extern component` and requirement facts, are
+//! reported as "not supported yet" at the keyword, so an author learns it
+//! is the compiler's limit and not their mistake. They are added as the
+//! examples that use them are compiled.
 //!
-//! Spans are byte offsets into one file's source. Diagnostics are rendered
+//! Spans are byte offsets into one file's source, or, from
+//! [`parse_code_at`], into a whole program's, where each file starts at an
+//! offset of its own. Diagnostics are rendered
 //! with `ariadne`, and their wording is pinned by `insta` snapshot tests, as
 //! is Hello HTTP's syntax tree. After a deliberate change, run the tests with
 //! `INSTA_UPDATE=always` and review the difference in `tests/snapshots/`
@@ -53,11 +57,26 @@ pub struct Parsed<T> {
 
 /// Parses one file of the code dialect.
 pub fn parse_code(source: &str) -> Parsed<ast::Module> {
-    let lexed = lexer::lex(source);
-    let mut diagnostics = lexed.diagnostics;
-    let mut parser = parser::Parser::new(source, lexed.tokens);
+    parse_code_at(source, 0)
+}
+
+/// Parses one file of the code dialect, with every span, in the tree and in
+/// the diagnostics, moved on by `base`. A program of several files gives
+/// each file a range of offsets of its own, as rustc's source map does, so a
+/// span alone says which file it is in.
+pub fn parse_code_at(source: &str, base: usize) -> Parsed<ast::Module> {
+    let mut lexed = lexer::lex(source);
+    for token in &mut lexed.tokens {
+        token.span = token.span.shifted(base);
+    }
+    let mut diagnostics: Vec<Diagnostic> = lexed
+        .diagnostics
+        .into_iter()
+        .map(|d| d.shifted(base))
+        .collect();
+    let mut parser = parser::Parser::new(source, base, lexed.tokens);
     let ast = parser.parse_module();
-    let cutoff = lexed.cutoff.unwrap_or(usize::MAX);
+    let cutoff = lexed.cutoff.map_or(usize::MAX, |c| c + base);
     diagnostics.extend(
         parser
             .diagnostics

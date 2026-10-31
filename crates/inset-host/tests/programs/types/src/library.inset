@@ -1,0 +1,71 @@
+use crate::{Book, Genre};
+
+/// Why a book is not lent.
+#[derive(Debug)]
+pub enum LendError {
+    /// No book has the title.
+    #[status(NotFound)]
+    Unknown,
+    /// Every copy is out. Says which book.
+    #[status(Conflict)]
+    AllOut(String),
+    /// The title is too short to look for.
+    #[status(BadRequest)]
+    TooShort,
+}
+
+/// The lending desk.
+pub component Desk {
+    http: HttpServer,
+
+    /// Lends a copy of a book, and replies with how many copies are left.
+    #[get("/lend/{title}", via = http)]
+    fn lend(title: String) -> Result<String, LendError> {
+        let book = find(&title)?;
+        if book.copies == 0 {
+            return Err(LendError::AllOut(format!("every copy of {} is out", book.title)));
+        }
+        Ok(format!("{} left", book.copies - 1))
+    }
+
+    /// Lists the titles of a genre, in shelf order.
+    #[get("/genres/{name}", via = http)]
+    fn genre(name: String) -> Option<String> {
+        let genre = match name.as_str() {
+            "fiction" => Genre::Fiction,
+            "science" => Genre::Science,
+            "history" => Genre::History,
+            _ => return None,
+        };
+        let mut titles = Vec::new();
+        for book in shelf() {
+            if book.genre == genre {
+                titles.push(book.title);
+            }
+        }
+        Some(titles.join(", "))
+    }
+}
+
+/// Every book on the shelf.
+fn shelf() -> Vec<Book> {
+    vec![
+        Book { title: "Dune".to_string(), copies: 2, genre: Genre::Fiction },
+        Book { title: "Cosmos".to_string(), copies: 1, genre: Genre::Science },
+        Book { title: "Emma".to_string(), copies: 3, genre: Genre::Fiction },
+        Book { title: "SPQR".to_string(), copies: 0, genre: Genre::History },
+    ]
+}
+
+/// The book with this title.
+fn find(title: &str) -> Result<Book, LendError> {
+    if title.len() < 3 {
+        return Err(LendError::TooShort);
+    }
+    for book in shelf() {
+        if book.title == title {
+            return Ok(book);
+        }
+    }
+    Err(LendError::Unknown)
+}

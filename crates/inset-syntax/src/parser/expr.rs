@@ -193,6 +193,66 @@ impl Parser<'_> {
         self.nested(Parser::parse_pattern_inner)
     }
 
+    /// A pattern that may have several alternatives, `a | b`, as in a
+    /// `match` arm or a `let`. A closure's parameters cannot, since `|`
+    /// ends them.
+    pub(super) fn parse_pattern_top(&mut self) -> PResult<Pattern> {
+        let first = self.parse_pattern()?;
+        if !self.at(P::Or) {
+            return Ok(first);
+        }
+        let mut alternatives = vec![first];
+        while self.eat(P::Or) {
+            alternatives.push(self.parse_pattern()?);
+        }
+        let span = alternatives[0]
+            .span
+            .to(alternatives[alternatives.len() - 1].span);
+        Ok(Pattern {
+            kind: PatternKind::Or(alternatives),
+            span,
+        })
+    }
+
+    /// `{ name, name: pattern, .. }` after a struct pattern's path.
+    fn parse_struct_pattern(&mut self, path: Path) -> PResult<PatternKind> {
+        let open = self.bump().span;
+        let mut fields = Vec::new();
+        let mut rest = false;
+        while !self.at(P::RBrace) {
+            if self.eat(P::DotDot) {
+                rest = true;
+                break;
+            }
+            let start = self.span();
+            let mutable = self.eat_kw(Kw::Mut);
+            let name = self.parse_ident("a field name")?;
+            let pattern = if !mutable && self.eat(P::Colon) {
+                Some(self.parse_pattern_top()?)
+            } else if mutable {
+                Some(Pattern {
+                    span: start.to(name.span),
+                    kind: PatternKind::Binding {
+                        mutable: true,
+                        name: name.clone(),
+                    },
+                })
+            } else {
+                None
+            };
+            fields.push(FieldPattern {
+                span: start.to(self.prev_span()),
+                name,
+                pattern,
+            });
+            if !self.eat(P::Comma) {
+                break;
+            }
+        }
+        self.expect_close(P::RBrace, open, "the struct pattern")?;
+        Ok(PatternKind::Struct { path, fields, rest })
+    }
+
     pub(super) fn parse_pattern_inner(&mut self) -> PResult<Pattern> {
         let start = self.span();
         let kind = match self.kind().clone() {
@@ -211,7 +271,7 @@ impl Parser<'_> {
                 self.bump();
                 let mut elems = Vec::new();
                 while !self.at(P::RParen) {
-                    elems.push(self.parse_pattern()?);
+                    elems.push(self.parse_pattern_top()?);
                     if !self.eat(P::Comma) {
                         break;
                     }
@@ -237,7 +297,7 @@ impl Parser<'_> {
                     let open = self.bump().span;
                     let mut elems = Vec::new();
                     while !self.at(P::RParen) {
-                        elems.push(self.parse_pattern()?);
+                        elems.push(self.parse_pattern_top()?);
                         if !self.eat(P::Comma) {
                             break;
                         }
@@ -245,8 +305,7 @@ impl Parser<'_> {
                     self.expect_close(P::RParen, open, "the pattern")?;
                     PatternKind::TupleStruct { path, elems }
                 } else if self.at(P::LBrace) {
-                    let span = self.span();
-                    return Err(self.unsupported("a struct pattern", span));
+                    self.parse_struct_pattern(path)?
                 } else if let [segment] = path.segments.as_slice()
                     && segment.generics.is_empty()
                 {
@@ -330,7 +389,10 @@ impl Parser<'_> {
             _ => {}
         }
         // An `if` or a block ends its statement without `;`, as in Rust.
-        let block_like = matches!(self.kind(), T::Keyword(Kw::If) | T::Punct(P::LBrace));
+        let block_like = matches!(
+            self.kind(),
+            T::Keyword(Kw::If | Kw::Match | Kw::For | Kw::While) | T::Punct(P::LBrace)
+        );
         let expr = if block_like {
             self.nested(|p| p.parse_primary(false))?
         } else {
@@ -349,7 +411,7 @@ impl Parser<'_> {
 
     pub(super) fn parse_let(&mut self) -> PResult<Stmt> {
         let start = self.bump().span;
-        let pattern = self.parse_pattern()?;
+        let pattern = self.parse_pattern_top()?;
         let ty = if self.eat(P::Colon) {
             Some(self.parse_type()?)
         } else {
@@ -406,6 +468,27 @@ impl Parser<'_> {
                     kind: ExprKind::Cast {
                         expr: Box::new(lhs),
                         ty,
+                    },
+                };
+                continue;
+            }
+            if self.at(P::DotDot) || self.at(P::DotDotEq) {
+                if RANGE_BP < min_bp {
+                    break;
+                }
+                let inclusive = self.at(P::DotDotEq);
+                self.bump();
+                let end = if self.at_range_end(no_struct) {
+                    None
+                } else {
+                    Some(Box::new(self.parse_expr_bp(RANGE_BP + 1, no_struct)?))
+                };
+                lhs = Expr {
+                    span: lhs.span.to(self.prev_span()),
+                    kind: ExprKind::Range {
+                        start: Some(Box::new(lhs)),
+                        end,
+                        inclusive,
                     },
                 };
                 continue;
@@ -490,6 +573,23 @@ impl Parser<'_> {
                 Ok(Expr {
                     span: start.to(message.span),
                     kind: ExprKind::Send(Box::new(message)),
+                })
+            }
+            T::Punct(P::DotDot | P::DotDotEq) => {
+                let inclusive = self.at(P::DotDotEq);
+                self.bump();
+                let end = if self.at_range_end(no_struct) {
+                    None
+                } else {
+                    Some(Box::new(self.parse_expr_bp(RANGE_BP + 1, no_struct)?))
+                };
+                Ok(Expr {
+                    span: start.to(self.prev_span()),
+                    kind: ExprKind::Range {
+                        start: None,
+                        end,
+                        inclusive,
+                    },
                 })
             }
             T::Keyword(Kw::Return) => {
@@ -655,17 +755,21 @@ impl Parser<'_> {
             }
             T::Punct(P::LBrace) => ExprKind::Block(self.parse_block()?),
             T::Keyword(Kw::If) => return self.parse_if(),
+            T::Keyword(Kw::Match) => return self.parse_match(),
+            T::Keyword(Kw::For) => return self.parse_for(),
+            T::Keyword(Kw::While) => return self.parse_while(),
             T::Keyword(Kw::Fork) => return Err(self.unsupported("`fork`", start)),
-            T::Keyword(
-                kw @ (Kw::Match
-                | Kw::For
-                | Kw::While
-                | Kw::Loop
-                | Kw::Break
-                | Kw::Continue
-                | Kw::Let
-                | Kw::Async),
-            ) => {
+            T::Keyword(Kw::Let) => {
+                return Err(self.report(
+                    Diagnostic::new(
+                        "`let` here is not a statement",
+                        start,
+                        "`let` inside an expression is only allowed as the condition of an `if` or `while`",
+                    )
+                    .with_help("move the `let` to a statement of its own"),
+                ));
+            }
+            T::Keyword(kw @ (Kw::Loop | Kw::Break | Kw::Continue | Kw::Async)) => {
                 let what = format!("`{}`", kw.as_str());
                 return Err(self.unsupported(&what, start));
             }
@@ -677,7 +781,6 @@ impl Parser<'_> {
                 }
                 ExprKind::Move(self.parse_place()?)
             }
-            T::Punct(P::DotDot | P::DotDotEq) => return Err(self.unsupported("a range", start)),
             T::Keyword(Kw::Unsafe) => return Err(self.left_out(Kw::Unsafe)),
             T::Keyword(kw) if kw.is_inset_only() => {
                 return Err(self.keyword_as_name(kw, "an expression"));
@@ -807,13 +910,131 @@ impl Parser<'_> {
         })
     }
 
+    /// The condition of an `if` or `while`: an expression, or `let pattern = value`.
+    pub(super) fn parse_cond(&mut self) -> PResult<Expr> {
+        if !self.at_kw(Kw::Let) {
+            return self.parse_expr_no_struct();
+        }
+        let start = self.bump().span;
+        let pattern = self.parse_pattern_top()?;
+        self.expect(P::Eq, "the pattern")?;
+        // `&&` binds looser than the value, so a chain of conditions is seen.
+        let expr = self.parse_expr_bp(6, true)?;
+        if self.at(P::AndAnd) {
+            let span = self.span();
+            return Err(self.unsupported("a `let` chain", span));
+        }
+        Ok(Expr {
+            span: start.to(expr.span),
+            kind: ExprKind::Let {
+                pattern,
+                expr: Box::new(expr),
+            },
+        })
+    }
+
+    /// Whether a range ends here, with no end value: `a..` or `..`.
+    pub(super) fn at_range_end(&self, no_struct: bool) -> bool {
+        matches!(
+            self.kind(),
+            T::Punct(P::RParen | P::RBracket | P::RBrace | P::Comma | P::Semi | P::FatArrow)
+                | T::Eof
+        ) || (no_struct && self.at(P::LBrace))
+    }
+
+    pub(super) fn parse_match(&mut self) -> PResult<Expr> {
+        let start = self.bump().span;
+        let scrutinee = self.parse_expr_no_struct()?;
+        if !self.at(P::LBrace) {
+            return Err(self.expected("`{` to start the `match` arms"));
+        }
+        let open = self.bump().span;
+        let mut arms = Vec::new();
+        while !self.at(P::RBrace) && *self.kind() != T::Eof {
+            let pattern = self.parse_pattern_top()?;
+            let guard = if self.eat_kw(Kw::If) {
+                Some(self.parse_expr()?)
+            } else {
+                None
+            };
+            self.expect(P::FatArrow, "the arm's pattern")?;
+            let body = if self.at(P::LBrace) {
+                let block = self.parse_block()?;
+                Expr {
+                    span: block.span,
+                    kind: ExprKind::Block(block),
+                }
+            } else {
+                self.parse_expr()?
+            };
+            let block_like = matches!(
+                body.kind,
+                ExprKind::Block(_)
+                    | ExprKind::If { .. }
+                    | ExprKind::Match { .. }
+                    | ExprKind::For { .. }
+                    | ExprKind::While { .. }
+            );
+            arms.push(MatchArm {
+                span: pattern.span.to(body.span),
+                pattern,
+                guard,
+                body,
+            });
+            if !self.eat(P::Comma) && !block_like && !self.at(P::RBrace) {
+                self.expect(P::Comma, "the arm")?;
+            }
+        }
+        let end = self.expect_close(P::RBrace, open, "the `match` arms")?;
+        Ok(Expr {
+            span: start.to(end),
+            kind: ExprKind::Match {
+                scrutinee: Box::new(scrutinee),
+                arms,
+            },
+        })
+    }
+
+    pub(super) fn parse_for(&mut self) -> PResult<Expr> {
+        let start = self.bump().span;
+        let pattern = self.parse_pattern_top()?;
+        if !self.eat_kw(Kw::In) {
+            return Err(self.expected("`in` after the `for` loop's pattern"));
+        }
+        let iter = self.parse_expr_no_struct()?;
+        if !self.at(P::LBrace) {
+            return Err(self.expected("`{` to start the loop's body"));
+        }
+        let body = self.parse_block()?;
+        Ok(Expr {
+            span: start.to(body.span),
+            kind: ExprKind::For {
+                pattern,
+                iter: Box::new(iter),
+                body,
+            },
+        })
+    }
+
+    pub(super) fn parse_while(&mut self) -> PResult<Expr> {
+        let start = self.bump().span;
+        let cond = self.parse_cond()?;
+        if !self.at(P::LBrace) {
+            return Err(self.expected("`{` to start the loop's body"));
+        }
+        let body = self.parse_block()?;
+        Ok(Expr {
+            span: start.to(body.span),
+            kind: ExprKind::While {
+                cond: Box::new(cond),
+                body,
+            },
+        })
+    }
+
     pub(super) fn parse_if(&mut self) -> PResult<Expr> {
         let start = self.bump().span;
-        if self.at_kw(Kw::Let) {
-            let span = self.span();
-            return Err(self.unsupported("`if let`", span));
-        }
-        let cond = self.parse_expr_no_struct()?;
+        let cond = self.parse_cond()?;
         if !self.at(P::LBrace) {
             return Err(self.expected("`{` to start the `if` block"));
         }
@@ -850,6 +1071,8 @@ enum Infix {
     Assign(Option<BinaryOp>),
 }
 
+/// Below `||`, above assignment, as in Rust.
+const RANGE_BP: u8 = 2;
 const CAST_BP: u8 = 21;
 const UNARY_BP: u8 = 23;
 

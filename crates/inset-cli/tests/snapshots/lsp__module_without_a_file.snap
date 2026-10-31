@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:2:5-2:12
+no file for the module `archive`
+neither `src/archive.inset` nor `src/archive/mod.inset` exists
+help: create `src/archive.inset` with the module's items, or remove this `mod`

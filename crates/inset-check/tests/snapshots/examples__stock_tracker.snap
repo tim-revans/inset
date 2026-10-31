@@ -1,0 +1,155 @@
+---
+source: crates/inset-check/tests/examples.rs
+expression: "remaining(\"stock-tracker\")"
+---
+Error: `given` is not supported yet
+   ╭─[ requirements/stock.req.inset:2:5 ]
+   │
+ 2 │     given items["bolt-m6"] is Item { on_hand: 40, reorder_level: 10, target_level: 50 }
+   │     ──┬──  
+   │       ╰──── the parser does not handle this yet
+───╯
+Error: `given` is not supported yet
+   ╭─[ requirements/stock.req.inset:7:5 ]
+   │
+ 7 │     given items is empty
+   │     ──┬──  
+   │       ╰──── the parser does not handle this yet
+───╯
+Error: expected the app's name, found `items`
+    ╭─[ requirements/stock.req.inset:14:9 ]
+    │
+ 14 │     and items is empty
+    │         ──┬──  
+    │           ╰──── the step names the app, such as `HelloHttp`
+────╯
+Error: `given` is not supported yet
+    ╭─[ requirements/stock.req.inset:17:5 ]
+    │
+ 17 │     given items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
+    │     ──┬──  
+    │       ╰──── the parser does not handle this yet
+────╯
+Error: expected the app's name, found `items["bolt-m6"]`
+    ╭─[ requirements/stock.req.inset:20:9 ]
+    │
+ 20 │     and items["bolt-m6"] is Item { on_hand: 23, reorder_level: 10, target_level: 50 }
+    │         ────────┬───────  
+    │                 ╰───────── the step names the app, such as `HelloHttp`
+────╯
+Error: `given` is not supported yet
+    ╭─[ requirements/stock.req.inset:23:5 ]
+    │
+ 23 │     given items["bolt-m6"] is Item { on_hand: 40, reorder_level: 10, target_level: 50 }
+    │     ──┬──  
+    │       ╰──── the parser does not handle this yet
+────╯
+Error: expected the app's name, found `items["bolt-m6"]`
+    ╭─[ requirements/stock.req.inset:26:9 ]
+    │
+ 26 │     and items["bolt-m6"] is Item { on_hand: 35, reorder_level: 10, target_level: 50 }
+    │         ────────┬───────  
+    │                 ╰───────── the step names the app, such as `HelloHttp`
+────╯
+Error: `given` is not supported yet
+    ╭─[ requirements/stock.req.inset:29:5 ]
+    │
+ 29 │     given items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
+    │     ──┬──  
+    │       ╰──── the parser does not handle this yet
+────╯
+Error: expected the app's name, found `items["bolt-m6"]`
+    ╭─[ requirements/stock.req.inset:32:9 ]
+    │
+ 32 │     and items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
+    │         ────────┬───────  
+    │                 ╰───────── the step names the app, such as `HelloHttp`
+────╯
+Error: `given` is not supported yet
+    ╭─[ requirements/stock.req.inset:35:5 ]
+    │
+ 35 │     given items["bolt-m6"] is Item { on_hand: <on hand>, reorder_level: 10, target_level: <target level> }
+    │     ──┬──  
+    │       ╰──── the parser does not handle this yet
+────╯
+Error: expected the body as a string
+    ╭─[ requirements/stock.req.inset:39:39 ]
+    │
+ 39 │     then StockTracker replies OK with <reorders>
+    │                                       ┬  
+    │                                       ╰── expected `"`
+    │ 
+    │ Help: an HTTP body is text, written as a string such as "Hello, Ada!"
+────╯
+Error: `examples` is not supported yet
+    ╭─[ requirements/stock.req.inset:40:5 ]
+    │
+ 40 │     examples
+    │     ────┬───  
+    │         ╰───── the parser does not handle this yet
+────╯
+Error: expected a step, found `|`
+    ╭─[ requirements/stock.req.inset:41:5 ]
+    │
+ 41 │     | on hand | target level | left | reorders       |
+    │     ┬  
+    │     ╰── a step starts with `given`, `when`, `then` or `and`
+────╯
+Error: expected a step, found `|`
+    ╭─[ requirements/stock.req.inset:42:5 ]
+    │
+ 42 │     | 12      | 50           | 11   | ""             |
+    │     ┬  
+    │     ╰── a step starts with `given`, `when`, `then` or `and`
+────╯
+Error: expected a step, found `|`
+    ╭─[ requirements/stock.req.inset:43:5 ]
+    │
+ 43 │     | 11      | 50           | 10   | "bolt-m6 40\n" |
+    │     ┬  
+    │     ╰── a step starts with `given`, `when`, `then` or `and`
+────╯
+Error: expected a step, found `|`
+    ╭─[ requirements/stock.req.inset:44:5 ]
+    │
+ 44 │     | 1       | 50           | 0    | "bolt-m6 50\n" |
+    │     ┬  
+    │     ╰── a step starts with `given`, `when`, `then` or `and`
+────╯
+Error: expected a step, found `|`
+    ╭─[ requirements/stock.req.inset:45:5 ]
+    │
+ 45 │     | 11      | 5            | 10   | ""             |
+    │     ┬  
+    │     ╰── a step starts with `given`, `when`, `then` or `and`
+────╯
+Error: `given` is not supported yet
+    ╭─[ requirements/stock.req.inset:48:5 ]
+    │
+ 48 │     given items["bolt-m6"] is Item { on_hand: 12, reorder_level: 10, target_level: 50 }
+    │     ──┬──  
+    │       ╰──── the parser does not handle this yet
+────╯
+Error: `given` is not supported yet
+    ╭─[ requirements/stock.req.inset:57:5 ]
+    │
+ 57 │     given items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
+    │     ──┬──  
+    │       ╰──── the parser does not handle this yet
+────╯
+Error: `and` with no step before it
+    ╭─[ requirements/stock.req.inset:58:5 ]
+    │
+ 58 │     and items fails
+    │     ─┬─  
+    │      ╰─── `and` repeats the kind of the step before it
+    │ 
+    │ Help: start with `given`, `when` or `then`
+────╯
+Error: expected the app's name, found `items["bolt-m6"]`
+    ╭─[ requirements/stock.req.inset:61:9 ]
+    │
+ 61 │     and items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
+    │         ────────┬───────  
+    │                 ╰───────── the step names the app, such as `HelloHttp`
+────╯

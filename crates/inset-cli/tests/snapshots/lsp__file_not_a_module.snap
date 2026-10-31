@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/archive.inset:1:1-1:1
+this file is not a module of the program
+no `mod` declares it
+help: declare it with `mod archive;` in `src/main.inset`, or move its items into a module that is

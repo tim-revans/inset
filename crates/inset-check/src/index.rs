@@ -18,8 +18,6 @@ use crate::{Checker, FnKind, names};
 /// The symbols of a program, and the references to them.
 #[derive(Clone, Debug, Default)]
 pub struct Index {
-    /// The file of the code, in which every symbol is declared.
-    pub main: Option<usize>,
     pub symbols: Vec<Symbol>,
     pub references: Vec<Reference>,
 }
@@ -27,6 +25,9 @@ pub struct Index {
 /// Something declared in the code.
 #[derive(Clone, Debug)]
 pub struct Symbol {
+    /// The file it is declared in, by its index in the program.
+    pub file: usize,
+    /// Its name, with the span in that file.
     pub name: Ident,
     pub kind: SymbolKind,
     /// The whole declaration, without its doc comment.
@@ -48,6 +49,10 @@ pub enum SymbolKind {
     Route,
     Message,
     Algorithm,
+    Struct,
+    Enum,
+    Variant,
+    Module,
     /// A parameter or a variable.
     Variable,
 }
@@ -74,26 +79,18 @@ impl Index {
         if let Some(reference) = reference {
             return Some(&self.symbols[reference.symbol]);
         }
-        if self.main != Some(file) {
-            return None;
-        }
-        self.symbols.iter().find(|s| contains(s.name.span))
+        self.symbols
+            .iter()
+            .find(|s| s.file == file && contains(s.name.span))
     }
 }
 
 /// Builds the index from a checked program. `refs` holds the references
-/// the checker recorded, each with its file and the name span of its target.
-pub(crate) fn build(
-    cx: &Checker,
-    main: Option<(usize, &str)>,
-    refs: Vec<(usize, Span, Span)>,
-) -> Index {
-    let Some((main, text)) = main else {
-        return Index::default();
-    };
+/// the requirements make, each with its file and the name span of its target.
+pub(crate) fn build(cx: &Checker, refs: Vec<(usize, Span, Span)>) -> Index {
+    let modules = cx.names.modules;
     let mut builder = Builder {
         cx,
-        text,
         symbols: Vec::new(),
         refs: Vec::new(),
     };
@@ -117,11 +114,17 @@ pub(crate) fn build(
         .enumerate()
         .map(|(i, s)| (s.name.span, i))
         .collect();
-    let references = cx
+    let names_refs = cx.names.refs.borrow();
+    let code_refs = cx
         .refs
         .iter()
         .chain(&builder.refs)
-        .map(|&(span, target)| (main, span, target))
+        .chain(names_refs.iter())
+        .filter_map(|&(span, target)| {
+            let (file, span) = modules.locate(span)?;
+            Some((file, span, target))
+        });
+    let mut references: Vec<Reference> = code_refs
         .chain(refs)
         .filter_map(|(file, span, target)| {
             Some(Reference {
@@ -131,16 +134,27 @@ pub(crate) fn build(
             })
         })
         .collect();
+    references.sort_by_key(|r| (r.file, r.span.start, r.span.end));
+    references.dedup_by_key(|r| (r.file, r.span, r.symbol));
+    let symbols = builder
+        .symbols
+        .into_iter()
+        .filter_map(|mut symbol| {
+            let (file, name) = modules.locate(symbol.name.span)?;
+            symbol.file = file;
+            symbol.name.span = name;
+            symbol.span = modules.locate(symbol.span)?.1;
+            Some(symbol)
+        })
+        .collect();
     Index {
-        main: Some(main),
-        symbols: builder.symbols,
+        symbols,
         references,
     }
 }
 
 struct Builder<'c, 'a> {
     cx: &'c Checker<'a>,
-    text: &'c str,
     symbols: Vec<Symbol>,
     /// References in the code, each with the name span of its target.
     refs: Vec<(Span, Span)>,
@@ -164,6 +178,7 @@ impl Scope<'_> {
 impl<'a> Builder<'_, 'a> {
     fn symbol(&mut self, name: &Ident, kind: SymbolKind, span: Span, hover: String) {
         self.symbols.push(Symbol {
+            file: 0,
             name: name.clone(),
             kind,
             span,
@@ -176,21 +191,118 @@ impl<'a> Builder<'_, 'a> {
     }
 
     /// The source text of a span.
-    fn source(&self, span: Span) -> &str {
-        self.text.get(span.range()).unwrap_or("").trim()
+    fn source(&self, span: Span) -> &'a str {
+        self.cx.names.modules.text(span).trim()
     }
 
     fn items(&mut self) {
-        for item in &self.cx.module.items {
-            let span = Span::new(
-                item.docs.last().map_or(item.span.start, |d| d.span.end),
-                item.span.end,
-            );
-            match &item.kind {
-                ItemKind::App(app) => self.app(app, &item.docs, span),
-                ItemKind::Component(component) => self.component(component, &item.docs, span),
-                ItemKind::Function(function) => self.function(function, None),
+        let modules = self.cx.names.modules;
+        for (index, module) in modules.list.iter().enumerate() {
+            for item in &module.ast.items {
+                let span = Span::new(
+                    item.docs.last().map_or(item.span.start, |d| d.span.end),
+                    item.span.end,
+                );
+                match &item.kind {
+                    ItemKind::App(app) => self.app(app, &item.docs, span),
+                    ItemKind::Component(component) => self.component(component, &item.docs, span),
+                    ItemKind::Function(function) => self.function(function, None),
+                    ItemKind::Struct(_) | ItemKind::Enum(_) => self.data(item, span),
+                    ItemKind::Mod(name) => {
+                        let child = modules.list.iter().find(|m| {
+                            m.parent
+                                .as_ref()
+                                .is_some_and(|(p, decl)| *p == index && decl.span == name.span)
+                        });
+                        let note = match child {
+                            Some(child) => format!(
+                                "The module `{}`, in `{}`.",
+                                child.rust_path(),
+                                child.file_path
+                            ),
+                            None => "A module with no file.".to_string(),
+                        };
+                        let code = format!("mod {}", name.name);
+                        let hover = hover(&code, &item.docs, &[note]);
+                        self.symbol(name, SymbolKind::Module, span, hover);
+                    }
+                    ItemKind::Use(_) => {}
+                }
             }
+        }
+    }
+
+    /// A struct or enum, its fields and its variants.
+    fn data(&mut self, item: &'a Item, span: Span) {
+        let Some(index) = self
+            .cx
+            .names
+            .datas
+            .iter()
+            .position(|d| std::ptr::eq(d.item, item))
+        else {
+            return;
+        };
+        let data = &self.cx.datas[index];
+        let kind = if data.is_enum { "enum" } else { "struct" };
+        let mut notes = Vec::new();
+        if !data.derives.is_empty() {
+            notes.push(format!(
+                "Derives {}.",
+                names(data.derives.iter().map(String::as_str))
+            ));
+        }
+        if let Some(statuses) = data.statuses() {
+            let mut unique: Vec<&str> = Vec::new();
+            for status in &statuses {
+                if !unique.contains(&status.as_str()) {
+                    unique.push(status);
+                }
+            }
+            notes.push(format!("An error that replies {}.", names(unique)));
+        }
+        let code = format!("{kind} {}", data.name.name);
+        let symbol_kind = if data.is_enum {
+            SymbolKind::Enum
+        } else {
+            SymbolKind::Struct
+        };
+        self.symbol(
+            &data.name,
+            symbol_kind,
+            span,
+            hover(&code, &item.docs, &notes),
+        );
+        match &item.kind {
+            ItemKind::Struct(s) => {
+                for (field, info) in s.fields.iter().zip(&data.fields) {
+                    let code = format!("{}: {}", field.name.name, self.source(field.ty.span));
+                    let ty = info.ty.to_string();
+                    let mut note = format!("A field of `{}`", data.name.name);
+                    if ty != self.source(field.ty.span) && info.ty.is_known() {
+                        note.push_str(&format!(", a `{ty}`"));
+                    }
+                    note.push('.');
+                    let hover = hover(&code, &field.docs, &[note]);
+                    self.symbol(&field.name, SymbolKind::Field, field.span, hover);
+                }
+            }
+            ItemKind::Enum(e) => {
+                for (variant, info) in e.variants.iter().zip(&data.variants) {
+                    let code = format!(
+                        "{}::{}",
+                        data.name.name,
+                        self.source(Span::new(variant.name.span.start, variant.span.end))
+                    );
+                    let notes = match &info.status {
+                        Some(status) => vec![format!("Replies `{}`.", status.name)],
+                        None => Vec::new(),
+                    };
+                    let hover = hover(&code, &variant.docs, &notes);
+                    self.symbol(&variant.name, SymbolKind::Variant, variant.span, hover);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -252,10 +364,11 @@ impl<'a> Builder<'_, 'a> {
     }
 
     fn component(&mut self, component: &'a Component, docs: &[Doc], span: Span) {
-        let comp = self.cx.component(&component.name.name);
-        let comp = comp
-            .map(|i| &self.cx.components[i])
-            .filter(|c| std::ptr::eq(c.ast, component));
+        let comp = self
+            .cx
+            .components
+            .iter()
+            .find(|c| std::ptr::eq(c.ast, component));
         let mut notes = Vec::new();
         if let Some(comp) = comp {
             let held: Vec<String> = comp
@@ -310,7 +423,6 @@ impl<'a> Builder<'_, 'a> {
             let code = format!("{}: {}", decl.name.name, self.source(decl.ty.span));
             let hover = hover(&code, &decl.docs, &notes);
             self.symbol(&decl.name, SymbolKind::Field, decl.span, hover);
-            self.types(&decl.ty);
         }
         if let Some(failure) = &component.failure {
             for arm in &failure.arms {
@@ -356,11 +468,11 @@ impl<'a> Builder<'_, 'a> {
         let code = self.source(Span::new(header_start, function.body.span.start));
         // Later lines lose the indentation of the first, as `fn` sits in a
         // component's body.
-        let line_start = self.text[..header_start].rfind('\n').map_or(0, |i| i + 1);
-        let indent = self.text[line_start..header_start]
-            .chars()
-            .take_while(|c| *c == ' ')
-            .count();
+        let modules = self.cx.names.modules;
+        let module = &modules.list[modules.at(header_start).unwrap_or(0)];
+        let text = &module.text[..header_start - module.base];
+        let line_start = text.rfind('\n').map_or(0, |i| i + 1);
+        let indent = text[line_start..].chars().take_while(|c| *c == ' ').count();
         let code = code
             .lines()
             .map(|line| {
@@ -372,13 +484,15 @@ impl<'a> Builder<'_, 'a> {
         let sig = match component {
             Some(c) => self
                 .cx
-                .component(&c.name.name)
-                .and_then(|i| self.cx.components[i].function(&function.name.name)),
+                .components
+                .iter()
+                .find(|comp| std::ptr::eq(comp.ast, c))
+                .and_then(|comp| comp.function(&function.name.name)),
             None => self
                 .cx
                 .algorithms
                 .iter()
-                .find(|a| a.name() == function.name.name),
+                .find(|a| std::ptr::eq(a.ast, function)),
         };
         let kind = match sig.map(|s| s.kind) {
             Some(FnKind::Route) => SymbolKind::Route,
@@ -408,12 +522,6 @@ impl<'a> Builder<'_, 'a> {
         let span = Span::new(header_start, function.span.end);
         let hover = hover(&code, &function.docs, &[note]);
         self.symbol(&function.name, kind, span, hover);
-        for param in &function.params {
-            self.types(&param.ty);
-        }
-        if let Some(ret) = &function.ret {
-            self.types(ret);
-        }
         for attr in &function.attrs {
             if let AttributeKind::Route(route) = &attr.kind {
                 self.route(route, function, component);
@@ -462,7 +570,10 @@ impl<'a> Builder<'_, 'a> {
 
     fn starts(&mut self, scope: &Scope<'a>) {
         for start in scope.starts {
-            let started = self.component_decl(&start.component.name);
+            let started = self
+                .cx
+                .started(start)
+                .map(|c| self.cx.names.components[c].ast);
             if let Some(binding) = &start.binding {
                 let code = self.source(start.span).to_string();
                 let notes = [match scope.component {
@@ -496,7 +607,8 @@ impl<'a> Builder<'_, 'a> {
                                 .starts
                                 .iter()
                                 .find(|s| s.binding.as_ref().is_some_and(|b| b.name == target.name))
-                                .and_then(|s| self.component_decl(&s.component.name))
+                                .and_then(|s| self.cx.started(s))
+                                .map(|c| self.cx.names.components[c].ast)
                         };
                         if let Some(function) = receiver
                             .and_then(|c| c.functions.iter().find(|f| f.name.name == message.name))
@@ -519,36 +631,6 @@ impl<'a> Builder<'_, 'a> {
     fn scope_name(&mut self, scope: &Scope, name: &Ident) {
         if let Some(target) = scope.find(&name.name) {
             self.refer(name.span, target);
-        }
-    }
-
-    fn component_decl(&self, name: &str) -> Option<&'a Component> {
-        self.cx
-            .module
-            .items
-            .iter()
-            .find_map(|item| match &item.kind {
-                ItemKind::Component(c) if c.name.name == name => Some(c),
-                _ => None,
-            })
-    }
-
-    /// The components a written type names, such as `C` in `Handle<C>`.
-    fn types(&mut self, ty: &Type) {
-        match &ty.kind {
-            TypeKind::Path(path) => {
-                for segment in &path.segments {
-                    if let Some(c) = self.component_decl(&segment.ident.name) {
-                        self.refer(segment.ident.span, c.name.span);
-                    }
-                    for generic in &segment.generics {
-                        self.types(generic);
-                    }
-                }
-            }
-            TypeKind::Ref { inner, .. } | TypeKind::Slice(inner) => self.types(inner),
-            TypeKind::Tuple(elems) => elems.iter().for_each(|t| self.types(t)),
-            TypeKind::Infer => {}
         }
     }
 }

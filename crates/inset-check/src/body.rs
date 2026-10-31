@@ -5,7 +5,8 @@ use inset_syntax::ast::*;
 use inset_syntax::{Diagnostic, Ident, Span};
 
 use crate::items::handed_down_use;
-use crate::types::{FLOATS, INTS, Resolver, Ty, fits};
+use crate::names::{Def, Ns};
+use crate::types::{FLOATS, INTS, Resolver, Ty, data_ty, fits};
 use crate::wiring::{mismatch, mutable_borrow, without_move};
 use crate::{Checker, FnKind, Sig, names};
 
@@ -66,7 +67,8 @@ struct Local {
 
 pub(crate) struct Body<'c, 'a> {
     cx: &'c Checker<'a>,
-    component_names: Vec<&'a str>,
+    /// The module the code is in, where its names resolve.
+    module: usize,
     comp: Option<usize>,
     /// The function being checked, or `None` for a handoff in a `start`.
     function: Option<&'c Sig<'a>>,
@@ -80,9 +82,14 @@ pub(crate) struct Body<'c, 'a> {
 
 impl<'c, 'a> Body<'c, 'a> {
     fn new(cx: &'c Checker<'a>, comp: Option<usize>, function: Option<&'c Sig<'a>>) -> Self {
+        let module = match (function, comp) {
+            (Some(sig), _) => sig.module,
+            (None, Some(comp)) => cx.components[comp].module,
+            (None, None) => 0,
+        };
         Body {
             cx,
-            component_names: cx.component_names(),
+            module,
             comp,
             function,
             scopes: vec![Vec::new()],
@@ -176,7 +183,8 @@ impl<'c, 'a> Body<'c, 'a> {
 
     fn resolve(&mut self, ty: &Type) -> Ty {
         let resolver = Resolver {
-            components: &self.component_names,
+            names: &self.cx.names,
+            module: self.module,
         };
         resolver.resolve(ty, &mut self.diagnostics)
     }
@@ -203,17 +211,42 @@ impl<'c, 'a> Body<'c, 'a> {
     }
 
     fn bind(&mut self, pattern: &Pattern, ty: Ty) {
+        self.bind_in(pattern, ty, None);
+    }
+
+    /// Binds the names in a pattern matched against a value of type `ty`.
+    /// Matching through a reference binds references, as Rust's default
+    /// binding mode does: `by_ref` is then whether they are mutable.
+    fn bind_in(&mut self, pattern: &Pattern, ty: Ty, by_ref: Option<bool>) {
+        if let Ty::Ref { mutable, inner } = &ty
+            && !matches!(
+                pattern.kind,
+                PatternKind::Binding { .. } | PatternKind::Wild
+            )
+        {
+            let mode = Some(by_ref.unwrap_or(*mutable) && *mutable);
+            return self.bind_in(pattern, (**inner).clone(), mode);
+        }
         match &pattern.kind {
-            PatternKind::Wild | PatternKind::Lit(_) | PatternKind::Path(_) => {}
+            PatternKind::Wild | PatternKind::Lit(_) => {}
             PatternKind::Binding { name, .. } => {
-                if name.name != "None" {
-                    self.locals.push((name.clone(), ty.clone()));
-                    self.scopes.last_mut().expect("a scope").push(Local {
-                        name: name.name.clone(),
-                        ty,
-                        span: name.span,
-                    });
+                if name.name == "None" {
+                    return;
                 }
+                let ty = match by_ref {
+                    Some(mutable) if ty.is_known() => Ty::Ref {
+                        mutable,
+                        inner: Box::new(ty),
+                    },
+                    Some(_) => Ty::Unknown,
+                    None => ty,
+                };
+                self.locals.push((name.clone(), ty.clone()));
+                self.scopes.last_mut().expect("a scope").push(Local {
+                    name: name.name.clone(),
+                    ty,
+                    span: name.span,
+                });
             }
             PatternKind::Tuple(elems) => {
                 let tys = match ty {
@@ -221,33 +254,231 @@ impl<'c, 'a> Body<'c, 'a> {
                     _ => vec![Ty::Unknown; elems.len()],
                 };
                 for (elem, ty) in elems.iter().zip(tys) {
-                    self.bind(elem, ty);
+                    self.bind_in(elem, ty, by_ref);
                 }
             }
             PatternKind::TupleStruct { path, elems } => {
                 let name = path.segments.last().map_or("", |s| s.ident.name.as_str());
-                let inner = match (name, &ty) {
-                    ("Some", Ty::Std("Option", args)) | ("Ok", Ty::Std("Result", args)) => {
-                        args[0].clone()
+                let inner: Vec<Ty> = match (path.segments.len(), name, &ty) {
+                    (1, "Some", Ty::Std("Option", args)) | (1, "Ok", Ty::Std("Result", args)) => {
+                        vec![args[0].clone()]
                     }
-                    ("Err", Ty::Std("Result", args)) => args[1].clone(),
-                    ("Some" | "Ok" | "Err", _) => Ty::Unknown,
-                    _ => {
-                        self.error(cannot_find_type(path));
-                        Ty::Unknown
-                    }
+                    (1, "Err", Ty::Std("Result", args)) => vec![args[1].clone()],
+                    (1, "Some" | "Ok" | "Err", _) => vec![Ty::Unknown],
+                    _ => match self.pattern_variant(path, &ty) {
+                        Some((data, variant)) => {
+                            self.cx.datas[data].variants[variant].fields.clone()
+                        }
+                        None => Vec::new(),
+                    },
                 };
-                for elem in elems {
-                    self.bind(
-                        elem,
-                        if elems.len() == 1 {
-                            inner.clone()
-                        } else {
-                            Ty::Unknown
-                        },
+                if !inner.is_empty() && inner.len() != elems.len() {
+                    self.error(Diagnostic::new(
+                        format!(
+                            "`{name}` holds {} value{}, but the pattern has {}",
+                            inner.len(),
+                            if inner.len() == 1 { "" } else { "s" },
+                            elems.len()
+                        ),
+                        pattern.span,
+                        format!("expected {}", inner.len()),
+                    ));
+                }
+                for (i, elem) in elems.iter().enumerate() {
+                    let ty = inner.get(i).cloned().unwrap_or(Ty::Unknown);
+                    self.bind_in(elem, ty, by_ref);
+                }
+            }
+            PatternKind::Path(path) => {
+                if let Some((data, variant)) = self.pattern_variant(path, &ty)
+                    && !self.cx.datas[data].variants[variant].fields.is_empty()
+                {
+                    let name = &self.cx.datas[data].variants[variant].name.name;
+                    self.error(
+                        Diagnostic::new(
+                            format!("the variant `{name}` holds values"),
+                            path.span,
+                            "this pattern names it without them",
+                        )
+                        .with_help(format!(
+                            "write `{}(..)` to match it whatever it holds",
+                            self.text_of_path(path)
+                        )),
                     );
                 }
             }
+            PatternKind::Struct { path, fields, rest } => {
+                let data = self.data_of_type_path(path);
+                let Some(data) = data else {
+                    for field in fields {
+                        if let Some(p) = &field.pattern {
+                            self.bind_in(p, Ty::Unknown, by_ref);
+                        } else {
+                            self.bind_field_shorthand(&field.name, Ty::Unknown, by_ref);
+                        }
+                    }
+                    return;
+                };
+                let mut named = Vec::new();
+                for field in fields {
+                    named.push(field.name.name.as_str());
+                    let ty = self.struct_field(data, &field.name).unwrap_or(Ty::Unknown);
+                    match &field.pattern {
+                        Some(p) => self.bind_in(p, ty, by_ref),
+                        None => self.bind_field_shorthand(&field.name, ty, by_ref),
+                    }
+                }
+                if !rest {
+                    self.missing_fields(
+                        data,
+                        &named,
+                        path.span,
+                        "name each field, or end with `..` to ignore the rest",
+                    );
+                }
+            }
+            PatternKind::Or(alternatives) => {
+                for (i, alternative) in alternatives.iter().enumerate() {
+                    if i == 0 {
+                        self.bind_in(alternative, ty.clone(), by_ref);
+                    } else {
+                        // Each alternative binds the same names, as Rust requires.
+                        self.scopes.push(Vec::new());
+                        self.bind_in(alternative, ty.clone(), by_ref);
+                        self.scopes.pop();
+                    }
+                }
+            }
+        }
+    }
+
+    fn bind_field_shorthand(&mut self, name: &Ident, ty: Ty, by_ref: Option<bool>) {
+        let pattern = Pattern {
+            kind: PatternKind::Binding {
+                mutable: false,
+                name: name.clone(),
+            },
+            span: name.span,
+        };
+        self.bind_in(&pattern, ty, by_ref);
+    }
+
+    fn text_of_path(&self, path: &Path) -> String {
+        path.segments
+            .iter()
+            .map(|s| s.ident.name.as_str())
+            .collect::<Vec<_>>()
+            .join("::")
+    }
+
+    /// The enum variant a pattern's path names, reporting one that is not.
+    fn pattern_variant(&mut self, path: &Path, matched: &Ty) -> Option<(usize, usize)> {
+        let idents: Vec<Ident> = path.segments.iter().map(|s| s.ident.clone()).collect();
+        let found = match self.cx.names.resolve_in(self.module, &idents, Ns::Value) {
+            Ok(Some(Def::Variant(data, variant))) => Some((data, variant)),
+            Ok(Some(Def::Std(_))) => return None,
+            Err(diagnostic) => {
+                self.error(diagnostic);
+                return None;
+            }
+            Ok(_) => None,
+        };
+        let Some((data, variant)) = found else {
+            self.error(cannot_find_type(path));
+            return None;
+        };
+        if let Ty::Data { id, name, .. } = matched
+            && *id != data
+        {
+            self.error(Diagnostic::new(
+                format!(
+                    "this pattern matches a `{}`, but the value is a `{name}`",
+                    self.cx.datas[data].name.name
+                ),
+                path.span,
+                format!("expected a variant of `{name}`"),
+            ));
+        }
+        Some((data, variant))
+    }
+
+    /// The struct a path in a type position names, if it names one.
+    fn data_of_type_path(&mut self, path: &Path) -> Option<usize> {
+        let idents: Vec<Ident> = path.segments.iter().map(|s| s.ident.clone()).collect();
+        match self.cx.names.resolve_in(self.module, &idents, Ns::Type) {
+            Ok(Some(Def::Data(data))) if !self.cx.datas[data].is_enum => Some(data),
+            Ok(Some(Def::Variant(..))) => {
+                self.error(Diagnostic::new(
+                    "a variant with named fields is not supported yet",
+                    path.span,
+                    "the checker does not handle this yet",
+                ));
+                None
+            }
+            Ok(Some(Def::Std(_))) => None,
+            Err(diagnostic) => {
+                self.error(diagnostic);
+                None
+            }
+            Ok(_) => {
+                self.error(cannot_find_type(path));
+                None
+            }
+        }
+    }
+
+    /// The type of a struct's field, recording the reference and reporting
+    /// a field that is not there or is private here.
+    fn struct_field(&mut self, data: usize, name: &Ident) -> Option<Ty> {
+        let info = &self.cx.datas[data];
+        let Some(field) = info.field(&name.name) else {
+            let fields = names(info.fields.iter().map(|f| f.name.name.as_str()));
+            let struct_name = info.name.name.clone();
+            self.error(
+                Diagnostic::new(
+                    format!("`{struct_name}` has no field `{}`", name.name),
+                    name.span,
+                    format!("not a field of `{struct_name}`"),
+                )
+                .with_help(if fields.is_empty() {
+                    format!("`{struct_name}` has no fields")
+                } else {
+                    format!("the fields of `{struct_name}` are {fields}")
+                }),
+            );
+            return None;
+        };
+        self.refs.push((name.span, field.name.span));
+        if !self.cx.names.visible(field.vis, self.module) {
+            let struct_name = &info.name.name;
+            let owner = self.cx.names.modules.list[self.cx.names.datas[data].module].rust_path();
+            self.error(
+                Diagnostic::new(
+                    format!("the field `{}` of `{struct_name}` is private", name.name),
+                    name.span,
+                    format!("declared in `{owner}` without `pub`"),
+                )
+                .with_help("make the field `pub(crate)` to use it from anywhere in the program"),
+            );
+        }
+        Some(field.ty.clone())
+    }
+
+    fn missing_fields(&mut self, data: usize, named: &[&str], span: Span, help: &str) {
+        let info = &self.cx.datas[data];
+        let missing: Vec<&str> = info
+            .fields
+            .iter()
+            .map(|f| f.name.name.as_str())
+            .filter(|f| !named.contains(f))
+            .collect();
+        if !missing.is_empty() {
+            let message = format!(
+                "`{}` is missing {}",
+                info.name.name,
+                names(missing.iter().copied())
+            );
+            self.error(Diagnostic::new(message, span, "every field is given").with_help(help));
         }
     }
 
@@ -374,27 +605,7 @@ impl<'c, 'a> Body<'c, 'a> {
                 self.resolve(ty)
             }
             ExprKind::Struct { path, fields, rest } => {
-                self.struct_lit(path);
-                for field in fields {
-                    match &field.value {
-                        Some(value) => {
-                            self.expr(value);
-                        }
-                        None => {
-                            self.path_value(&Path {
-                                segments: vec![PathSegment {
-                                    ident: field.name.clone(),
-                                    generics: Vec::new(),
-                                }],
-                                span: field.name.span,
-                            });
-                        }
-                    }
-                }
-                if let Some(rest) = rest {
-                    self.expr(rest);
-                }
-                Ty::Unknown
+                self.struct_lit(path, fields, rest.as_deref())
             }
             ExprKind::Tuple(elems) => Ty::Tuple(elems.iter().map(|e| self.expr(e)).collect()),
             ExprKind::Paren(inner) => self.expr(inner),
@@ -410,8 +621,10 @@ impl<'c, 'a> Body<'c, 'a> {
                 then_block,
                 else_branch,
             } => {
-                self.expect(cond, &Ty::Bool, "an `if` condition");
+                self.scopes.push(Vec::new());
+                self.cond(cond, "an `if` condition");
                 let then_ty = self.block(then_block);
+                self.scopes.pop();
                 match else_branch {
                     Some(branch) => {
                         let else_ty = self.expr(branch);
@@ -447,6 +660,41 @@ impl<'c, 'a> Body<'c, 'a> {
                 self.closure(closure);
                 Ty::Unknown
             }
+            ExprKind::Match { scrutinee, arms } => self.match_expr(scrutinee, arms),
+            ExprKind::For {
+                pattern,
+                iter,
+                body,
+            } => {
+                let iter_ty = self.expr(iter);
+                self.scopes.push(Vec::new());
+                self.bind(pattern, element(&iter_ty));
+                self.block(body);
+                self.scopes.pop();
+                Ty::unit()
+            }
+            ExprKind::While { cond, body } => {
+                self.scopes.push(Vec::new());
+                self.cond(cond, "a `while` condition");
+                self.block(body);
+                self.scopes.pop();
+                Ty::unit()
+            }
+            ExprKind::Let { .. } => {
+                self.cond(expr, "a condition");
+                Ty::Bool
+            }
+            ExprKind::Range { start, end, .. } => {
+                let start = start.as_ref().map(|e| self.expr(e));
+                let end = end.as_ref().map(|e| self.expr(e));
+                let elem = match (start, end) {
+                    (Some(Ty::Int(None)), Some(end)) => end,
+                    (Some(start), _) => start,
+                    (None, Some(end)) => end,
+                    (None, None) => Ty::Unknown,
+                };
+                Ty::Std("Range", vec![elem])
+            }
         };
         (ty, false)
     }
@@ -462,11 +710,41 @@ impl<'c, 'a> Body<'c, 'a> {
             if let Some(ty) = self.use_local(first) {
                 return ty;
             }
-            if let Some(algorithm) = self.cx.algorithms.iter().find(|a| a.name() == name) {
-                self.refs.push((first.span, algorithm.ast.name.span));
-                return Ty::Unknown;
+        }
+        if first.name == "Self" {
+            self.self_path(path);
+            return Ty::Unknown;
+        }
+        let idents: Vec<Ident> = path.segments.iter().map(|s| s.ident.clone()).collect();
+        match self.cx.names.resolve_in(self.module, &idents, Ns::Value) {
+            Err(diagnostic) => {
+                self.error(diagnostic);
+                Ty::Unknown
             }
-            return match name {
+            Ok(Some(Def::Variant(data, variant))) => {
+                if self.cx.datas[data].variants[variant].fields.is_empty() {
+                    data_ty(&self.cx.names, data)
+                } else {
+                    Ty::Unknown
+                }
+            }
+            Ok(Some(Def::Algorithm(_) | Def::Std(_))) => Ty::Unknown,
+            Ok(Some(def)) => {
+                let what = match def {
+                    Def::Data(_) => "a type",
+                    Def::Component(_) => "a component",
+                    Def::Module(_) => "a module",
+                    _ => "the app",
+                };
+                let name = self.text_of_path(path);
+                self.error(Diagnostic::new(
+                    format!("expected a value, found {what} `{name}`"),
+                    path.span,
+                    format!("`{name}` is {what}"),
+                ));
+                Ty::Unknown
+            }
+            Ok(None) if path.segments.len() == 1 => match first.name.as_str() {
                 "None" => Ty::Std("Option", vec![Ty::Unknown]),
                 "Some" | "Ok" | "Err" => Ty::Unknown,
                 _ => {
@@ -474,58 +752,52 @@ impl<'c, 'a> Body<'c, 'a> {
                     self.error(diagnostic);
                     Ty::Unknown
                 }
-            };
+            },
+            Ok(None) => {
+                self.std_path(path);
+                Ty::Unknown
+            }
         }
-        self.path_prefix(path);
-        Ty::Unknown
     }
 
-    /// Checks what a path of several segments starts with.
-    fn path_prefix(&mut self, path: &Path) {
+    /// `Self::name`: a function of the component.
+    fn self_path(&mut self, path: &Path) {
+        let first = &path.segments[0].ident;
+        let Some(segment) = path.segments.get(1) else {
+            self.error(Diagnostic::new(
+                "`Self` is not a value",
+                first.span,
+                "a component is started, not made in code",
+            ));
+            return;
+        };
+        let name = &segment.ident;
+        match self.comp() {
+            Some(comp) if comp.function(&name.name).is_some() => {
+                let target = comp.function(&name.name).expect("found").ast.name.span;
+                self.refs.push((name.span, target));
+            }
+            Some(comp) => {
+                let comp_name = comp.name().to_string();
+                self.error(Diagnostic::new(
+                    format!("`{comp_name}` has no function `{}`", name.name),
+                    name.span,
+                    format!("not a function of `{comp_name}`"),
+                ));
+            }
+            None => self.error(Diagnostic::new(
+                "`Self` names a component, and this is not in one",
+                first.span,
+                "a function at the top level of a module is called by its name",
+            )),
+        }
+    }
+
+    /// A path of several names that the program does not declare, which must
+    /// start with a standard name, such as `String::from`.
+    fn std_path(&mut self, path: &Path) {
         let first = &path.segments[0].ident;
         match first.name.as_str() {
-            "Self" => {
-                let name = &path.segments[1].ident;
-                match self.comp() {
-                    Some(comp) if comp.function(&name.name).is_some() => {
-                        let target = comp.function(&name.name).expect("found").ast.name.span;
-                        self.refs.push((name.span, target));
-                    }
-                    Some(comp) => {
-                        let comp_name = comp.name().to_string();
-                        self.error(Diagnostic::new(
-                            format!("`{comp_name}` has no function `{}`", name.name),
-                            name.span,
-                            format!("not a function of `{comp_name}`"),
-                        ));
-                    }
-                    None => self.error(Diagnostic::new(
-                        "`Self` names a component, and this is not in one",
-                        first.span,
-                        "a function at the top level of a module is called by its name",
-                    )),
-                }
-            }
-            "std" | "core" => {
-                let module = path.segments[1].ident.name.as_str();
-                let effect = match module {
-                    "fs" => Some(("file access is an effect", "use a capability the app grants")),
-                    "io" => Some(("input and output are effects", "use a capability the app grants")),
-                    "net" => Some(("networking is an effect", "use a capability the app grants, such as `HttpServer`")),
-                    "process" => Some(("running a process is an effect", "use a capability the app grants")),
-                    "env" => Some(("environment variables are an effect", "declare a `setting` in the app")),
-                    "time" => Some(("the clock is an effect", "use a capability the app grants, so tests can fake the clock")),
-                    "thread" => Some(("threads are concurrency the flowchart cannot draw", "use `fork`")),
-                    _ => None,
-                };
-                if let Some((why, help)) = effect {
-                    let span = first.span.to(path.segments[1].ident.span);
-                    self.error(
-                        Diagnostic::new(format!("Inset has no `{}::{module}`", first.name), span, why)
-                            .with_help(format!("{help}, so the diagram shows it and a test can fake it")),
-                    );
-                }
-            }
             "Instant" | "SystemTime" => self.error(
                 Diagnostic::new(format!("Inset has no `{}`", first.name), first.span, "the clock is an effect")
                     .with_help("use a capability the app grants, so the diagram shows it and a test can fake it"),
@@ -602,6 +874,9 @@ impl<'c, 'a> Body<'c, 'a> {
         let base_ty = self.expr(base);
         match (base_ty.deref(), name.name.parse::<usize>()) {
             (Ty::Tuple(elems), Ok(i)) if i < elems.len() => elems[i].clone(),
+            (Ty::Data { id, .. }, Err(_)) if !self.cx.datas[*id].is_enum => {
+                self.struct_field(*id, name).unwrap_or(Ty::Unknown)
+            }
             _ => Ty::Unknown,
         }
     }
@@ -623,9 +898,12 @@ impl<'c, 'a> Body<'c, 'a> {
             }
             return field.ty.clone();
         }
-        if let Some(child) = comp.child(&name.name) {
-            let ty = Ty::Handle(child.name.clone());
-            if let Some(binding) = comp.child_binding(&name.name) {
+        if let Some(start) = comp.start_of(&name.name) {
+            let ty = match self.cx.started(start) {
+                Some(child) => Ty::Handle(child, self.cx.components[child].name().to_string()),
+                None => Ty::Unknown,
+            };
+            if let Some(binding) = &start.binding {
                 self.refs.push((name.span, binding.span));
             }
             return ty;
@@ -715,8 +993,25 @@ impl<'c, 'a> Body<'c, 'a> {
                 Ty::Bool
             }
             B::Eq | B::Ne | B::Lt | B::Le | B::Gt | B::Ge => {
-                self.expr(lhs);
+                let left = self.expr(lhs);
                 self.expr(rhs);
+                let needs = if matches!(op, B::Eq | B::Ne) {
+                    "PartialEq"
+                } else {
+                    "PartialOrd"
+                };
+                if let Ty::Data { id, name, .. } = left.deref()
+                    && !self.cx.datas[*id].derives(needs)
+                {
+                    self.error(
+                        Diagnostic::new(
+                            format!("`{name}` cannot be compared"),
+                            lhs.span,
+                            format!("`{name}` does not derive `{needs}`"),
+                        )
+                        .with_help(format!("add `{needs}` to the `#[derive]` of `{name}`")),
+                    );
+                }
                 Ty::Bool
             }
             _ => {
@@ -754,25 +1049,186 @@ impl<'c, 'a> Body<'c, 'a> {
         }
     }
 
-    fn struct_lit(&mut self, path: &Path) {
+    fn struct_lit(&mut self, path: &Path, fields: &[FieldInit], rest: Option<&Expr>) -> Ty {
         let name = path.segments.last().map_or("", |s| s.ident.name.as_str());
-        let diagnostic = match name {
-            "HttpServer" | "Table" => Diagnostic::new(
-                "only an app's `grant` creates a capability",
-                path.span,
-                "this would make a capability no grant declares",
-            )
-            .with_help(
-                "declare a field for the capability, and have the component's parent move one in",
+        let special = match name {
+            "HttpServer" | "Table" if path.segments.len() == 1 => Some(
+                Diagnostic::new(
+                    "only an app's `grant` creates a capability",
+                    path.span,
+                    "this would make a capability no grant declares",
+                )
+                .with_help(
+                    "declare a field for the capability, and have the component's parent move one in",
+                ),
             ),
-            "Handle" | "Outlet" => Diagnostic::new(
+            "Handle" | "Outlet" if path.segments.len() == 1 => Some(Diagnostic::new(
                 format!("a `{name}` cannot be made in code"),
                 path.span,
                 "`start` makes handles, and connects outlets",
-            ),
-            _ => cannot_find_type(path),
+            )),
+            _ => None,
         };
-        self.error(diagnostic);
+        let data = match special {
+            Some(diagnostic) => {
+                self.error(diagnostic);
+                None
+            }
+            None => self.data_of_type_path(path),
+        };
+        let mut named = Vec::new();
+        for field in fields {
+            let expected = match data {
+                Some(data) => {
+                    if named.contains(&field.name.name.as_str()) {
+                        self.error(Diagnostic::new(
+                            format!("the field `{}` is given twice", field.name.name),
+                            field.name.span,
+                            "this repeats an earlier field",
+                        ));
+                    }
+                    named.push(field.name.name.as_str());
+                    self.struct_field(data, &field.name)
+                }
+                None => None,
+            }
+            .unwrap_or(Ty::Unknown);
+            let what = format!("the field `{}`", field.name.name);
+            match &field.value {
+                Some(value) => {
+                    self.expect(value, &expected, &what);
+                }
+                None => {
+                    let found = self.path_value(&Path {
+                        segments: vec![PathSegment {
+                            ident: field.name.clone(),
+                            generics: Vec::new(),
+                        }],
+                        span: field.name.span,
+                    });
+                    if !fits(&expected, &found) {
+                        self.error(mismatch(field.name.span, &expected, &found, &what));
+                    }
+                }
+            }
+        }
+        let Some(data) = data else {
+            if let Some(rest) = rest {
+                self.expr(rest);
+            }
+            return Ty::Unknown;
+        };
+        let ty = data_ty(&self.cx.names, data);
+        match rest {
+            Some(rest) => {
+                self.expect(rest, &ty, "the rest of the struct");
+            }
+            None => self.missing_fields(data, &named, path.span, "give each field a value"),
+        }
+        ty
+    }
+
+    /// The condition of an `if` or `while`, binding the names of an
+    /// `if let` or `while let` in the current scope.
+    fn cond(&mut self, cond: &Expr, what: &str) {
+        match &cond.kind {
+            ExprKind::Let { pattern, expr } => {
+                let ty = self.expr(expr);
+                self.bind(pattern, ty);
+            }
+            _ => {
+                self.expect(cond, &Ty::Bool, what);
+            }
+        }
+    }
+
+    fn match_expr(&mut self, scrutinee: &Expr, arms: &[MatchArm]) -> Ty {
+        let matched = self.expr(scrutinee);
+        let mut result = Ty::Never;
+        for arm in arms {
+            self.scopes.push(Vec::new());
+            self.bind(&arm.pattern, matched.clone());
+            if let Some(guard) = &arm.guard {
+                self.expect(guard, &Ty::Bool, "a `match` guard");
+            }
+            let ty = self.expr(&arm.body);
+            self.scopes.pop();
+            if result == Ty::Never {
+                result = ty;
+            }
+        }
+        self.check_covered(scrutinee, &matched, arms);
+        result
+    }
+
+    /// Reports a `match` that leaves a case out, when that is certain: an
+    /// enum variant, `Some`, `None`, `Ok`, `Err`, `true` or `false` that no
+    /// arm names, or a number or text matched with no arm for the rest.
+    fn check_covered(&mut self, scrutinee: &Expr, matched: &Ty, arms: &[MatchArm]) {
+        if arms
+            .iter()
+            .any(|a| a.guard.is_none() && irrefutable(&a.pattern))
+        {
+            return;
+        }
+        let mut mentioned = Vec::new();
+        for arm in arms {
+            mentioned_names(&arm.pattern, &mut mentioned);
+        }
+        let cases: Vec<String> = match matched.deref() {
+            Ty::Data { id, name, .. } if self.cx.datas[*id].is_enum => self.cx.datas[*id]
+                .variants
+                .iter()
+                .map(|v| format!("{name}::{}", v.name.name))
+                .collect(),
+            Ty::Std("Option", _) => vec!["None".into(), "Some(_)".into()],
+            Ty::Std("Result", _) => vec!["Ok(_)".into(), "Err(_)".into()],
+            Ty::Bool => vec!["true".into(), "false".into()],
+            Ty::Int(_) | Ty::Float(_) | Ty::String | Ty::Str | Ty::Char | Ty::Decimal => {
+                vec!["_".into()]
+            }
+            _ => return,
+        };
+        let missing: Vec<&str> = cases
+            .iter()
+            .map(String::as_str)
+            .filter(|case| {
+                let last = case
+                    .rsplit("::")
+                    .next()
+                    .unwrap_or(case)
+                    .trim_end_matches("(_)");
+                *case == "_" || !mentioned.iter().any(|m| m == last)
+            })
+            .collect();
+        if missing.is_empty() {
+            return;
+        }
+        let (label, help) = if missing == ["_"] {
+            (
+                format!(
+                    "a `{}` has more values than these arms name",
+                    matched.deref()
+                ),
+                "add a `_ =>` arm for every other value".to_string(),
+            )
+        } else {
+            (
+                format!("no arm for {}", names(missing.iter().copied())),
+                format!(
+                    "add an arm for {}, or a `_ =>` arm for every other case",
+                    names(missing.iter().copied())
+                ),
+            )
+        };
+        self.error(
+            Diagnostic::new(
+                "this `match` does not cover every case",
+                scrutinee.span,
+                label,
+            )
+            .with_help(help),
+        );
     }
 
     fn closure(&mut self, closure: &Closure) {
@@ -873,16 +1329,31 @@ impl<'c, 'a> Body<'c, 'a> {
             .iter()
             .map(|s| s.ident.name.as_str())
             .collect();
-        let sig = match names.as_slice() {
-            [name] if self.local(name).is_none() => {
-                self.cx.algorithms.iter().find(|a| a.name() == *name)
+        let idents: Vec<Ident> = path.segments.iter().map(|s| s.ident.clone()).collect();
+        let local = matches!(names.as_slice(), [name] if self.local(name).is_some());
+        let resolved = if local || names[0] == "Self" {
+            Ok(None)
+        } else {
+            self.cx.names.resolve_in(self.module, &idents, Ns::Value)
+        };
+        let sig = match (names.as_slice(), resolved) {
+            (["Self", name], _) => self.comp().and_then(|c| c.function(name)),
+            (_, Ok(Some(Def::Algorithm(a)))) => Some(&self.cx.algorithms[a]),
+            (_, Ok(Some(Def::Variant(data, variant)))) => {
+                return self.variant_call(span, data, variant, args);
             }
-            ["Self", name] => self.comp().and_then(|c| c.function(name)),
+            (_, Err(diagnostic)) => {
+                self.error(diagnostic);
+                self.args(args);
+                return Ty::Unknown;
+            }
             _ => None,
         };
         if let Some(sig) = sig {
-            let last = &path.segments[path.segments.len() - 1].ident;
-            self.refs.push((last.span, sig.ast.name.span));
+            if names[0] == "Self" {
+                let last = &path.segments[path.segments.len() - 1].ident;
+                self.refs.push((last.span, sig.ast.name.span));
+            }
             if sig.kind != FnKind::Algorithm {
                 let kind = if sig.kind == FnKind::Route {
                     "a route handler"
@@ -926,6 +1397,24 @@ impl<'c, 'a> Body<'c, 'a> {
         }
     }
 
+    /// `Enum::Variant(values)`, which makes a value of the enum.
+    fn variant_call(&mut self, span: Span, data: usize, variant: usize, args: &[Expr]) -> Ty {
+        let fields = self.cx.datas[data].variants[variant].fields.clone();
+        let name = format!(
+            "{}::{}",
+            self.cx.datas[data].name.name, self.cx.datas[data].variants[variant].name.name
+        );
+        if fields.len() != args.len() {
+            self.error(arity(span, &name, fields.len(), args.len()));
+            self.args(args);
+        } else {
+            for (arg, ty) in args.iter().zip(&fields) {
+                self.expect(arg, ty, &format!("this value of `{name}`"));
+            }
+        }
+        data_ty(&self.cx.names, data)
+    }
+
     fn args(&mut self, args: &[Expr]) {
         for arg in args {
             self.expr(arg);
@@ -942,8 +1431,8 @@ impl<'c, 'a> Body<'c, 'a> {
     ) -> (Ty, bool) {
         let receiver_ty = self.expr(receiver);
         match receiver_ty.deref().clone() {
-            Ty::Handle(component) => (
-                self.message_call(span, &component, method, args, usage),
+            Ty::Handle(component, _) => (
+                self.message_call(span, component, method, args, usage),
                 true,
             ),
             Ty::Outlet(ty) => {
@@ -968,6 +1457,20 @@ impl<'c, 'a> Body<'c, 'a> {
             ),
             other => {
                 self.args(args);
+                if method.name == "clone"
+                    && let Ty::Data {
+                        name, clone: false, ..
+                    } = other.deref()
+                {
+                    self.error(
+                        Diagnostic::new(
+                            format!("`{name}` cannot be cloned"),
+                            method.span,
+                            format!("`{name}` does not derive `Clone`"),
+                        )
+                        .with_help(format!("add `Clone` to the `#[derive]` of `{name}`")),
+                    );
+                }
                 let ty = match (method.name.as_str(), other.deref()) {
                     ("to_string", _) => Ty::String,
                     ("to_owned", Ty::Str) => Ty::String,
@@ -985,12 +1488,13 @@ impl<'c, 'a> Body<'c, 'a> {
     fn message_call(
         &mut self,
         span: Span,
-        component: &str,
+        component: usize,
         method: &Ident,
         args: &[Expr],
         usage: Use,
     ) -> Ty {
-        let comp = self.cx.component(component).map(|i| &self.cx.components[i]);
+        let comp = Some(&self.cx.components[component]);
+        let component = self.cx.components[component].name();
         let sig = comp.and_then(|c| c.function(&method.name));
         let sig = match sig {
             Some(sig) if sig.kind == FnKind::Message => sig,
@@ -1467,4 +1971,73 @@ fn cannot_find_type(path: &Path) -> Diagnostic {
         "not a type or function this program knows",
     )
     .with_help("declaring `struct` and `enum` types is not supported yet")
+}
+
+/// The type of each element a `for` loop takes from a value of type `ty`.
+fn element(ty: &Ty) -> Ty {
+    match ty {
+        Ty::Std("Vec" | "VecDeque" | "HashSet" | "BTreeSet" | "Option" | "Range", args) => {
+            args[0].clone()
+        }
+        Ty::Std("HashMap" | "BTreeMap", args) => Ty::Tuple(args.clone()),
+        Ty::Ref { mutable, inner } => {
+            let by_ref = |t: Ty| {
+                if t.is_known() {
+                    Ty::Ref {
+                        mutable: *mutable,
+                        inner: Box::new(t),
+                    }
+                } else {
+                    Ty::Unknown
+                }
+            };
+            match &**inner {
+                Ty::Std("Vec" | "VecDeque" | "HashSet" | "BTreeSet" | "Option", args) => {
+                    by_ref(args[0].clone())
+                }
+                Ty::Slice(elem) => by_ref((**elem).clone()),
+                Ty::Std("HashMap" | "BTreeMap", args) => {
+                    Ty::Tuple(vec![by_ref(args[0].clone()), by_ref(args[1].clone())])
+                }
+                _ => Ty::Unknown,
+            }
+        }
+        _ => Ty::Unknown,
+    }
+}
+
+/// Whether a pattern matches every value, so its arm leaves no case out.
+fn irrefutable(pattern: &Pattern) -> bool {
+    match &pattern.kind {
+        PatternKind::Wild => true,
+        PatternKind::Binding { name, .. } => name.name != "None",
+        PatternKind::Tuple(elems) => elems.iter().all(irrefutable),
+        PatternKind::Or(alternatives) => alternatives.iter().any(irrefutable),
+        _ => false,
+    }
+}
+
+/// The last name of each variant, literal or constructor a pattern names
+/// at its top level: `Some`, `NotFound` or `true`.
+fn mentioned_names(pattern: &Pattern, out: &mut Vec<String>) {
+    match &pattern.kind {
+        PatternKind::TupleStruct { path, .. }
+        | PatternKind::Path(path)
+        | PatternKind::Struct { path, .. } => {
+            if let Some(last) = path.segments.last() {
+                out.push(last.ident.name.clone());
+            }
+        }
+        PatternKind::Binding { name, .. } if name.name == "None" => out.push("None".into()),
+        PatternKind::Lit(Lit {
+            kind: LitKind::Bool(b),
+            ..
+        }) => out.push(b.to_string()),
+        PatternKind::Or(alternatives) => {
+            for alternative in alternatives {
+                mentioned_names(alternative, out);
+            }
+        }
+        _ => {}
+    }
 }

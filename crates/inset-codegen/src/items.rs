@@ -1,37 +1,145 @@
 //! The app, components and their functions, which become Rust items that
 //! implement the runtime's `App` and `Component` traits.
 
+use inset_check::Modules;
 use inset_syntax::Span;
 use inset_syntax::ast::{
-    App, AttributeKind, Component, Expr, ExprKind, Function, HandoffValue, HttpMethod, Item,
-    ItemKind, LitKind, Module, PatternKind, Route, TypeKind, UnaryOp, Visibility,
+    App, AttributeKind, Component, Enum, Expr, ExprKind, Function, HandoffValue, HttpMethod, Item,
+    ItemKind, LitKind, PatternKind, Route, TypeKind, UnaryOp, UseTree, Visibility,
 };
 use proc_macro2::TokenStream;
 use quote::quote;
 
 use crate::Emitter;
-use crate::body::{docs, ident, pattern, ty};
+use crate::body::{docs, ident, pattern};
 
 /// Names the generated route code gives its own variables. A handler
 /// parameter with one of these names is renamed where it is read.
 const ROUTE_LOCALS: [&str; 4] = ["field", "request", "path", "component"];
 
 impl Emitter {
-    pub(crate) fn module(&mut self, module: &Module) -> TokenStream {
-        let items = module.items.iter().map(|item| self.item(item));
+    /// A module's items, with each module it declares inside it, as a Rust
+    /// module of the same name. Rust's paths and privacy then work in the
+    /// emitted code exactly as in the Inset source.
+    pub(crate) fn module(&mut self, modules: &Modules, index: usize) -> TokenStream {
+        let module = &modules.list[index];
+        let items: Vec<_> = module
+            .ast
+            .items
+            .iter()
+            .map(|item| match &item.kind {
+                ItemKind::Mod(name) => {
+                    let child = modules.list.iter().position(|m| {
+                        m.parent
+                            .as_ref()
+                            .is_some_and(|(p, decl)| *p == index && decl.span == name.span)
+                    });
+                    let vis = self.vis(&item.vis);
+                    let docs = docs(&item.docs);
+                    let inner = child.map(|c| self.module(modules, c));
+                    let name = ident(&name.name);
+                    quote! {
+                        #docs
+                        #vis mod #name {
+                            #inner
+                        }
+                    }
+                }
+                _ => self.item(item),
+            })
+            .collect();
         quote!(#(#items)*)
     }
 
     fn item(&mut self, item: &Item) -> TokenStream {
-        let docs = docs(&item.docs);
+        let item_docs = docs(&item.docs);
         match &item.kind {
-            ItemKind::App(app) => self.app(docs, app),
+            ItemKind::App(app) => self.app(item_docs, app),
             ItemKind::Component(component) => {
                 let vis = self.vis(&item.vis);
-                self.component(docs, vis, component)
+                self.component(item_docs, vis, component)
             }
             ItemKind::Function(function) => self.function(function),
+            ItemKind::Struct(s) => {
+                let vis = self.vis(&item.vis);
+                let derive = self.derive(item);
+                let name = ident(&s.name.name);
+                let fields: Vec<_> = s
+                    .fields
+                    .iter()
+                    .map(|field| {
+                        let docs = docs(&field.docs);
+                        let vis = self.vis(&field.vis);
+                        let name = ident(&field.name.name);
+                        let ty = self.ty(&field.ty);
+                        quote!(#docs #vis #name: #ty)
+                    })
+                    .collect();
+                quote! {
+                    #item_docs
+                    #derive
+                    #vis struct #name {
+                        #(#fields),*
+                    }
+                }
+            }
+            ItemKind::Enum(e) => {
+                let vis = self.vis(&item.vis);
+                let derive = self.derive(item);
+                let name = ident(&e.name.name);
+                let variants: Vec<_> = e
+                    .variants
+                    .iter()
+                    .map(|variant| {
+                        let docs = docs(&variant.docs);
+                        let name = ident(&variant.name.name);
+                        if variant.fields.is_empty() {
+                            quote!(#docs #name)
+                        } else {
+                            let fields: Vec<_> =
+                                variant.fields.iter().map(|t| self.ty(t)).collect();
+                            quote!(#docs #name(#(#fields),*))
+                        }
+                    })
+                    .collect();
+                let status = status_impl(e);
+                quote! {
+                    #item_docs
+                    #derive
+                    #vis enum #name {
+                        #(#variants),*
+                    }
+
+                    #status
+                }
+            }
+            ItemKind::Use(tree) => {
+                let vis = self.vis(&item.vis);
+                let tree = use_tree(tree);
+                quote!(#vis use #tree;)
+            }
+            ItemKind::Mod(_) => unreachable!("modules are emitted by `module`"),
         }
+    }
+
+    /// `#[derive(...)]`, with the traits as written.
+    fn derive(&mut self, item: &Item) -> Option<TokenStream> {
+        let mut traits = Vec::new();
+        for attr in &item.attrs {
+            if let AttributeKind::Derive(names) = &attr.kind {
+                for name in names {
+                    if matches!(name.name.as_str(), "Serialize" | "Deserialize") {
+                        self.unsupported(
+                            &format!("deriving `{}`", name.name),
+                            name.span,
+                            "derived here",
+                        );
+                    }
+                    traits.push(ident(&name.name));
+                }
+            }
+        }
+        (!traits.is_empty()).then(|| quote!(#[derive(#(#traits),*)]))
     }
 
     fn vis(&mut self, vis: &Visibility) -> TokenStream {
@@ -39,10 +147,7 @@ impl Emitter {
             Visibility::Private => quote!(),
             Visibility::Pub(_) => quote!(pub),
             Visibility::PubCrate(_) => quote!(pub(crate)),
-            Visibility::PubSuper(span) => {
-                self.unsupported("`pub(super)`", *span, "visible to a parent module");
-                quote!()
-            }
+            Visibility::PubSuper(_) => quote!(pub(super)),
         }
     }
 
@@ -220,8 +325,10 @@ impl Emitter {
                 }
                 let docs = docs(&field.docs);
                 let name = ident(&field.name.name);
-                let ty = ty(&field.ty);
-                quote!(#docs #name: #ty)
+                let ty = self.ty(&field.ty);
+                // Whoever can name the component can start it, and so must
+                // be able to supply its fields.
+                quote!(#docs #vis #name: #ty)
             })
             .collect();
         for start in &c.starts {
@@ -330,11 +437,12 @@ impl Emitter {
         });
         let params = f.params.iter().map(|p| {
             let pat = pattern(&p.pattern);
-            let ty = ty(&p.ty);
+            let ty = self.ty(&p.ty);
             quote!(#pat: #ty)
         });
+        let params: Vec<_> = params.collect();
         let ret = f.ret.as_ref().map(|t| {
-            let t = ty(t);
+            let t = self.ty(t);
             quote!(-> #t)
         });
         let body = self.block(&f.body);
@@ -503,4 +611,61 @@ fn integer(text: &str) -> Option<String> {
     u128::from_str_radix(digits, radix)
         .ok()
         .map(|n| n.to_string())
+}
+
+/// `impl Status` for an error enum, replying with each variant's status:
+/// an empty body for a unit variant, or the `String` it holds.
+fn status_impl(e: &Enum) -> Option<TokenStream> {
+    let arms: Vec<_> = e
+        .variants
+        .iter()
+        .map(|variant| {
+            let status = variant.attrs.iter().find_map(|a| match &a.kind {
+                AttributeKind::Status(name) => Some(name),
+                _ => None,
+            })?;
+            let code =
+                proc_macro2::Literal::u16_unsuffixed(inset_check::status::code(&status.name)?);
+            let name = ident(&variant.name.name);
+            Some(if variant.fields.is_empty() {
+                quote!(Self::#name => ::inset_runtime::Reply::empty(#code),)
+            } else {
+                quote!(Self::#name(text) => ::inset_runtime::Reply::text(#code, text),)
+            })
+        })
+        .collect::<Option<_>>()?;
+    let name = ident(&e.name.name);
+    Some(quote! {
+        impl ::inset_runtime::Status for #name {
+            fn into_reply(self) -> ::inset_runtime::Reply {
+                match self {
+                    #(#arms)*
+                }
+            }
+        }
+    })
+}
+
+fn use_tree(tree: &UseTree) -> TokenStream {
+    match tree {
+        UseTree::Path { segment, rest } => {
+            let segment = ident(&segment.name);
+            let rest = use_tree(rest);
+            quote!(#segment::#rest)
+        }
+        UseTree::Name { name, alias } => {
+            let name = ident(&name.name);
+            match alias {
+                Some(alias) => {
+                    let alias = ident(&alias.name);
+                    quote!(#name as #alias)
+                }
+                None => quote!(#name),
+            }
+        }
+        UseTree::Group(trees, _) => {
+            let trees = trees.iter().map(use_tree);
+            quote!({ #(#trees),* })
+        }
+    }
 }

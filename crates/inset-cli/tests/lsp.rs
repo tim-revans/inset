@@ -196,18 +196,15 @@ fn diagnostics_match_inset_check() {
         // A directory that need not exist: the documents are open, so the
         // server reads nothing from disk.
         let root = std::env::temp_dir().join("inset-lsp-cases").join(case.name);
-        let files = [
-            ("src/main.inset", &case.main),
-            ("requirements/main.req.inset", &case.requirements),
-        ];
-        for (path, text) in files {
+        let files = case.files();
+        for &(path, text) in &files {
             client.open(&root.join(path), text);
         }
         let published = client.diagnostics();
 
         let mut snapshot = String::new();
         let mut from_server = Vec::new();
-        for (path, _) in files {
+        for &(path, _) in &files {
             let list = &published[&uri(&root.join(path))];
             for diagnostic in list {
                 let (line, column) = start(&diagnostic["range"]);
@@ -418,6 +415,71 @@ fn names_in_code_lead_to_their_declarations() {
 }
 
 #[test]
+fn a_use_path_leads_to_the_item_in_its_module() {
+    let mut client = Client::start();
+    let dir = example("stock-tracker");
+    let main = dir.join("src/main.inset");
+    let warehouse = dir.join("src/warehouse.inset");
+    let main_code = std::fs::read_to_string(&main).unwrap();
+    let warehouse_code = std::fs::read_to_string(&warehouse).unwrap();
+    client.open(&main, &main_code);
+    client.open(&warehouse, &warehouse_code);
+
+    // From the root module to a component in `warehouse`.
+    let (line, column) = find(&main_code, "warehouse::Warehouse");
+    let location = client.at("textDocument/definition", &main, (line, column + 12));
+    assert_eq!(location["uri"], uri(&warehouse));
+    assert_eq!(
+        start(&location["range"]),
+        find(&warehouse_code, "Warehouse {")
+    );
+    // The module's name leads to its `mod` declaration.
+    let location = client.at("textDocument/definition", &main, (line, column + 2));
+    assert_eq!(location["uri"], uri(&main));
+    assert_eq!(start(&location["range"]), find(&main_code, "warehouse;"));
+    // From `warehouse` back up to a struct in the root module, and to a
+    // field of it used in a body.
+    let (line, column) = find(&warehouse_code, "Item, Reorder");
+    let location = client.at("textDocument/definition", &warehouse, (line, column));
+    assert_eq!(location["uri"], uri(&main));
+    assert_eq!(start(&location["range"]), find(&main_code, "Item {"));
+    let (line, column) = find(&warehouse_code, "item.on_hand.to_string");
+    let location = client.at("textDocument/definition", &warehouse, (line, column + 5));
+    assert_eq!(location["uri"], uri(&main));
+    assert_eq!(start(&location["range"]), find(&main_code, "on_hand: u32"));
+    client.shutdown();
+}
+
+#[test]
+fn hover_shows_a_struct_field_and_an_error_variant() {
+    let mut client = Client::start();
+    let dir = example("stock-tracker");
+    let main = dir.join("src/main.inset");
+    let warehouse = dir.join("src/warehouse.inset");
+    let main_code = std::fs::read_to_string(&main).unwrap();
+    let warehouse_code = std::fs::read_to_string(&warehouse).unwrap();
+    client.open(&main, &main_code);
+    client.open(&warehouse, &warehouse_code);
+    let mut hover = |path: &Path, code: &str, from: &str, offset: usize| {
+        let (line, column) = find(code, from);
+        let hover = client.at("textDocument/hover", path, (line, column + offset));
+        hover["contents"]["value"].as_str().unwrap().to_string()
+    };
+    let hovers = [
+        hover(&main, &main_code, "on_hand: u32", 0),
+        hover(&warehouse, &warehouse_code, "item.on_hand.to_string", 5),
+        hover(&main, &main_code, "Item {", 0),
+        hover(&main, &main_code, "ShipError {", 0),
+        hover(&warehouse, &warehouse_code, "ShipError::UnknownItem", 11),
+        hover(&main, &main_code, "warehouse;", 0),
+    ];
+    insta::with_settings!({ omit_expression => true }, {
+        insta::assert_snapshot!(hovers.join("\n\n----\n\n"));
+    });
+    client.shutdown();
+}
+
+#[test]
 fn hover_shows_types_capabilities_and_docs() {
     let mut client = Client::start();
     let dir = example("hello-http");
@@ -450,9 +512,13 @@ fn hover_shows_types_capabilities_and_docs() {
 #[test]
 fn outline_lists_app_components_handlers_and_requirements() {
     let mut client = Client::start();
-    let dir = example("hello-http");
     let mut outline = String::new();
-    for path in ["src/main.inset", "requirements/hello.req.inset"] {
+    for (example, path) in [
+        ("hello-http", "src/main.inset"),
+        ("hello-http", "requirements/hello.req.inset"),
+        ("stock-tracker", "src/main.inset"),
+    ] {
+        let dir = self::example(example);
         let symbols = client.request(
             "textDocument/documentSymbol",
             json!({ "textDocument": { "uri": uri(&dir.join(path)) } }),

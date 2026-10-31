@@ -7,6 +7,7 @@ use proptest::prelude::*;
 
 const HELLO: &str = include_str!("../../../examples/hello-http/src/main.inset");
 const HELLO_REQ: &str = include_str!("../../../examples/hello-http/requirements/hello.req.inset");
+const WAREHOUSE: &str = include_str!("../../../examples/stock-tracker/src/warehouse.inset");
 
 /// Fragments that reach deep into both grammars when strung together.
 const VOCABULARY: &[&str] = &[
@@ -30,6 +31,21 @@ const VOCABULARY: &[&str] = &[
     "pub",
     "pub(crate)",
     "match",
+    "for",
+    "in",
+    "while",
+    "struct",
+    "enum",
+    "mod",
+    "use",
+    "=>",
+    "..",
+    "|",
+    "::",
+    "{",
+    "}",
+    "#[derive(Clone)]",
+    "#[status(NotFound)]",
     "Greeter",
     "http",
     "x",
@@ -113,7 +129,7 @@ fn soup() -> impl Strategy<Value = String> {
         .prop_map(|parts| parts.join(" "))
 }
 
-/// Hello HTTP with one span of characters replaced, so most of the input
+/// A program with one span of characters replaced, so most of the input
 /// is valid and the error lands somewhere inside a real program.
 fn mutated(source: &'static str) -> impl Strategy<Value = String> {
     let len = source.chars().count();
@@ -146,6 +162,11 @@ proptest! {
     }
 
     #[test]
+    fn mutated_modules_and_types(source in mutated(WAREHOUSE)) {
+        check(&source);
+    }
+
+    #[test]
     fn mutated_requirements(source in mutated(HELLO_REQ)) {
         check(&source);
     }
@@ -168,6 +189,10 @@ fn deep_nesting() {
         format!("fn f() -> {} {{}}", nest("Vec<", "u8", ">")),
         format!("fn f() -> {} {{}}", nest("&", "u8", "")),
         format!("fn f() {{ let {} = x; }}", nest("(", "x", ")")),
+        format!("fn f() {{ {} }}", nest("match x { _ => ", "x", "}")),
+        format!("fn f() {{ {} }}", nest("for x in y {", "x", "}")),
+        format!("fn f() {{ let {} = x; }}", nest("Some(", "x", ")")),
+        format!("use {};", nest("a::{", "b", "}")),
     ];
     for source in sources {
         let parsed = parse_code(&source);

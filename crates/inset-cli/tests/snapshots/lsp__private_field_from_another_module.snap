@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:20:10-20:14
+the field `days` of `Loan` is private
+declared in `crate::library` without `pub`
+help: make the field `pub(crate)` to use it from anywhere in the program

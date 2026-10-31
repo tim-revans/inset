@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `Desk` is private to `crate::library`
+   ╭─[ src/main.inset:3:14 ]
+   │
+ 3 │ use library::Desk;
+   │              ──┬─  
+   │                ╰─── `Desk` is declared in `crate::library` without `pub`
+   │ 
+   │ Help: make it `pub(crate)` where it is declared to use it from anywhere in the program, or use it only inside `crate::library`
+───╯

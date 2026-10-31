@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:12:35-12:42
+Inset cannot derive `Display`
+not a trait `#[derive]` may list
+help: derive any of `Clone`, `Copy`, `Debug`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash`, `Default`, `Serialize` and `Deserialize`

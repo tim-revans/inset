@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/library.inset:8:12-8:15
+the variant `AllOut` replies with a `u32`
+an error variant's reply is its body, which is text
+help: hold nothing, for an empty body, or one `String`, which is the body

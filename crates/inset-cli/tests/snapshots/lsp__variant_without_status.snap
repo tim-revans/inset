@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/library.inset:7:5-7:11
+the variant `AllOut` has no `#[status]`
+other variants of `LendError` have one
+help: an error enum names the status each variant replies with; write one above `AllOut`, such as `#[status(BadRequest)]`

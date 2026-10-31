@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" class="inset-diagram" width="465.4" height="200" viewBox="0 0 465.4 200">
+<style>
+.inset-diagram text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; fill: #e7ecf0; white-space: pre; }
+.inset-diagram .title { font-weight: bold; }
+.inset-diagram .kw { fill: #5797f8; }
+.inset-diagram .dim { fill: #aab2bb; }
+.inset-diagram .doc { fill: #aab2bb; font-style: italic; }
+.inset-diagram .sec { fill: #aab2bb; font-size: 10px; letter-spacing: 0.05em; }
+.inset-diagram .warn { fill: #f64234; font-weight: bold; }
+.inset-diagram .ground { fill: #0c1015; }
+.inset-diagram .app { fill: #13181d; stroke: #6a7683; stroke-width: 1.5; }
+.inset-diagram .comp { fill: #161c23; stroke: #5797f8; stroke-width: 1.4; }
+.inset-diagram .ext { fill: #271923; stroke: #e057c5; stroke-width: 1.3; }
+.inset-diagram .outside { fill: #161c23; stroke: #727b86; stroke-dasharray: 3 2; }
+.inset-diagram .port { fill: #161c23; stroke: #5797f8; stroke-width: 1.6; }
+.inset-diagram .edge { fill: none; stroke: #e7ecf0; stroke-width: 1.2; }
+.inset-diagram .send { stroke-dasharray: 5 3; }
+.inset-diagram .cap { fill: none; stroke: #eba566; stroke-width: 1.8; }
+.inset-diagram .node { fill: #161c23; stroke: #e7ecf0; }
+.inset-diagram .decide { fill: #36210d; stroke: #e7ecf0; }
+.inset-diagram .term { fill: #1a273a; stroke: #e7ecf0; }
+.inset-diagram .bar { fill: #e7ecf0; }
+.inset-diagram .arrow { fill: #e7ecf0; }
+.inset-diagram .arrow-cap { fill: #eba566; }
+@media (prefers-color-scheme: light) {
+.inset-diagram text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; fill: #182029; white-space: pre; }
+.inset-diagram .title { font-weight: bold; }
+.inset-diagram .kw { fill: #1066f0; }
+.inset-diagram .dim { fill: #565f69; }
+.inset-diagram .doc { fill: #565f69; font-style: italic; }
+.inset-diagram .sec { fill: #565f69; font-size: 10px; letter-spacing: 0.05em; }
+.inset-diagram .warn { fill: #9c200b; font-weight: bold; }
+.inset-diagram .ground { fill: #fdfdfd; }
+.inset-diagram .app { fill: #f2f6fa; stroke: #6a7683; stroke-width: 1.5; }
+.inset-diagram .comp { fill: #ffffff; stroke: #196df7; stroke-width: 1.4; }
+.inset-diagram .ext { fill: #fef3fe; stroke: #a41faa; stroke-width: 1.3; }
+.inset-diagram .outside { fill: #ffffff; stroke: #78818c; stroke-dasharray: 3 2; }
+.inset-diagram .port { fill: #ffffff; stroke: #196df7; stroke-width: 1.6; }
+.inset-diagram .edge { fill: none; stroke: #182029; stroke-width: 1.2; }
+.inset-diagram .send { stroke-dasharray: 5 3; }
+.inset-diagram .cap { fill: none; stroke: #e2760f; stroke-width: 1.8; }
+.inset-diagram .node { fill: #ffffff; stroke: #182029; }
+.inset-diagram .decide { fill: #fff0e7; stroke: #182029; }
+.inset-diagram .term { fill: #e9f1fe; stroke: #182029; }
+.inset-diagram .bar { fill: #182029; }
+.inset-diagram .arrow { fill: #182029; }
+.inset-diagram .arrow-cap { fill: #e2760f; }
+}
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow"/></marker>
+<marker id="arrow-cap" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow-cap"/></marker>
+</defs>
+<rect x="0" y="0" width="465.4" height="200" class="ground"/>
+<g data-id="Shapes/mod:sizes/fn:classify">
+<text x="16" y="20" class="title">classify</text>
+</g>
+<text x="16" y="36" class="doc opt-docs">Sorts a number by its size.</text>
+<rect x="134.3" y="52" width="196.8" height="24" rx="12" class="term"/>
+<text x="146.3" y="68" class="">classify</text>
+<text x="203.9" y="68" class="dim opt-signatures">(n: i32) -&gt; Size</text>
+<path d="M232.7,76 L232.7,98" class="edge" marker-end="url(#arrow)"/>
+<polygon points="187.5,112 201.5,98 263.9,98 277.9,112 263.9,126 201.5,126" class="decide" data-id="Shapes/mod:sizes/fn:classify/0"/>
+<text x="207.5" y="116" class="">match n</text>
+<path d="M217.1,126 L217.1,136 L65.6,136 L65.6,160" class="edge" marker-end="url(#arrow)" data-id="Shapes/mod:sizes/fn:classify/0/b0"/>
+<text x="72.6" y="154" class="dim">0</text>
+<rect x="16" y="160" width="99.2" height="24" rx="12" class="term" data-id="Shapes/mod:sizes/fn:classify/0/b0/0"/>
+<text x="26" y="176" class="">Size::Small</text>
+<path d="M232.7,126 L232.7,136 L228.8,136 L228.8,160" class="edge" marker-end="url(#arrow)" data-id="Shapes/mod:sizes/fn:classify/0/b1"/>
+<text x="235.8" y="154" class="dim">n if n &gt; 100</text>
+<rect x="143.2" y="160" width="171.2" height="24" rx="12" class="term" data-id="Shapes/mod:sizes/fn:classify/0/b1/0"/>
+<text x="153.2" y="176" class="">Size::Large(n as u32)</text>
+<path d="M248.3,126 L248.3,136 L399.8,136 L399.8,160" class="edge" marker-end="url(#arrow)" data-id="Shapes/mod:sizes/fn:classify/0/b2"/>
+<text x="406.8" y="154" class="dim">_</text>
+<rect x="350.2" y="160" width="99.2" height="24" rx="12" class="term" data-id="Shapes/mod:sizes/fn:classify/0/b2/0"/>
+<text x="360.2" y="176" class="">Size::Small</text>
+</svg>

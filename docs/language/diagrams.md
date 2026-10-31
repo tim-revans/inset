@@ -2,7 +2,7 @@
 
 What the generated diagrams show, the data they are drawn from, and how a reader chooses what to see.
 
-The diagram data format is defined, and `crates/inset-diagram` reads it and draws it as SVG. The compiler does not emit it yet, so each example's `expected/diagram.json` is written by hand. It is the target the compiler's output must equal. The SVGs beside it are drawn from it, and the tests keep them up to date.
+The diagram data format is defined, and `crates/inset-diagram` reads it and draws it as SVG. `inset diagram` emits it for the programs the compiler covers. Each example's `expected/diagram.json` is written by hand, and is the target the compiler's output must equal. The SVGs beside it are drawn from it, and the tests keep them up to date.
 
 ## Review levels
 
@@ -109,8 +109,8 @@ Every function with a body has a flowchart: route handlers and message handlers 
 | --- | --- | --- |
 | Action | A statement that runs and carries on | A box |
 | Exit | The error path of a `?` | A `?` arrow from the action to a `return` pill beside it |
-| Decision | `if`, `if let`, `match`, `let ... else` | A six-sided box, with one labelled branch per way out, side by side. Branches that carry on join below |
-| Loop | `for` | A six-sided head, the body below with the way back on the left, and `none` on the right for not running the body |
+| Decision | `if`, `if let`, `match`, `let ... else` | A six-sided box, with one labelled branch per way out, side by side. Branches that carry on join below. An `if` branches `yes` and `no`, a `match` once per arm, labelled with the arm's pattern and any guard, and a `let ... else` with its pattern and `else` |
+| Loop | `for`, `while`, `while let` | A six-sided head, the body below with the way back on the left, and `none` on the right for not running the body. The body is labelled `each` for a `for` and `repeat` for a `while` |
 | Fork | `fork for` | A bar, the body below, a `join` bar, and `none` on the right for an empty collection |
 | Return | `return`, or the function's final value | A pill. A function that returns nothing ends in `end` |
 
@@ -143,7 +143,7 @@ Every element has an ID derived from where it is in the source, so an ID stays t
 | Setting, grant | The app, then `setting:` or `grant:` and the name | `StockTracker/grant:items` |
 | Component | Its parent, then the name its `start` binds, or its type's name | `StockTracker/Warehouse/inventory` |
 | Field | The component, then `field:` and the name | `…/inventory/field:low_stock` |
-| Function | Its owner, then `fn:` and the name. A top-level algorithm's owner is the app, followed by `mod:<path>` outside the root module | `…/inventory/fn:ship`, `PriceImport/fn:parse_row` |
+| Function | Its owner, then `fn:` and the name. A top-level algorithm's owner is the app, followed by `mod:<path>` outside the root module, with `::` between the names of nested modules | `…/inventory/fn:ship`, `PriceImport/fn:parse_row` |
 | Failure arm | The component, then `failure:` and `panic`, `overflow`, `any`, or `capability:`, `message:` or `child:` and the name | `…/inventory/failure:capability:items` |
 | Step | Its block, then its index in the block. A function's body is the block with the function's ID | `…/fn:ship/5` |
 | Branch | Its step, then `b0`, `b1` and so on for a decision or fork, or `body` and `skip` for a loop | `…/fn:ship/5/b0` |

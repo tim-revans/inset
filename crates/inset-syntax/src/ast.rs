@@ -33,6 +33,58 @@ pub enum ItemKind {
     Component(Component),
     /// An algorithm at the top level of a module.
     Function(Function),
+    Struct(Struct),
+    Enum(Enum),
+    /// `mod name;`
+    Mod(Ident),
+    /// `use path;`
+    Use(UseTree),
+}
+
+/// `struct Name { fields }`
+#[derive(Clone, Debug, PartialEq)]
+pub struct Struct {
+    pub name: Ident,
+    pub fields: Vec<StructField>,
+}
+
+/// `name: Type` in a struct, with its visibility.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StructField {
+    pub docs: Vec<Doc>,
+    pub vis: Visibility,
+    pub name: Ident,
+    pub ty: Type,
+    pub span: Span,
+}
+
+/// `enum Name { variants }`
+#[derive(Clone, Debug, PartialEq)]
+pub struct Enum {
+    pub name: Ident,
+    pub variants: Vec<Variant>,
+}
+
+/// `Name` or `Name(Type, ...)` in an enum.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Variant {
+    pub docs: Vec<Doc>,
+    pub attrs: Vec<Attribute>,
+    pub name: Ident,
+    /// The types a tuple variant holds, empty for a unit variant.
+    pub fields: Vec<Type>,
+    pub span: Span,
+}
+
+/// The tree of a `use` declaration: `a::b::{c, d as e}`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum UseTree {
+    /// `segment::rest`, where the segment may be `crate`, `super` or `self`.
+    Path { segment: Ident, rest: Box<UseTree> },
+    /// A name imported, optionally under another: `name as alias`.
+    Name { name: Ident, alias: Option<Ident> },
+    /// `{a, b}`
+    Group(Vec<UseTree>, Span),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -56,6 +108,10 @@ pub enum AttributeKind {
     Route(Route),
     Message,
     HandedDown,
+    /// `#[derive(Trait, ...)]`
+    Derive(Vec<Ident>),
+    /// `#[status(Name)]` on an error enum's variant.
+    Status(Ident),
 }
 
 /// `#[get("/hello/{name}", via = http)]`
@@ -371,7 +427,25 @@ pub enum PatternKind {
     },
     /// A path with no fields, such as `None` or `ShipError::UnknownItem`.
     Path(Path),
+    /// `Item { on_hand, reorder_level: level, .. }`
+    Struct {
+        path: Path,
+        fields: Vec<FieldPattern>,
+        /// Whether it ends in `..`, ignoring the other fields.
+        rest: bool,
+    },
+    /// `a | b`
+    Or(Vec<Pattern>),
     Lit(Lit),
+}
+
+/// `name: pattern`, or the shorthand `name`, in a struct pattern.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FieldPattern {
+    pub name: Ident,
+    /// `None` for the shorthand, which binds the field to `name`.
+    pub pattern: Option<Pattern>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -461,6 +535,42 @@ pub enum ExprKind {
     Move(Place),
     /// `|params| body`, or `move |params| body`.
     Closure(Closure),
+    /// `match scrutinee { arms }`
+    Match {
+        scrutinee: Box<Expr>,
+        arms: Vec<MatchArm>,
+    },
+    /// `for pattern in iter { body }`
+    For {
+        pattern: Pattern,
+        iter: Box<Expr>,
+        body: Block,
+    },
+    /// `while cond { body }`, where `cond` may be a `let`.
+    While {
+        cond: Box<Expr>,
+        body: Block,
+    },
+    /// `let pattern = expr` as the condition of an `if` or `while`.
+    Let {
+        pattern: Pattern,
+        expr: Box<Expr>,
+    },
+    /// `start..end` or `start..=end`, either end optional.
+    Range {
+        start: Option<Box<Expr>>,
+        end: Option<Box<Expr>>,
+        inclusive: bool,
+    },
+}
+
+/// `pattern if guard => body` in a `match`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub guard: Option<Expr>,
+    pub body: Expr,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq)]

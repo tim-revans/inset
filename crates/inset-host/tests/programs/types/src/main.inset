@@ -1,0 +1,32 @@
+// Types and modules, compiled: a struct, two enums, a `match` and a `for`
+// loop, split across two modules.
+
+mod library;
+
+use library::Desk;
+
+/// Lends books over HTTP.
+app Shelf {
+    /// The port to serve on.
+    setting port: u16 = 8080;
+    grant http: HttpServer { port };
+    start Desk { http: move http };
+}
+
+/// A book on the shelf.
+#[derive(Clone, Debug, PartialEq)]
+struct Book {
+    /// The title, as printed on the cover.
+    title: String,
+    /// How many copies are on the shelf.
+    copies: u32,
+    genre: Genre,
+}
+
+/// What a book is about.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Genre {
+    Fiction,
+    Science,
+    History,
+}
