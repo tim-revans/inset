@@ -82,6 +82,14 @@
           "type": "string",
           "default": "inset",
           "markdownDescription": "The `inset` command. The extension runs the language server as `inset lsp`, and requirements as `inset test`. A bare name is looked up on `PATH`."
+        },
+        "inset.requirements.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Glob patterns for requirements files to leave out of the Test Explorer and the requirements panel, such as test fixtures. Files under `target` and `node_modules` are always left out."
         }
       }
     },

@@ -1,6 +1,6 @@
-// Runs inside VS Code, started by `run.mjs` on Hello HTTP. Opens each panel
-// and does what a reviewer would: clicks `Greeter` in the diagram, and runs
-// the requirement from the Test Explorer.
+// Runs inside VS Code, started by `run.mjs` on the repository. Opens each
+// panel and does what a reviewer would: clicks `Greeter` in Hello HTTP's
+// diagram, and runs every requirement from the Test Explorer.
 
 const assert = require("node:assert/strict");
 const { execFileSync } = require("node:child_process");
@@ -50,7 +50,12 @@ async function diagramPanel(api, example) {
   assert.equal(editor.selection.start.character, "component ".length);
 }
 
-/** The Test Explorer lists the requirement by its sentence, and runs it. */
+/**
+ * The Test Explorer lists the examples' requirements by their sentences,
+ * leaving out the compiler's test fixtures as the repository's settings ask,
+ * and runs them. Hello HTTP's requirement passes. A program the compiler
+ * cannot build yet has that one error, and its requirements point to it.
+ */
 async function testExplorer(api) {
   const item = await until("the requirement to be found", () => {
     let found;
@@ -66,21 +71,43 @@ async function testExplorer(api) {
   assert.equal(item.uri.path.endsWith("requirements/hello.req.inset"), true);
   assert.equal(item.range.start.line, 0);
   await vscode.commands.executeCommand("vscode.revealTestInExplorer", item);
+  const programs = [];
+  api.requirements.controller.items.forEach((program) => programs.push(program));
+  assert.deepEqual(programs.map((p) => p.label).sort(), [
+    "examples/csv-import",
+    "examples/hello-http",
+    "examples/stock-tracker",
+  ]);
+  const requirements = programs.flatMap((program) => {
+    const children = [];
+    program.children.forEach((child) => children.push(child));
+    return children;
+  });
+
   await vscode.commands.executeCommand("testing.runAll");
-  // Building the program the first time compiles its dependencies.
-  const result = await until("the requirement to run", () => api.requirements.results.get(item.id), 900).catch(
+  // Building a program the first time compiles its dependencies.
+  const results = api.requirements.results;
+  await until("every requirement to run", () => requirements.every((r) => results.has(r.id)), 900).catch(
     (error) => {
       throw new Error(`${error.message}; the runs printed:\n${api.requirements.output}`);
     },
   );
-  assert.equal(result.result, "pass", result.detail);
+  assert.equal(results.get(item.id).result, "pass", results.get(item.id).detail);
+  for (const program of programs) {
+    if (results.get(program.id)) {
+      assert.equal(results.get(program.id).result, "error");
+      program.children.forEach((child) => assert.match(results.get(child.id).detail, /could not be built/));
+    } else {
+      program.children.forEach((child) => assert.equal(results.get(child.id).result, "pass", child.label));
+    }
+  }
 }
 
 /** The requirements panel lists the sentence as passed. */
 async function requirementsPanel(api) {
   await vscode.commands.executeCommand("inset.requirements.focus");
   const tree = api.requirements.tree;
-  const [program] = tree.getChildren();
+  const program = tree.getChildren().find((p) => p.label === "examples/hello-http");
   const [requirement] = tree.getChildren(program);
   const shown = tree.getTreeItem(requirement);
   assert.equal(shown.label, SENTENCE);

@@ -1,0 +1,5 @@
+{
+  // The programs under crates/ are compiler test fixtures, and some of
+  // their requirements fail on purpose, to test how failures are reported.
+  "inset.requirements.exclude": ["crates/**"]
+}

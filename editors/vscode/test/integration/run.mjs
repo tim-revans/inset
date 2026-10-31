@@ -1,4 +1,4 @@
-// Integration tests: starts VS Code with the extension, opens Hello HTTP,
+// Integration tests: starts VS Code with the extension on the repository,
 // and runs `suite.js` inside it, which opens the panels and drives them.
 //
 // `INSET_COMMAND` must name an `inset` binary built from this repository,
@@ -45,7 +45,7 @@ try {
     extensionTestsPath: path.join(extensionDir, "test", "integration", "suite.js"),
     extensionTestsEnv: { INSET_REPO: repoDir, INSET_COMMAND: path.resolve(inset) },
     launchArgs: [
-      path.join(repoDir, "examples", "hello-http"),
+      repoDir,
       `--user-data-dir=${userDataDir}`,
       `--extensions-dir=${path.join(userDataDir, "extensions")}`,
       "--disable-extensions",

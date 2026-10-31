@@ -62,12 +62,17 @@ class Requirements {
       this.controller,
       this.changed,
       watcher,
-      watcher.onDidCreate((uri) => this.discoverFile(uri)),
-      watcher.onDidChange((uri) => this.discoverFile(uri)),
-      watcher.onDidDelete((uri) => this.forget(uri)),
+      watcher.onDidCreate(() => this.discoverSoon()),
+      watcher.onDidChange(() => this.discoverSoon()),
+      watcher.onDidDelete(() => this.discoverSoon()),
       vscode.workspace.onDidSaveTextDocument((document) => {
         if (document.languageId === "inset-req") {
-          this.discoverFile(document.uri);
+          this.discoverSoon();
+        }
+      }),
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration("inset.requirements.exclude")) {
+          this.discoverSoon();
         }
       }),
       vscode.window.registerTreeDataProvider("inset.requirements", this.tree),
@@ -76,12 +81,21 @@ class Requirements {
     );
   }
 
-  /** Finds every program's requirements in the workspace. */
+  /** Finds the requirements again shortly, once a burst of file changes is over. */
+  discoverSoon() {
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.discover(), 300);
+  }
+
+  /**
+   * Finds every program's requirements in the workspace, leaving out build
+   * output and the files matched by `inset.requirements.exclude`.
+   */
   async discover() {
-    const files = await vscode.workspace.findFiles(
-      "**/requirements/**/*.req.inset",
-      "{**/node_modules/**,**/target/**}",
+    const excluded = ["**/node_modules/**", "**/target/**"].concat(
+      vscode.workspace.getConfiguration("inset").get("requirements.exclude") ?? [],
     );
+    const files = await vscode.workspace.findFiles("**/requirements/**/*.req.inset", `{${excluded.join(",")}}`);
     const found = new Set();
     for (const uri of files) {
       const root = programRoot(uri);
@@ -93,6 +107,12 @@ class Requirements {
     this.controller.items.forEach((program) => {
       if (!found.has(program.id)) {
         this.controller.items.delete(program.id);
+      } else {
+        program.children.forEach((item) => {
+          if (!files.some((uri) => uri.toString() === item.uri?.toString())) {
+            program.children.delete(item.id);
+          }
+        });
       }
     });
     this.changed.fire();
@@ -129,18 +149,6 @@ class Requirements {
       item.range = symbol.range;
       program.children.add(item);
     }
-    this.changed.fire();
-  }
-
-  /** @param {vscode.Uri} uri */
-  forget(uri) {
-    const root = programRoot(uri);
-    const program = root && this.controller.items.get(root);
-    program?.children.forEach((item) => {
-      if (item.uri?.toString() === uri.toString()) {
-        program.children.delete(item.id);
-      }
-    });
     this.changed.fire();
   }
 
@@ -224,15 +232,20 @@ class Requirements {
       report = undefined;
     }
     if (!report) {
-      // The program did not build, or `inset` did not start: every
-      // requirement is in error, with what `inset test` said.
+      // The program did not build, or `inset` did not start. The program
+      // gets what `inset test` said, once, and each requirement a line
+      // pointing there.
       const text = stderr.trim() || `\`inset test\` stopped with ${code} and printed no report.`;
+      run.errored(program, new vscode.TestMessage(text));
+      this.results.set(program.id, { result: "error", detail: text });
+      const pointer = `${label} could not be built, so its requirements did not run. See the error on ${label}.`;
       for (const item of items) {
-        run.errored(item, new vscode.TestMessage(text));
-        this.results.set(item.id, { result: "error", detail: text });
+        run.errored(item, new vscode.TestMessage(pointer));
+        this.results.set(item.id, { result: "error", detail: pointer });
       }
       return;
     }
+    this.results.delete(program.id);
     for (const outcome of report.requirements) {
       const item = program.children.get(requirementId(root, outcome.sentence));
       if (!item) {
@@ -303,10 +316,12 @@ class RequirementsTree {
       this.requirements.controller.items.forEach((program) => children.push(program));
     } else if ("children" in node) {
       node.children.forEach((item) => children.push(item));
+      const result = this.requirements.results.get(node.id);
+      const problem = result && result.result !== "pass" ? [result] : [];
       if (node.parent) {
-        const result = this.requirements.results.get(node.id);
-        return result && result.result !== "pass" ? [result] : [];
+        return problem;
       }
+      return [...problem, ...children.sort(byPosition)];
     }
     return children.sort(byPosition);
   }
@@ -315,7 +330,9 @@ class RequirementsTree {
   getTreeItem(node) {
     if (!("children" in node)) {
       // The step that failed, or why the program could not run.
-      const tree = new vscode.TreeItem(node.detail?.split("\n").join(" — ") ?? "");
+      // A failure's step and why; an error's first line, with the rest in the tooltip.
+      const lines = node.detail?.split("\n") ?? [];
+      const tree = new vscode.TreeItem((node.result === "fail" ? lines : lines.slice(0, 1)).join(" — "));
       tree.tooltip = node.detail;
       tree.iconPath = new vscode.ThemeIcon("debug-stackframe-dot");
       if (node.location) {
@@ -326,6 +343,7 @@ class RequirementsTree {
     if (!node.parent) {
       const tree = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Expanded);
       tree.iconPath = new vscode.ThemeIcon("package");
+      tree.description = this.requirements.results.has(node.id) ? "could not be built" : "";
       tree.contextValue = "program";
       return tree;
     }
