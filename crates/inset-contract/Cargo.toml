@@ -1,0 +1,21 @@
+[package]
+name = "inset-contract"
+version = "0.0.0"
+description = "The typed API contract of an Inset program: OpenAPI 3.1 and TypeScript types, from its routes"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+inset-check = { path = "../inset-check" }
+inset-syntax = { path = "../inset-syntax" }
+inset-value = { path = "../inset-value" }
+
+[dev-dependencies]
+insta = "1.49"
+jsonschema = { version = "0.60", default-features = false }
+serde_json = "1"
+
+[lints]
+workspace = true

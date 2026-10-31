@@ -177,6 +177,7 @@ impl Parser<'_> {
                 "message" => AttributeKind::Message,
                 "handed_down" => AttributeKind::HandedDown,
                 "derive" => AttributeKind::Derive(self.parse_attr_names(&name, name_span)?),
+                "serde" => AttributeKind::Serde(self.parse_serde_args(name_span)?),
                 "status" => {
                     let names = self.parse_attr_names(&name, name_span)?;
                     match <[Ident; 1]>::try_from(names) {
@@ -208,7 +209,7 @@ impl Parser<'_> {
                         )
                         .with_help(
                             "the attributes are `get`, `post`, `put`, `patch`, `delete`, \
-                             `message`, `handed_down`, `derive`, `status`, `rust` and `defensive`",
+                             `message`, `handed_down`, `derive`, `status`, `serde`, `rust` and `defensive`",
                         ),
                     ));
                 }
@@ -289,6 +290,46 @@ impl Parser<'_> {
         })
     }
 
+    /// `(name = "value", name, ...)` after `serde`.
+    fn parse_serde_args(&mut self, name_span: Span) -> PResult<Vec<SerdeArg>> {
+        let Some(open) = self.at(P::LParen).then(|| self.bump().span) else {
+            return Err(self.report(
+                Diagnostic::new(
+                    "`#[serde]` needs its arguments in `(` `)`",
+                    name_span,
+                    "the arguments go after this",
+                )
+                .with_help("such as `#[serde(rename_all = \"camelCase\")]`"),
+            ));
+        };
+        let mut args = Vec::new();
+        while !self.at(P::RParen) {
+            let name = self.parse_ident("a serde argument, such as `rename`")?;
+            let value = if self.eat(P::Eq) {
+                let T::Str(value) = self.kind().clone() else {
+                    return Err(self.expected("a string, such as \"camelCase\""));
+                };
+                Some(StrLit {
+                    value,
+                    span: self.bump().span,
+                })
+            } else {
+                None
+            };
+            let end = value.as_ref().map_or(name.span, |v| v.span);
+            args.push(SerdeArg {
+                span: name.span.to(end),
+                name,
+                value,
+            });
+            if !self.eat(P::Comma) {
+                break;
+            }
+        }
+        self.expect_close(P::RParen, open, "the serde arguments")?;
+        Ok(args)
+    }
+
     /// `(Name, Name, ...)` after `derive` or `status`.
     pub(super) fn parse_attr_names(
         &mut self,
@@ -352,20 +393,14 @@ impl Parser<'_> {
         while !self.at(P::RBrace) && *self.kind() != T::Eof {
             let docs = self.parse_docs();
             let start = docs.first().map_or(self.span(), |d| d.span);
-            if self.at(P::Pound) {
-                let span = self.span();
-                return Err(self.report(Diagnostic::new(
-                    "a struct field takes no attributes",
-                    span,
-                    "remove this attribute",
-                )));
-            }
+            let attrs = self.parse_attrs()?;
             let vis = self.parse_vis()?;
             let name = self.parse_ident("a field name")?;
             self.expect(P::Colon, "the field's name")?;
             let ty = self.parse_type()?;
             fields.push(StructField {
                 docs,
+                attrs,
                 vis,
                 name,
                 span: start.to(ty.span),
@@ -535,6 +570,7 @@ impl Parser<'_> {
             settings: Vec::new(),
             grants: Vec::new(),
             starts: Vec::new(),
+            front_ends: Vec::new(),
         };
         while !self.at(P::RBrace) && *self.kind() != T::Eof {
             let start = self.pos;
@@ -552,13 +588,18 @@ impl Parser<'_> {
             T::Keyword(Kw::Setting) => app.settings.push(self.parse_setting(docs)?),
             T::Keyword(Kw::Grant) => app.grants.push(self.parse_grant(docs)?),
             T::Keyword(Kw::Start) => app.starts.push(self.parse_start(docs)?),
+            T::Ident(word)
+                if word == "front" && matches!(self.nth(1), T::Ident(w) if w == "end") =>
+            {
+                app.front_ends.push(self.parse_front_end(docs)?)
+            }
             T::Keyword(Kw::Fn | Kw::Async) | T::Punct(P::Pound) => {
                 let span = self.span();
                 return Err(self.report(
                     Diagnostic::new(
                         "an app has no functions",
                         span,
-                        "an app holds only settings, grants and starts",
+                        "an app holds only settings, grants, starts and its front end",
                     )
                     .with_help("put the function in a component the app starts"),
                 ));
@@ -571,9 +612,68 @@ impl Parser<'_> {
                     "nothing follows this doc comment",
                 )));
             }
-            _ => return Err(self.expected("`setting`, `grant` or `start`")),
+            _ => return Err(self.expected("`setting`, `grant`, `start` or `front end`")),
         }
         Ok(())
+    }
+
+    /// `front end via server calls ["METHOD /path", ...];`
+    pub(super) fn parse_front_end(&mut self, docs: Vec<Doc>) -> PResult<FrontEnd> {
+        let start = self.bump().span;
+        self.bump();
+        match self.kind() {
+            T::Ident(word) if word == "via" => {
+                self.bump();
+            }
+            _ => {
+                return Err(self.report(
+                    Diagnostic::new(
+                        "`front end` needs `via`",
+                        start.to(self.prev_span()),
+                        "the front end does not say which server serves it",
+                    )
+                    .with_help("write `front end via http calls [\"GET /items\"];`, naming an `HttpServer` grant"),
+                ));
+            }
+        }
+        let via = self.parse_ident("the name of an `HttpServer` grant")?;
+        match self.kind() {
+            T::Ident(word) if word == "calls" => {
+                self.bump();
+            }
+            _ => {
+                return Err(self.report(
+                    Diagnostic::new(
+                        "`front end` needs `calls`",
+                        start.to(self.prev_span()),
+                        "the front end does not say which routes it calls",
+                    )
+                    .with_help("list the routes after `calls`, such as `calls [\"GET /items\", \"PUT /items/{sku}\"]`"),
+                ));
+            }
+        }
+        let open = self.expect(P::LBracket, "`calls`")?;
+        let mut calls = Vec::new();
+        while !self.at(P::RBracket) {
+            let T::Str(value) = self.kind().clone() else {
+                return Err(self.expected("a route as a string, such as \"GET /items\""));
+            };
+            calls.push(StrLit {
+                value,
+                span: self.bump().span,
+            });
+            if !self.eat(P::Comma) {
+                break;
+            }
+        }
+        self.expect_close(P::RBracket, open, "the routes")?;
+        let end = self.expect(P::Semi, "the front end")?;
+        Ok(FrontEnd {
+            docs,
+            via,
+            calls,
+            span: start.to(end),
+        })
     }
 
     pub(super) fn parse_setting(&mut self, docs: Vec<Doc>) -> PResult<Setting> {

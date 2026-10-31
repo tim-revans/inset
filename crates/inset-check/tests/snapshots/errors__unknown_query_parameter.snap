@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: the route `GET /products?{limit}` takes no query parameter `sort`
+   ╭─[ requirements/main.req.inset:5:33 ]
+   │
+ 5 │     when Catalogue receives GET /products?limit=5&sort=name
+   │                                 ─────────────┬─────────────  
+   │                                              ╰─────────────── the program would ignore this parameter
+   │ 
+   │ Help: it takes `limit`
+───╯

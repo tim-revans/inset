@@ -1,0 +1,39 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: no route of `Catalogue` takes `GET /products`
+   ╭─[ requirements/main.req.inset:5:33 ]
+   │
+ 5 │     when Catalogue receives GET /products?limit=5
+   │                                 ────────┬────────  
+   │                                         ╰────────── no route matches this request
+   │ 
+   │ Help: the routes of `Catalogue` are `PUT /products/{sku}`
+───╯
+Error: no route of `Catalogue` takes `GET /products`
+   ╭─[ requirements/main.req.inset:7:33 ]
+   │
+ 7 │     when Catalogue receives GET /products?limit=many
+   │                                 ──────────┬─────────  
+   │                                           ╰─────────── no route matches this request
+   │ 
+   │ Help: the routes of `Catalogue` are `PUT /products/{sku}`
+───╯
+Error: no route of `http` is `GET /products?{limit}`
+   ╭─[ src/main.inset:5:31 ]
+   │
+ 5 │     front end via http calls ["GET /products?{limit}", "PUT /products/{sku}"];
+   │                               ───────────┬───────────  
+   │                                          ╰───────────── the front end calls a route that does not exist
+   │ 
+   │ Help: the routes of `http` are "PUT /products/{sku}"
+───╯
+Error: the query parameter `{after}` has no function parameter
+    ╭─[ src/main.inset:31:11 ]
+    │
+ 31 │     #[get("/products?{limit}&{after}", via = http)]
+    │           ─────────────┬─────────────  
+    │                        ╰─────────────── `list` takes no parameter `after`
+    │ 
+    │ Help: add `after: Option<String>` to the function's parameters, or `after: String` if every request must give it
+────╯

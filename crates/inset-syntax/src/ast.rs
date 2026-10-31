@@ -52,6 +52,8 @@ pub struct Struct {
 #[derive(Clone, Debug, PartialEq)]
 pub struct StructField {
     pub docs: Vec<Doc>,
+    /// Only `#[serde(...)]` is allowed here, which the checker sees to.
+    pub attrs: Vec<Attribute>,
     pub vis: Visibility,
     pub name: Ident,
     pub ty: Type,
@@ -112,6 +114,16 @@ pub enum AttributeKind {
     Derive(Vec<Ident>),
     /// `#[status(Name)]` on an error enum's variant.
     Status(Ident),
+    /// `#[serde(name = "value", ...)]` on a data type, field or variant.
+    Serde(Vec<SerdeArg>),
+}
+
+/// `name = "value"`, or a bare `name`, in `#[serde(...)]`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SerdeArg {
+    pub name: Ident,
+    pub value: Option<StrLit>,
+    pub span: Span,
 }
 
 /// `#[get("/hello/{name}", via = http)]`
@@ -189,6 +201,19 @@ pub struct App {
     pub settings: Vec<Setting>,
     pub grants: Vec<Grant>,
     pub starts: Vec<Start>,
+    /// `front end ...;`, in the order written. The checker allows one.
+    pub front_ends: Vec<FrontEnd>,
+}
+
+/// `front end via server calls ["METHOD /path", ...];`: the browser front
+/// end in `web/`, the `HttpServer` grant that serves it, and the routes it calls.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FrontEnd {
+    pub docs: Vec<Doc>,
+    pub via: Ident,
+    /// Each a route's method and its path, as its attribute writes it.
+    pub calls: Vec<StrLit>,
+    pub span: Span,
 }
 
 /// `setting name: Type = default;`
@@ -719,13 +744,13 @@ pub enum StepKind {
         path: Text,
         /// The `HttpServer` grant the request arrives through.
         via: Option<Ident>,
-        body: Option<Text>,
+        body: Option<Body>,
     },
     /// `then App replies Status [with body]`
     Reply {
         app: Ident,
         status: Ident,
-        body: Option<Text>,
+        body: Option<Body>,
     },
     /// `given fact`, which sets up a fake capability, or `then fact`, which
     /// checks what it holds.
@@ -750,6 +775,24 @@ pub enum FactKind {
     Empty,
     /// `name fails`
     Fails,
+}
+
+/// What follows `with` in a step.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Body {
+    /// A string or a text block, sent or compared exactly as written.
+    Text(Text),
+    /// A value, sent or compared as JSON of the route's `Json<T>` type.
+    Value(Box<Expr>),
+}
+
+impl Body {
+    pub fn span(&self) -> Span {
+        match self {
+            Body::Text(text) => text.span,
+            Body::Value(expr) => expr.span,
+        }
+    }
 }
 
 /// Text in a step: a path, a string literal's value, or a text block's lines.

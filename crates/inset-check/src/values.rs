@@ -68,6 +68,7 @@ pub(crate) fn types(cx: &Checker) -> Types {
             .iter()
             .map(|data| DataShape {
                 name: data.name.name.clone(),
+                json: data.json.clone(),
                 kind: if data.is_enum {
                     DataKind::Enum(
                         data.variants

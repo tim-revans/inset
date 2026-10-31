@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:5:33-5:60
+the route `GET /products?{limit}` takes no query parameter `sort`
+the program would ignore this parameter
+help: it takes `limit`

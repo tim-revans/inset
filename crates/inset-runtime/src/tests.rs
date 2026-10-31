@@ -68,7 +68,8 @@
 use crate::actor::fail;
 use crate::prelude::*;
 use crate::program::{self, report::REPORTS};
-use crate::{AnyReply, Json, LocalBoxFuture, Reply, Stopped};
+use crate::{AnyReply, LocalBoxFuture, Reply, Stopped};
+use serde_json::Value as Json;
 
 struct Shop;
 

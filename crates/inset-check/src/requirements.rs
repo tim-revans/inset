@@ -11,13 +11,13 @@
 
 use std::collections::HashMap;
 
-use inset_syntax::ast::{FactKind, RequirementsFile, Step, StepKind, TypeKind};
+use inset_syntax::ast::{Body, FactKind, RequirementsFile, Step, StepKind, TypeKind};
 use inset_syntax::{Diagnostic, Ident, Span};
 use inset_value::{Check, Shape, Types, Value};
 
 use crate::types::Ty;
 use crate::values::{Values, shape};
-use crate::{Checker, Program, Reply, Report, RouteInfo, Segment, names, status};
+use crate::{BodyDecl, Checker, Program, Reply, Report, RouteInfo, Segment, names, status};
 
 /// A program's requirements, as the test runner runs them.
 #[derive(Clone, Debug)]
@@ -68,17 +68,30 @@ pub enum Planned {
     Request {
         server: String,
         method: String,
+        /// The path and any query, as written.
         path: String,
-        body: Vec<u8>,
+        /// Empty text when the step gives no body.
+        body: PlannedBody,
     },
-    /// The reply to the latest request has this status and body.
-    Reply { status: u16, body: String },
+    /// The reply to the latest request has this status and body. Empty
+    /// text is an empty body.
+    Reply { status: u16, body: PlannedBody },
     /// Sets up what a fake holds.
     Given(PlannedFact),
     /// Checks what a fake holds.
     Then(PlannedFact),
     /// A condition on what the fakes hold.
     Check(Check),
+}
+
+/// A request's or reply's body.
+#[derive(Clone, Debug)]
+pub enum PlannedBody {
+    /// Sent, or compared, exactly as written.
+    Text(String),
+    /// A value of a `Json<T>` route's `T`, sent as its JSON, or compared
+    /// as a value with the reply's JSON read back as `T`.
+    Json { value: Value, shape: Shape },
 }
 
 #[derive(Clone, Debug)]
@@ -242,7 +255,16 @@ fn plan_steps(
                     via.as_ref(),
                     &mut report,
                 );
-                if let Some(route) = route {
+                let planned_body = route.and_then(|route| {
+                    request_body(
+                        cx,
+                        route,
+                        body.as_ref(),
+                        &mut report,
+                        &mut |span, target| refs.push((*file, span, target)),
+                    )
+                });
+                if let (Some(route), Some(body)) = (route, planned_body) {
                     refs.push((*file, step.span, route.decl.function));
                     plan(Planned::Request {
                         server: via.as_ref().map_or_else(
@@ -251,9 +273,7 @@ fn plan_steps(
                         ),
                         method: method.as_str().to_string(),
                         path: path.value.clone(),
-                        body: body
-                            .as_ref()
-                            .map_or_else(Vec::new, |b| b.value.clone().into_bytes()),
+                        body,
                     });
                 }
                 last = Some(route);
@@ -277,11 +297,15 @@ fn plan_steps(
                     refs.push((*file, step.span, route.decl.function));
                 }
                 check_status(status, route, &mut report);
-                if let Some(code) = status::code(&status.name) {
-                    plan(Planned::Reply {
-                        status: code,
-                        body: body.as_ref().map_or_else(String::new, |b| b.value.clone()),
-                    });
+                let body = reply_body(
+                    cx,
+                    route,
+                    body.as_ref(),
+                    &mut report,
+                    &mut |span, target| refs.push((*file, span, target)),
+                );
+                if let (Some(code), Some(body)) = (status::code(&status.name), body) {
+                    plan(Planned::Reply { status: code, body });
                 }
             }
             StepKind::Fact { given, fact } => {
@@ -474,14 +498,10 @@ fn resolve_request<'r>(
         }
         None => None,
     };
-    if path.contains('?') {
-        report(Diagnostic::new(
-            "a query in a request is not supported yet",
-            span,
-            "the checker does not handle this yet",
-        ));
-        return None;
-    }
+    let (path, query) = match path.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (path, None),
+    };
     let segments: Vec<&str> = path[1..].split('/').collect();
     let candidates: Vec<&RouteInfo> = cx
         .routes
@@ -511,6 +531,9 @@ fn resolve_request<'r>(
                 Segment::Param(ty) => converts(text, ty),
             })
     }) {
+        if let Some(query) = query {
+            check_query(route, query, span, report);
+        }
         return Some(route);
     }
     let request = format!("{} {path}", method.as_str());
@@ -612,6 +635,140 @@ fn percent_decode(text: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
+/// Each parameter a request's query gives must be one of the route's. Its
+/// value is not checked, so a requirement can show that a value that does
+/// not convert gets `BadRequest`.
+fn check_query(route: &RouteInfo, query: &str, span: Span, report: &mut impl FnMut(Diagnostic)) {
+    for pair in query.split('&').filter(|p| !p.is_empty()) {
+        let name = pair.split_once('=').map_or(pair, |(name, _)| name);
+        let name = percent_decode(name).unwrap_or_else(|| name.to_string());
+        if route.decl.query.iter().any(|q| q.name == name) {
+            continue;
+        }
+        let help = if route.decl.query.is_empty() {
+            "it takes none".to_string()
+        } else {
+            format!(
+                "it takes {}",
+                names(route.decl.query.iter().map(|q| q.name.as_str()))
+            )
+        };
+        report(
+            Diagnostic::new(
+                format!(
+                    "the route `{} {}` takes no query parameter `{name}`",
+                    route.decl.method.as_str(),
+                    route.decl.template
+                ),
+                span,
+                "the program would ignore this parameter",
+            )
+            .with_help(help),
+        );
+    }
+}
+
+/// A request's body, typed for its route: text as written, or a value of
+/// the route's `Json<T>` body.
+fn request_body(
+    cx: &Checker,
+    route: &RouteInfo,
+    body: Option<&Body>,
+    report: &mut impl FnMut(Diagnostic),
+    refer: &mut impl FnMut(Span, Span),
+) -> Option<PlannedBody> {
+    match (body, &route.decl.body) {
+        (None, _) => Some(PlannedBody::Text(String::new())),
+        (Some(Body::Text(text)), _) => Some(PlannedBody::Text(text.value.clone())),
+        (Some(Body::Value(value)), Some(BodyDecl::Json(ty))) => {
+            json_value(cx, value, ty, "the body", false, report, refer)
+        }
+        (Some(Body::Value(value)), decl) => {
+            let label = match decl {
+                Some(_) => "this route reads its body as text",
+                None => "this route reads no body",
+            };
+            report(
+                Diagnostic::new(
+                    "a body written as a value is sent as JSON",
+                    value.span,
+                    label,
+                )
+                .with_help(
+                    "write a text body as a string, such as \"20\"; a value is for a route whose body is a `Json<T>`",
+                ),
+            );
+            None
+        }
+    }
+}
+
+/// A reply's body, typed for its route: text as written, or a value of
+/// the route's `Json<T>` reply.
+fn reply_body(
+    cx: &Checker,
+    route: Option<&RouteInfo>,
+    body: Option<&Body>,
+    report: &mut impl FnMut(Diagnostic),
+    refer: &mut impl FnMut(Span, Span),
+) -> Option<PlannedBody> {
+    match (body, route.and_then(|r| r.decl.reply_json.as_ref())) {
+        (None, _) => Some(PlannedBody::Text(String::new())),
+        (Some(Body::Text(text)), _) => Some(PlannedBody::Text(text.value.clone())),
+        (Some(Body::Value(value)), Some(ty)) => {
+            json_value(cx, value, ty, "the reply", true, report, refer)
+        }
+        (Some(Body::Value(_)), None) if route.is_none_or(|r| r.decl.reply == Reply::Unknown) => {
+            None
+        }
+        (Some(Body::Value(value)), None) => {
+            report(
+                Diagnostic::new(
+                    "a body written as a value is compared as JSON",
+                    value.span,
+                    "this route replies with text",
+                )
+                .with_help(
+                    "write a text body as a string, such as \"40\"; a value is for a route that replies with a `Json<T>`",
+                ),
+            );
+            None
+        }
+    }
+}
+
+fn json_value(
+    cx: &Checker,
+    value: &inset_syntax::ast::Expr,
+    ty: &Ty,
+    role: &str,
+    compared: bool,
+    report: &mut impl FnMut(Diagnostic),
+    refer: &mut impl FnMut(Span, Span),
+) -> Option<PlannedBody> {
+    let mut values = Values {
+        cx,
+        diagnostics: Vec::new(),
+        refs: Vec::new(),
+    };
+    let typed = values.value(value, ty, role);
+    if compared && let Some(diagnostic) = values.not_comparable(ty, value.span) {
+        values.diagnostics.push(diagnostic);
+    }
+    for (span, target) in values.refs {
+        refer(span, target);
+    }
+    let failed = !values.diagnostics.is_empty();
+    values.diagnostics.into_iter().for_each(report);
+    if failed {
+        return None;
+    }
+    Some(PlannedBody::Json {
+        value: typed?,
+        shape: shape(ty),
+    })
+}
+
 fn check_status(name: &Ident, route: Option<&RouteInfo>, report: &mut impl FnMut(Diagnostic)) {
     if status::code(&name.name).is_none() {
         let help = match status::by_other_case(&name.name) {
@@ -632,12 +789,16 @@ fn check_status(name: &Ident, route: Option<&RouteInfo>, report: &mut impl FnMut
     let Some(route) = route else {
         return;
     };
+    let success = match &route.decl.reply_json {
+        Some(ty) => format!("Json<{ty}>"),
+        None => "String".to_string(),
+    };
     let (mut possible, why): (Vec<&str>, String) = match &route.decl.reply {
         Reply::Unknown => return,
-        Reply::Text => (vec!["OK"], "it returns a `String`".into()),
+        Reply::Text => (vec!["OK"], format!("it returns a `{success}`")),
         Reply::Optional => (
             vec!["OK", "NotFound"],
-            "it returns an `Option<String>`".into(),
+            format!("it returns an `Option<{success}>`"),
         ),
         Reply::Fallible(statuses) => {
             let mut possible = vec!["OK"];
@@ -652,7 +813,7 @@ fn check_status(name: &Ident, route: Option<&RouteInfo>, report: &mut impl FnMut
             )
         }
     };
-    if route.decl.body {
+    if route.decl.body.is_some() || !route.decl.query.is_empty() {
         possible.push("BadRequest");
     }
     // A failure the component rolls back replies `InternalServerError`, so

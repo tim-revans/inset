@@ -17,14 +17,22 @@ src/main.inset
     port (u16) line 8
     http (HttpServer) line 9
     items (Table<String, Item>) line 11
-    Warehouse (Warehouse) line 12
-  Item (struct) line 17
-    on_hand (u32) line 19
-    reorder_level (u32) line 21
-    target_level (u32) line 23
-  Reorder (struct) line 28
-    sku (String) line 29
-    quantity (u32) line 30
-  ShipError (enum) line 35
-    UnknownItem (NotFound) line 38
-    NotEnoughStock (Conflict) line 41
+    front end (via http) line 13
+      GET /items?{low} () line 13
+      PUT /items/{sku} () line 13
+    Warehouse (Warehouse) line 14
+  Item (struct) line 20
+    on_hand (u32) line 22
+    reorder_level (u32) line 24
+    target_level (u32) line 26
+  StockLevel (struct) line 32
+    sku (String) line 33
+    on_hand (u32) line 34
+    reorder_level (u32) line 35
+    low (bool) line 37
+  Reorder (struct) line 42
+    sku (String) line 43
+    quantity (u32) line 44
+  ShipError (enum) line 49
+    UnknownItem (NotFound) line 52
+    NotEnoughStock (Conflict) line 55

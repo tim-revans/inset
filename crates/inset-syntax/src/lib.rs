@@ -107,6 +107,26 @@ fn parse_step_fact(
     allow_check: bool,
     row: Option<&requirements::RowMap>,
 ) -> (Option<parser::StepFact>, Vec<Diagnostic>) {
+    parse_step_part(source, span, row, |parser| {
+        parser.parse_step_fact(allow_check)
+    })
+}
+
+/// Parses a step's body written as a value, as [`parse_step_fact`] parses a fact.
+fn parse_step_value(
+    source: &str,
+    span: Span,
+    row: Option<&requirements::RowMap>,
+) -> (Option<ast::Expr>, Vec<Diagnostic>) {
+    parse_step_part(source, span, row, |parser| parser.parse_step_value())
+}
+
+fn parse_step_part<T>(
+    source: &str,
+    span: Span,
+    row: Option<&requirements::RowMap>,
+    parse: impl FnOnce(&mut parser::Parser<'_>) -> parser::PResult<T>,
+) -> (Option<T>, Vec<Diagnostic>) {
     let text = &source[span.start..span.end];
     let map = |s: Span| row.map_or(s, |row| row.span(s));
     let mut lexed = lexer::lex(text);
@@ -124,7 +144,7 @@ fn parse_step_fact(
         .collect();
     let base = map(span).start;
     let mut parser = parser::Parser::new(text, base, lexed.tokens);
-    let parsed = parser.parse_step_fact(allow_check).ok();
+    let parsed = parse(&mut parser).ok();
     diagnostics.extend(parser.diagnostics.into_iter().map(|(_, d)| d));
     (parsed, diagnostics)
 }

@@ -20,6 +20,12 @@
 //!   sort in key order. The compiler implements `Stored` for each data type
 //!   a program declares, so serde's derives and attributes, which say how a
 //!   JSON body looks, never change what is stored.
+//! - **JSON bodies** are read and written with serde and `serde_json`, which
+//!   this crate re-exports, so a generated project depends on this crate
+//!   alone. A data type's serde derives name `::inset_runtime::serde` as
+//!   their crate. [`Json`] is the body and reply wrapper, as in axum.
+//! - **The front end**'s files are compiled into the component, and served
+//!   for a `GET` that no route of their server takes ([`FrontEnd`]).
 //! - **Failures** are not Rust panics where they can be avoided. A failed
 //!   capability call or message ends its handler by dropping the handler's
 //!   future, so the component's `failure` block can roll it back and the
@@ -63,10 +69,13 @@ pub use actor::{
     Scope, Sendable, send,
 };
 pub use failure::{Failure, Response, Stopped};
-pub use http::{HttpServer, IntoResponse, Method, PathParams, Reply, Request, Route, Status};
-pub use program::{App, Grant, GrantValue, Grants, Setting, SettingType};
+pub use http::{
+    HttpServer, IntoResponse, Json, Method, PathParams, Query, Reply, Request, Route, Status,
+};
+pub use program::{App, FrontEnd, Grant, GrantValue, Grants, Setting, SettingType};
 pub use rust_decimal::Decimal;
-pub use serde_json::Value as Json;
+pub use serde;
+pub use serde_json;
 pub use stored::{Key, KeyReader, KeyType, Saved, SavedFields, Stored, data};
 pub use table::Table;
 
@@ -76,9 +85,9 @@ pub use program::glue;
 /// Everything emitted code uses, in one import.
 pub mod prelude {
     pub use crate::{
-        App, Component, Failure, Grant, GrantValue, Grants, Handle, HttpServer, IntoResponse,
-        Mailbox, Message, Method, NoMessage, Outlet, Reply, Request, Response, Route, Scope,
-        Setting, SettingType, Status, Stopped, Stored, Table, send,
+        App, Component, Failure, FrontEnd, Grant, GrantValue, Grants, Handle, HttpServer,
+        IntoResponse, Json, Mailbox, Message, Method, NoMessage, Outlet, Reply, Request, Response,
+        Route, Scope, Setting, SettingType, Status, Stopped, Stored, Table, send,
     };
 }
 

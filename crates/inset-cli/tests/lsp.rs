@@ -249,6 +249,11 @@ fn diagnostics_match_inset_check() {
                 format!("{location}\n{}\n{}{help}", d.message, d.label)
             })
             .collect();
+        // The server publishes by file in the case's order, and `inset
+        // check` reports in order of path.
+        let (mut from_server, mut from_check) = (from_server, from_check);
+        from_server.sort();
+        from_check.sort();
         assert_eq!(from_server, from_check, "{}", case.name);
         insta::with_settings!({ omit_expression => true }, {
             insta::assert_snapshot!(case.name, snapshot);

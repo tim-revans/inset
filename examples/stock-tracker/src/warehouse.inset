@@ -1,4 +1,4 @@
-use crate::{Item, Reorder, ShipError};
+use crate::{Item, Reorder, ShipError, StockLevel};
 
 /// Answers HTTP requests from warehouse staff about stock and reorders.
 pub component Warehouse {
@@ -19,6 +19,24 @@ pub component Warehouse {
     async fn stock(&self, sku: String) -> Option<String> {
         let item = self.inventory.item(&sku).await?;
         Some(item.on_hand.to_string())
+    }
+
+    /// Lists every item's stock in SKU order, or with `low=true`, only the
+    /// items at or below their reorder level.
+    #[get("/items?{low}", via = http)]
+    async fn stock_levels(&self, low: Option<bool>) -> Json<Vec<StockLevel>> {
+        let levels = self.inventory.levels(low.unwrap_or(false)).await;
+        Json(levels)
+    }
+
+    /// Stocks an item with the levels given, replacing any it had, and
+    /// replies with the quantity on hand.
+    #[put("/items/{sku}", via = http, body = item)]
+    async fn stock_item(&self, sku: String, item: Json<Item>) -> String {
+        let Json(item) = item;
+        let on_hand = item.on_hand;
+        self.inventory.stock(&sku, move item).await;
+        on_hand.to_string()
     }
 
     /// Adds stock that has arrived, and replies with the new quantity on hand.
@@ -59,6 +77,31 @@ component Inventory {
     #[message]
     async fn item(&self, sku: &str) -> Option<Item> {
         self.items.get(sku).await
+    }
+
+    /// Every item's stock, in SKU order, or only that of the items at or
+    /// below their reorder level.
+    #[message]
+    async fn levels(&self, low_only: bool) -> Vec<StockLevel> {
+        let mut levels = Vec::new();
+        for (sku, item) in self.items.entries().await {
+            let low = item.on_hand <= item.reorder_level;
+            if low || !low_only {
+                levels.push(StockLevel {
+                    sku,
+                    on_hand: item.on_hand,
+                    reorder_level: item.reorder_level,
+                    low,
+                });
+            }
+        }
+        levels
+    }
+
+    /// Stores an item under its SKU, replacing any item stored there.
+    #[message]
+    async fn stock(&mut self, sku: &str, item: Item) {
+        self.items.insert(sku.to_string(), item).await;
     }
 
     /// Adds to an item's stock, and returns the item as it now stands.

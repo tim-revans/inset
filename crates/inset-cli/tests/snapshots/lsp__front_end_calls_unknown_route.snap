@@ -1,0 +1,16 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:5:31-5:46
+no route of `http` is `GET /products`
+the front end calls a route that does not exist
+help: write the path as its attribute does: "GET /products?{limit}"
+
+src/main.inset:5:48-5:69
+unknown HTTP method `get`
+the call starts with its route's method
+help: methods are written in capitals: `GET`
+
+src/main.inset:5:94-5:115
+the front end lists this route twice
+this repeats an earlier call

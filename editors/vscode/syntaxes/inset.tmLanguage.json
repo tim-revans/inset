@@ -399,6 +399,86 @@
           }
         },
         {
+          "comment": "The app's front end, the server it is served through, and the routes it calls, each a method and a path as the route's attribute writes it.",
+          "name": "meta.front-end.inset",
+          "begin": "\\b(front)\\s+(end)\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.front-end.inset"
+            },
+            "2": {
+              "name": "storage.type.front-end.inset"
+            }
+          },
+          "end": "(?=;)",
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "match": "\\b(via)\\s+([a-z_]\\w*)",
+              "captures": {
+                "1": {
+                  "name": "keyword.other.route-option.inset"
+                },
+                "2": {
+                  "name": "variable.other.capability.inset"
+                }
+              }
+            },
+            {
+              "match": "\\bcalls\\b",
+              "name": "keyword.other.front-end.inset"
+            },
+            {
+              "name": "string.quoted.double.route.inset",
+              "begin": "(\")\\s*(GET|POST|PUT|PATCH|DELETE)?",
+              "beginCaptures": {
+                "1": {
+                  "name": "punctuation.definition.string.begin.inset"
+                },
+                "2": {
+                  "name": "constant.language.http-method.inset"
+                }
+              },
+              "end": "\"",
+              "endCaptures": {
+                "0": {
+                  "name": "punctuation.definition.string.end.inset"
+                }
+              },
+              "patterns": [
+                {
+                  "name": "meta.route-parameter.inset",
+                  "match": "(\\{)\\s*([a-z_]\\w*)\\s*(\\})",
+                  "captures": {
+                    "1": {
+                      "name": "punctuation.definition.parameter.begin.inset"
+                    },
+                    "2": {
+                      "name": "variable.parameter.route.inset"
+                    },
+                    "3": {
+                      "name": "punctuation.definition.parameter.end.inset"
+                    }
+                  }
+                },
+                {
+                  "match": "[?&]",
+                  "name": "punctuation.separator.query.inset"
+                },
+                {
+                  "match": "\\\\(?:[nrt0\\\\'\\\"]|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F_]{1,6}\\})",
+                  "name": "constant.character.escape.inset"
+                }
+              ]
+            },
+            {
+              "include": "#punctuation"
+            }
+          ]
+        },
+        {
           "include": "#start"
         },
         {
@@ -786,7 +866,7 @@
           "name": "support.type.capability.inset"
         },
         {
-          "match": "\\b(Handle|Outlet)\\b",
+          "match": "\\b(Handle|Outlet|Json)\\b",
           "name": "support.type.inset"
         },
         {

@@ -20,7 +20,7 @@ inset diagram examples/hello-http -o hello-http.svg  # draw its component diagra
 inset run examples/hello-http                        # serve it, then open http://localhost:8080/hello/Ada
 ```
 
-`inset test --json` prints the test report as JSON. `inset diagram --json` prints the diagram data. `inset diagram --flowchart HelloHttp/Greeter/fn:hello` draws one function's flowchart instead.
+`inset test --json` prints the test report as JSON. `inset diagram --json` prints the diagram data. `inset diagram --flowchart HelloHttp/Greeter/fn:hello` draws one function's flowchart instead. `inset contract examples/hello-http` prints the program's API contract as OpenAPI 3.1, or with `--typescript` as TypeScript types for a front end. `inset build` writes both beside the component.
 
 ## Repository layout
 
@@ -38,7 +38,7 @@ inset run examples/hello-http                        # serve it, then open http:
 You need [rustup](https://rustup.rs). `rust-toolchain.toml` selects the toolchain and installs the `wasm32-wasip2` target. The editor tests and packaging also need [Node.js](https://nodejs.org) 22 or later with npm, and the editor integration tests need a display or `xvfb-run`.
 
 ```sh
-cargo xtask ci                 # format check, clippy, tests, editor tests
+cargo xtask ci                 # format check, clippy, tests, editor tests, front-end type check
 cargo xtask editor             # package the VS Code extension
 cargo install --path crates/inset-cli   # put `inset` on PATH, for the editor
 cargo xtask e2e hello          # build Hello HTTP, serve it and request a greeting

@@ -405,11 +405,11 @@ fn examples_row_that_breaks_a_step() {
         "examples_row_that_breaks_a_step",
         r#"requirement "Visitors are greeted by the name in the web address"
     when HelloHttp receives GET /hello/Ada
-    then HelloHttp replies OK with <greeting> please
+    then HelloHttp replies OK with <greeting>
     examples
     | greeting      |
     | "Hello, Ada!" |
-    | Hello         |
+    | "Hello        |
 "#,
     );
 }

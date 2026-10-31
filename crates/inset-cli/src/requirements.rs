@@ -16,7 +16,7 @@
 use std::path::Path;
 
 use inset_check::status::STATUSES;
-use inset_check::{Plan, Planned, PlannedFact, PlannedStep, Program};
+use inset_check::{Plan, Planned, PlannedBody, PlannedFact, PlannedStep, Program};
 use inset_host::{Mode, Options, Request, Response, Running};
 use inset_syntax::Span;
 use inset_value::{Check, CheckError, Op, Shape, Types, Value, json, key};
@@ -178,10 +178,21 @@ fn run_steps(plan: &Plan, steps: &[PlannedStep], running: &mut Running<'_>) -> O
                 path,
                 body,
             } => {
+                let body = match body {
+                    PlannedBody::Text(text) => text.clone().into_bytes(),
+                    PlannedBody::Json { value, shape } => {
+                        match inset_value::serde::encode(value, shape, &plan.types) {
+                            Ok(json) => json.to_string().into_bytes(),
+                            Err(e) => {
+                                return fail(format!("but the body cannot be sent as JSON: {e}"));
+                            }
+                        }
+                    }
+                };
                 let request = Request {
                     method: method.clone(),
                     path: path.clone(),
-                    body: body.clone(),
+                    body,
                 };
                 reports_before = running.reports().len();
                 match running.request(server, &request) {
@@ -196,12 +207,32 @@ fn run_steps(plan: &Plan, steps: &[PlannedStep], running: &mut Running<'_>) -> O
             }
             Planned::Reply { status, body } => {
                 let response = last.as_ref().expect("the checker puts a request first");
-                if response.status != *status || response.body != body.as_bytes() {
-                    let mut message = format!("but the reply was {}", describe(response));
-                    for report in &running.reports()[reports_before..] {
-                        message.push_str(&format!("\nafter {report}"));
+                let mut failed = match body {
+                    _ if response.status != *status => Some(Failed::new(
+                        step.span,
+                        format!("but the reply was {}", describe(response)),
+                    )),
+                    PlannedBody::Text(text) if response.body != text.as_bytes() => {
+                        Some(Failed::new(
+                            step.span,
+                            format!("but the reply was {}", describe(response)),
+                        ))
                     }
-                    return fail(message);
+                    PlannedBody::Text(_) => None,
+                    PlannedBody::Json { value, shape } => {
+                        json_reply(response, value, shape, &plan.types).map(|mut failed| {
+                            failed.span = step.span;
+                            failed
+                        })
+                    }
+                };
+                if let Some(failed) = &mut failed {
+                    for report in &running.reports()[reports_before..] {
+                        failed.message.push_str(&format!("\nafter {report}"));
+                    }
+                }
+                if failed.is_some() {
+                    return failed;
                 }
             }
             Planned::Given(fact) => {
@@ -224,6 +255,45 @@ fn run_steps(plan: &Plan, steps: &[PlannedStep], running: &mut Running<'_>) -> O
         }
     }
     None
+}
+
+/// Compares a JSON reply with the value a step expects, as the type's
+/// `PartialEq` would, once the reply is read back as the route's type.
+fn json_reply(
+    response: &Response,
+    expected: &Value,
+    shape: &Shape,
+    types: &Types,
+) -> Option<Failed> {
+    let failed = |message: String| Some(Failed::new(Span::new(0, 0), message));
+    let json: serde_json::Value = match serde_json::from_slice(&response.body) {
+        Ok(json) => json,
+        Err(e) => {
+            return failed(format!(
+                "but the reply was {}, which is not JSON: {e}",
+                describe(response)
+            ));
+        }
+    };
+    let actual = match inset_value::serde::decode(&json, shape, types) {
+        Ok(actual) => actual,
+        Err(e) => {
+            return failed(format!(
+                "but the reply was {}, which does not fit its type: {e}",
+                describe(response)
+            ));
+        }
+    };
+    if actual == *expected {
+        return None;
+    }
+    Some(Failed {
+        span: Span::new(0, 0),
+        message: format!(
+            "but the reply is another value\n  expected: {expected}\n  actual:   {actual}"
+        ),
+        values: Some((expected.to_string(), actual.to_string())),
+    })
 }
 
 /// Sets up a fake table, as a `given` fact says.

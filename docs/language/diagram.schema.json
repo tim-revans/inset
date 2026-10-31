@@ -65,7 +65,7 @@
           ]
         },
         "front_end": {
-          "description": "The browser front end, drawn as one opaque box. Draft: no example has one yet.",
+          "description": "The browser front end, drawn as one opaque box with an arrow to each\nroute it calls.",
           "anyOf": [
             {
               "$ref": "#/$defs/FrontEnd"
@@ -678,24 +678,35 @@
       ]
     },
     "FrontEnd": {
-      "description": "The browser front end. Draft.",
+      "description": "The browser front end: the app's `front end` statement, and the files\nin `web/`, which the diagram does not look into.",
       "type": "object",
       "properties": {
         "calls": {
-          "description": "The routes the front end calls, by handler ID.",
+          "description": "The routes the front end calls, by handler ID, in the order the\n`front end` statement lists them.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
+        "doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "id": {
           "description": "`<app>/front_end`.",
+          "type": "string"
+        },
+        "via": {
+          "description": "The `HttpServer` grant that serves it, by ID.",
           "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
-        "id"
+        "id",
+        "via"
       ]
     },
     "Function": {

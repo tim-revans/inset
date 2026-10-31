@@ -83,6 +83,12 @@ pub fn generate(program: &Program) -> Result<Generated, Vec<Report>> {
         .expect("a checked program has an app");
 
     let mut emitter = Emitter::new(&resolved);
+    emitter.web = program
+        .web
+        .iter()
+        .flatten()
+        .map(|asset| asset.path.clone())
+        .collect();
     let items = emitter.module(modules, 0);
     if !emitter.diagnostics.is_empty() {
         return Err(emitter
@@ -151,6 +157,8 @@ struct Emitter<'a> {
     refs: &'a HashMap<Span, Span>,
     /// Every component, by the span of its name.
     components: HashMap<Span, &'a Component>,
+    /// The paths of the front end's files, from `web/`.
+    web: Vec<String>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -169,6 +177,7 @@ impl<'a> Emitter<'a> {
         Emitter {
             refs: &resolved.refs,
             components,
+            web: Vec::new(),
             diagnostics: Vec::new(),
         }
     }

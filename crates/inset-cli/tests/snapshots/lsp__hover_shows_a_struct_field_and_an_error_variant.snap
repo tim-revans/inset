@@ -7,7 +7,7 @@ on_hand: u32
 
 How many the warehouse holds.
 
-A field of `Item`.
+A field of `Item`. Written `onHand` in JSON.
 
 ----
 
@@ -17,7 +17,7 @@ on_hand: u32
 
 How many the warehouse holds.
 
-A field of `Item`.
+A field of `Item`. Written `onHand` in JSON.
 
 ----
 
@@ -27,7 +27,7 @@ struct Item
 
 A stocked item, stored under its SKU.
 
-Derives `Clone`, `Debug` and `PartialEq`.
+Derives `Clone`, `Debug`, `PartialEq`, `Serialize` and `Deserialize`.
 
 ----
 

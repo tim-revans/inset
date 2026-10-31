@@ -103,6 +103,7 @@ Module {
                             span: 181..215,
                         },
                     ],
+                    front_ends: [],
                 },
             ),
             span: 0..217,

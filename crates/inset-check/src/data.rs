@@ -1,5 +1,11 @@
-//! Structs and enums: their fields and variants, `#[derive]`, and the
-//! `#[status]` of an error enum's variants.
+//! Structs and enums: their fields and variants, `#[derive]`, `#[serde]`,
+//! and the `#[status]` of an error enum's variants.
+//!
+//! Of serde's attributes, Inset takes the two that name things in JSON:
+//! `rename_all` on the type, and `rename` on a field or variant. They
+//! change only the JSON form, which the API contract and requirement tests
+//! state, so the checker works out each field's and variant's JSON name
+//! here, by serde's own rules (`inset_value::rename`).
 //!
 //! Rust's own errors in the generated code are compiler bugs, so a derive
 //! that rustc would refuse, such as `Copy` on a struct holding a `String`,
@@ -11,6 +17,7 @@ use inset_syntax::{Diagnostic, Ident, Span};
 use crate::names::{DataAst, Vis};
 use crate::types::{Resolver, Ty, derives};
 use crate::{Checker, names, status};
+use inset_value::rename;
 
 /// The traits `#[derive]` may list (syntax.md, "Types").
 pub(crate) const DERIVES: [&str; 11] = [
@@ -45,6 +52,8 @@ pub(crate) struct Data {
     pub is_enum: bool,
     /// The traits it derives.
     pub derives: Vec<String>,
+    /// The name of each field, or of each variant, in its JSON form.
+    pub json: Vec<String>,
 }
 
 pub(crate) struct DataField {
@@ -93,20 +102,48 @@ impl Checker<'_> {
                 module: decl.module,
             };
             let mut errors = Vec::new();
+            let mut rename_all = None;
+            let mut serde_spans = Vec::new();
             for attr in &decl.item.attrs {
-                if !matches!(attr.kind, AttributeKind::Derive(_)) {
-                    errors.push(Diagnostic::new(
-                        "a struct or enum takes no attribute but `#[derive]`",
+                match &attr.kind {
+                    AttributeKind::Derive(_) => {}
+                    AttributeKind::Serde(args) => {
+                        serde_spans.push(attr.span);
+                        for arg in args {
+                            match (arg.name.name.as_str(), &arg.value) {
+                                ("rename_all", Some(rule)) if rename::is_rule(&rule.value) => {
+                                    rename_all = Some(rule.value.clone());
+                                }
+                                ("rename_all", Some(rule)) => errors.push(
+                                    Diagnostic::new(
+                                        format!("serde has no rule `{}`", rule.value),
+                                        rule.span,
+                                        "not a `rename_all` rule",
+                                    )
+                                    .with_help(format!(
+                                        "the rules are {}",
+                                        names(rename::RULES.iter().copied())
+                                    )),
+                                ),
+                                _ => errors.push(unsupported_serde(arg, "rename_all = \"...\"")),
+                            }
+                        }
+                    }
+                    _ => errors.push(Diagnostic::new(
+                        "a struct or enum takes no attribute but `#[derive]` and `#[serde]`",
                         attr.span,
                         "remove this attribute",
-                    ));
+                    )),
                 }
             }
             let derived = derives(decl.item);
             let data = match decl.ast {
                 DataAst::Struct(s) => {
                     let mut fields: Vec<DataField> = Vec::new();
+                    let mut json = Vec::new();
                     for field in &s.fields {
+                        let rename =
+                            renamed(&field.attrs, "a field", &mut serde_spans, &mut errors);
                         if fields.iter().any(|f| f.name.name == field.name.name) {
                             errors.push(Diagnostic::new(
                                 format!("the field `{}` is declared twice", field.name.name),
@@ -126,6 +163,10 @@ impl Checker<'_> {
                             ),
                             Visibility::Private => Vis::In(decl.module),
                         };
+                        json.push(rename.unwrap_or_else(|| match &rename_all {
+                            Some(rule) => rename::field(rule, &field.name.name),
+                            None => field.name.name.clone(),
+                        }));
                         fields.push(DataField {
                             name: field.name.clone(),
                             ty,
@@ -139,10 +180,12 @@ impl Checker<'_> {
                         variants: Vec::new(),
                         is_enum: false,
                         derives: derived.iter().map(|d| d.name.clone()).collect(),
+                        json,
                     }
                 }
                 DataAst::Enum(e) => {
                     let mut variants: Vec<DataVariant> = Vec::new();
+                    let mut json = Vec::new();
                     for variant in &e.variants {
                         if variants.iter().any(|v| v.name.name == variant.name.name) {
                             errors.push(Diagnostic::new(
@@ -163,13 +206,20 @@ impl Checker<'_> {
                                     attr.span,
                                     "this is a second status",
                                 )),
+                                AttributeKind::Serde(_) => {}
                                 _ => errors.push(Diagnostic::new(
-                                    "a variant takes no attribute but `#[status]`",
+                                    "a variant takes no attribute but `#[status]` and `#[serde]`",
                                     attr.span,
                                     "remove this attribute",
                                 )),
                             }
                         }
+                        let rename =
+                            renamed(&variant.attrs, "a variant", &mut serde_spans, &mut errors);
+                        json.push(rename.unwrap_or_else(|| match &rename_all {
+                            Some(rule) => rename::variant(rule, &variant.name.name),
+                            None => variant.name.name.clone(),
+                        }));
                         let fields = variant
                             .fields
                             .iter()
@@ -187,10 +237,22 @@ impl Checker<'_> {
                         variants,
                         is_enum: true,
                         derives: derived.iter().map(|d| d.name.clone()).collect(),
+                        json,
                     }
                 }
             };
+            if data.name.name == "Json" {
+                errors.push(
+                    Diagnostic::new(
+                        "a data type cannot be called `Json`",
+                        data.name.span,
+                        "`Json<T>` is the type of a JSON body or reply",
+                    )
+                    .with_help("give the type another name"),
+                );
+            }
             self.check_derives(index, &data, &derived, &mut errors);
+            check_serde(&data, &serde_spans, &mut errors);
             if data.is_enum
                 && let DataAst::Enum(e) = decl.ast
             {
@@ -321,7 +383,19 @@ impl Checker<'_> {
                 let decl = &self.names.datas[*id];
                 Some(derives(decl.item).iter().any(|d| d.name == trait_name))
             }
-            _ if trait_name == "Serialize" || trait_name == "Deserialize" => None,
+            _ if trait_name == "Serialize" || trait_name == "Deserialize" => match ty {
+                // Types that share state are serde's only with its `rc` feature.
+                Ty::Std(name, _) if crate::types::SHARED.contains(name) || *name == "Json" => {
+                    Some(false)
+                }
+                Ty::Tuple(elems) | Ty::Std(_, elems) => all(elems),
+                Ty::Ref { inner, .. } if trait_name == "Serialize" => {
+                    self.implements(inner, trait_name, this)
+                }
+                Ty::Ref { .. } | Ty::Str | Ty::Slice(_) => None,
+                Ty::HttpServer | Ty::Table(..) | Ty::Handle(..) | Ty::Outlet(_) => Some(false),
+                _ => Some(true),
+            },
             Ty::HttpServer | Ty::Table(..) | Ty::Handle(..) | Ty::Outlet(_) => Some(false),
             Ty::Ref { mutable, inner } => match trait_name {
                 "Copy" | "Clone" => Some(!mutable),
@@ -344,6 +418,81 @@ impl Checker<'_> {
             Ty::String | Ty::Str if trait_name == "Copy" => Some(false),
             Ty::Str if trait_name == "Clone" || trait_name == "Default" => Some(false),
             _ => Some(true),
+        }
+    }
+}
+
+/// The `rename` in a field's or variant's `#[serde]` attributes, if any.
+/// Records where each `#[serde]` is, and reports any other argument.
+fn renamed(
+    attrs: &[inset_syntax::ast::Attribute],
+    what: &str,
+    serde_spans: &mut Vec<Span>,
+    errors: &mut Vec<Diagnostic>,
+) -> Option<String> {
+    let mut rename = None;
+    for attr in attrs {
+        match &attr.kind {
+            AttributeKind::Serde(args) => {
+                serde_spans.push(attr.span);
+                for arg in args {
+                    match (arg.name.name.as_str(), &arg.value) {
+                        ("rename", Some(name)) => rename = Some(name.value.clone()),
+                        _ => errors.push(unsupported_serde(arg, "rename = \"...\"")),
+                    }
+                }
+            }
+            AttributeKind::Status(_) if what == "a variant" => {}
+            _ => errors.push(Diagnostic::new(
+                format!("{what} takes no attribute but `#[serde]`"),
+                attr.span,
+                "remove this attribute",
+            )),
+        }
+    }
+    rename
+}
+
+fn unsupported_serde(arg: &inset_syntax::ast::SerdeArg, here: &str) -> Diagnostic {
+    Diagnostic::new(
+        format!("`#[serde({})]` is not supported here", arg.name.name),
+        arg.span,
+        "Inset takes serde's `rename_all` on a struct or enum, and `rename` on a field or variant",
+    )
+    .with_help(format!("write `{here}`, or remove this"))
+}
+
+/// `#[serde]` is serde's, so it needs a serde derive beside it, as rustc
+/// would say. Two fields or variants cannot share a name in JSON.
+fn check_serde(data: &Data, serde_spans: &[Span], errors: &mut Vec<Diagnostic>) {
+    if let Some(span) = serde_spans.first()
+        && !data.derives("Serialize")
+        && !data.derives("Deserialize")
+    {
+        errors.push(
+            Diagnostic::new(
+                "`#[serde]` needs a serde derive",
+                *span,
+                format!("`{}` derives neither `Serialize` nor `Deserialize`", data.name.name),
+            )
+            .with_help("derive `Serialize` for a type replied as JSON, and `Deserialize` for one read from JSON"),
+        );
+    }
+    let members: Vec<&Ident> = if data.is_enum {
+        data.variants.iter().map(|v| &v.name).collect()
+    } else {
+        data.fields.iter().map(|f| &f.name).collect()
+    };
+    for (i, name) in data.json.iter().enumerate() {
+        if let Some(first) = data.json[..i].iter().position(|n| n == name) {
+            errors.push(Diagnostic::new(
+                format!(
+                    "`{}` and `{}` are both `{name}` in JSON",
+                    members[first].name, members[i].name
+                ),
+                members[i].span,
+                "two names cannot be told apart in JSON",
+            ));
         }
     }
 }

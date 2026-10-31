@@ -222,6 +222,7 @@ mod tests {
         let types = Types(vec![crate::DataShape {
             name: "Product".into(),
             kind: crate::DataKind::Struct(vec![("gross".into(), Shape::Decimal)]),
+            json: vec!["gross".into()],
         }]);
         let entry = Check::Entry {
             grant: "products".into(),

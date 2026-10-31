@@ -59,3 +59,39 @@ requirement "A database failure fails the request and changes nothing"
     when StockTracker receives POST /items/bolt-m6/receipts with "20"
     then StockTracker replies InternalServerError
     and items["bolt-m6"] is Item { on_hand: 3, reorder_level: 10, target_level: 50 }
+
+requirement "An item is stocked with the levels it is given"
+    given items is empty
+    when StockTracker receives PUT /items/bolt-m6 with Item { on_hand: 40, reorder_level: 10, target_level: 50 }
+    then StockTracker replies OK with "40"
+    and items["bolt-m6"] is Item { on_hand: 40, reorder_level: 10, target_level: 50 }
+
+requirement "Levels that are not a whole item in JSON are refused"
+    given items is empty
+    when StockTracker receives PUT /items/bolt-m6 with "forty"
+    then StockTracker replies BadRequest
+    when StockTracker receives PUT /items/bolt-m6 with
+        """
+        {"onHand": 40, "reorderLevel": 10}
+        """
+    then StockTracker replies BadRequest
+    and items is empty
+
+requirement "Stock levels are listed in SKU order"
+    given items["nut-m6"] is Item { on_hand: 5, reorder_level: 10, target_level: 50 }
+    and items["bolt-m6"] is Item { on_hand: 40, reorder_level: 10, target_level: 50 }
+    when StockTracker receives GET /items
+    then StockTracker replies OK with vec![
+            StockLevel { sku: "bolt-m6", on_hand: 40, reorder_level: 10, low: false },
+            StockLevel { sku: "nut-m6", on_hand: 5, reorder_level: 10, low: true },
+        ]
+
+requirement "Only items at or below their reorder level are listed as low stock"
+    given items["nut-m6"] is Item { on_hand: 10, reorder_level: 10, target_level: 50 }
+    and items["bolt-m6"] is Item { on_hand: 40, reorder_level: 10, target_level: 50 }
+    when StockTracker receives GET /items?low=true
+    then StockTracker replies OK with vec![
+            StockLevel { sku: "nut-m6", on_hand: 10, reorder_level: 10, low: true },
+        ]
+    when StockTracker receives GET /items?low=maybe
+    then StockTracker replies BadRequest

@@ -1,0 +1,12 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:15:29-15:36
+`#[serde(default)]` is not supported here
+Inset takes serde's `rename_all` on a struct or enum, and `rename` on a field or variant
+help: write `rename = "..."`, or remove this
+
+src/main.inset:21:22-21:29
+serde has no rule `snake`
+not a `rename_all` rule
+help: the rules are `lowercase`, `UPPERCASE`, `PascalCase`, `camelCase`, `snake_case`, `SCREAMING_SNAKE_CASE`, `kebab-case` and `SCREAMING-KEBAB-CASE`

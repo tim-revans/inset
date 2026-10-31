@@ -12,7 +12,7 @@ use quote::quote;
 use crate::Emitter;
 
 /// The types Inset's standard library adds, which the runtime provides.
-const RUNTIME_TYPES: [&str; 5] = ["HttpServer", "Table", "Handle", "Outlet", "Decimal"];
+const RUNTIME_TYPES: [&str; 6] = ["HttpServer", "Table", "Handle", "Outlet", "Decimal", "Json"];
 
 /// Words Rust reserves that Inset does not, which are written as raw identifiers.
 const RESERVED: [&str; 14] = [
@@ -73,6 +73,18 @@ pub(crate) fn ty(t: &Type) -> TokenStream {
     }
 }
 
+/// A path in an expression or a pattern. `Json`, the JSON body type, and
+/// `Decimal`'s associated items are the runtime's.
+fn value_path(p: &Path) -> TokenStream {
+    let written = path(p, true);
+    let first = p.segments[0].ident.name.as_str();
+    if (p.segments.len() > 1 && first == "Decimal") || (p.segments.len() == 1 && first == "Json") {
+        quote!(::inset_runtime::#written)
+    } else {
+        written
+    }
+}
+
 /// A path in a type, or, with `expr`, in an expression, where generic
 /// arguments take `::<`.
 fn path(p: &Path, expr: bool) -> TokenStream {
@@ -118,7 +130,7 @@ pub(crate) fn pattern(p: &Pattern) -> TokenStream {
             tuple(&elems)
         }
         PatternKind::TupleStruct { path: p, elems } => {
-            let p = path(p, true);
+            let p = value_path(p);
             let elems = elems.iter().map(pattern);
             quote!(#p(#(#elems),*))
         }
@@ -223,14 +235,7 @@ impl Emitter<'_> {
     pub(crate) fn expr(&mut self, e: &Expr) -> TokenStream {
         match &e.kind {
             ExprKind::Lit(l) => lit(l),
-            ExprKind::Path(p) => {
-                let path = path(p, true);
-                if p.segments.len() > 1 && p.segments[0].ident.name == "Decimal" {
-                    quote!(::inset_runtime::#path)
-                } else {
-                    path
-                }
-            }
+            ExprKind::Path(p) => value_path(p),
             ExprKind::Macro { name, args } => {
                 if matches!(name.segments.as_slice(), [only] if only.ident.name == "dec") {
                     return decimal(args);

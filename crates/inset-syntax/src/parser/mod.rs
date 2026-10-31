@@ -17,7 +17,7 @@ use crate::{Diagnostic, Span};
 /// An error was reported as a diagnostic.
 pub(crate) struct Reported;
 
-type PResult<T> = Result<T, Reported>;
+pub(crate) type PResult<T> = Result<T, Reported>;
 
 /// How deeply expressions, types, patterns and blocks may nest. Deeper input
 /// is reported rather than risking the stack.

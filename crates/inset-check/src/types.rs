@@ -56,7 +56,7 @@ pub(crate) const INTS: [&str; 12] = [
 pub(crate) const FLOATS: [&str; 2] = ["f32", "f64"];
 
 /// Generic standard types, with how many type arguments each takes.
-const STD_GENERICS: [(&str, usize); 15] = [
+const STD_GENERICS: [(&str, usize); 16] = [
     ("Option", 1),
     ("Result", 2),
     ("Vec", 1),
@@ -72,11 +72,13 @@ const STD_GENERICS: [(&str, usize); 15] = [
     ("RefCell", 1),
     ("Mutex", 1),
     ("RwLock", 1),
+    // axum's and actix-web's `Json<T>`, for a JSON body or reply.
+    ("Json", 1),
 ];
 
 /// Types that share state between their owners, which may not cross a
 /// component boundary (syntax.md, "Rust features Inset leaves out").
-const SHARED: [&str; 6] = ["Rc", "Arc", "Cell", "RefCell", "Mutex", "RwLock"];
+pub(crate) const SHARED: [&str; 6] = ["Rc", "Arc", "Cell", "RefCell", "Mutex", "RwLock"];
 
 impl Ty {
     pub(crate) fn unit() -> Ty {
@@ -427,14 +429,6 @@ impl Resolver<'_, '_> {
                 }
             }
             "Table" | "Outlet" | "Handle" => Ty::Unknown,
-            "Json" => {
-                diagnostics.push(Diagnostic::new(
-                    "`Json<T>` is not supported yet",
-                    path.span,
-                    "the checker does not handle this yet",
-                ));
-                Ty::Unknown
-            }
             _ => {
                 diagnostics.push(unknown_type(path));
                 Ty::Unknown

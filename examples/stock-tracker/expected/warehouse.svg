@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" class="inset-diagram" width="1653.2" height="870" viewBox="0 0 1653.2 870">
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" class="inset-diagram" width="1709.2" height="934" viewBox="0 0 1709.2 934">
 <style>
 .inset-diagram text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; fill: #e7ecf0; white-space: pre; }
 .inset-diagram .title { font-weight: bold; }
@@ -51,8 +51,8 @@
 <marker id="arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow"/></marker>
 <marker id="arrow-cap" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow-cap"/></marker>
 </defs>
-<rect x="0" y="0" width="1653.2" height="870" class="ground"/>
-<rect x="263.6" y="16" width="1082.8" height="838" rx="8" class="app" data-id="StockTracker"/>
+<rect x="0" y="0" width="1709.2" height="934" class="ground"/>
+<rect x="263.6" y="16" width="1138.8" height="902" rx="8" class="app" data-id="StockTracker"/>
 <g data-id="StockTracker">
 <text x="273.6" y="34" class="kw">app </text>
 <text x="302.4" y="34" class="title">StockTracker</text>
@@ -78,151 +78,187 @@
 <text x="352.8" y="114" class="dim opt-grant-types">: Table&lt;String, Item&gt;</text>
 <text x="504" y="114" class=" opt-grant-values"> { file: &quot;stock.db&quot;, name: &quot;items&quot; }</text>
 </g>
-<rect x="293.6" y="127" width="1036.8" height="708" rx="4" class="comp" data-id="StockTracker/Warehouse"/>
+<rect x="293.6" y="127" width="1092.8" height="772" rx="4" class="comp" data-id="StockTracker/Warehouse"/>
 <g data-id="StockTracker/Warehouse">
-<text x="357.6" y="145" class="title">Warehouse</text>
+<text x="377.6" y="145" class="title">Warehouse</text>
 </g>
-<text x="357.6" y="161" class="doc opt-docs">Answers HTTP requests from warehouse staff about stock and</text>
-<text x="357.6" y="177" class="doc opt-docs">reorders.</text>
-<text x="357.6" y="193" class="dim opt-handoffs">start { http: move http, items: move items }</text>
-<text x="357.6" y="209" class="sec">fields</text>
+<text x="377.6" y="161" class="doc opt-docs">Answers HTTP requests from warehouse staff about stock and</text>
+<text x="377.6" y="177" class="doc opt-docs">reorders.</text>
+<text x="377.6" y="193" class="dim opt-handoffs">start { http: move http, items: move items }</text>
+<text x="377.6" y="209" class="sec">fields</text>
 <g data-id="StockTracker/Warehouse/field:items">
-<text x="357.6" y="225" class="">items</text>
-<text x="393.6" y="225" class="dim opt-field-types">: Table&lt;String, Item&gt;</text>
-<text x="544.8" y="225" class="dim">, handed down</text>
+<text x="377.6" y="225" class="">items</text>
+<text x="413.6" y="225" class="dim opt-field-types">: Table&lt;String, Item&gt;</text>
+<text x="564.8" y="225" class="dim">, handed down</text>
 </g>
-<text x="357.6" y="241" class="sec">routes</text>
+<text x="377.6" y="241" class="sec">routes</text>
 <g data-id="StockTracker/Warehouse/fn:stock">
 <title class="opt-docs">Replies with the quantity on hand.</title>
-<text x="357.6" y="257" class="kw">GET </text>
-<text x="386.4" y="257" class="">/items/{sku}  </text>
-<text x="487.2" y="257" class="">stock</text>
-<text x="523.2" y="257" class="dim opt-signatures">(&amp;self, sku: String) -&gt; Option&lt;String&gt;</text>
+<text x="377.6" y="257" class="kw">GET </text>
+<text x="406.4" y="257" class="">/items/{sku}  </text>
+<text x="507.2" y="257" class="">stock</text>
+<text x="543.2" y="257" class="dim opt-signatures">(&amp;self, sku: String) -&gt; Option&lt;String&gt;</text>
+</g>
+<g data-id="StockTracker/Warehouse/fn:stock_levels">
+<title class="opt-docs">Lists every item's stock in SKU order, or with `low=true`, only the&#10;items at or below their reorder level.</title>
+<text x="377.6" y="273" class="kw">GET </text>
+<text x="406.4" y="273" class="">/items?{low}  </text>
+<text x="507.2" y="273" class="">stock_levels</text>
+<text x="593.6" y="273" class="dim opt-signatures">(&amp;self, low: Option&lt;bool&gt;) -&gt; Json&lt;Vec&lt;StockLevel&gt;&gt;</text>
+</g>
+<g data-id="StockTracker/Warehouse/fn:stock_item">
+<title class="opt-docs">Stocks an item with the levels given, replacing any it had, and&#10;replies with the quantity on hand.</title>
+<text x="377.6" y="289" class="kw">PUT </text>
+<text x="406.4" y="289" class="">/items/{sku}  </text>
+<text x="507.2" y="289" class="dim">body item  </text>
+<text x="586.4" y="289" class="">stock_item</text>
+<text x="658.4" y="289" class="dim opt-signatures">(&amp;self, sku: String, item: Json&lt;Item&gt;) -&gt; String</text>
 </g>
 <g data-id="StockTracker/Warehouse/fn:receive">
 <title class="opt-docs">Adds stock that has arrived, and replies with the new quantity on hand.</title>
-<text x="357.6" y="273" class="kw">POST </text>
-<text x="393.6" y="273" class="">/items/{sku}/receipts  </text>
-<text x="559.2" y="273" class="dim">body quantity  </text>
-<text x="667.2" y="273" class="">receive</text>
-<text x="717.6" y="273" class="dim opt-signatures">(&amp;self, sku: String, quantity: u32) -&gt; Option&lt;String&gt;</text>
+<text x="377.6" y="305" class="kw">POST </text>
+<text x="413.6" y="305" class="">/items/{sku}/receipts  </text>
+<text x="579.2" y="305" class="dim">body quantity  </text>
+<text x="687.2" y="305" class="">receive</text>
+<text x="737.6" y="305" class="dim opt-signatures">(&amp;self, sku: String, quantity: u32) -&gt; Option&lt;String&gt;</text>
 </g>
 <g data-id="StockTracker/Warehouse/fn:ship">
 <title class="opt-docs">Takes away stock that has been shipped, and replies with the new quantity on hand.</title>
-<text x="357.6" y="289" class="kw">POST </text>
-<text x="393.6" y="289" class="">/items/{sku}/shipments  </text>
-<text x="566.4" y="289" class="dim">body quantity  </text>
-<text x="674.4" y="289" class="">ship</text>
-<text x="703.2" y="289" class="dim opt-signatures">(&amp;self, sku: String, quantity: u32) -&gt; Result&lt;String, ShipError&gt;</text>
+<text x="377.6" y="321" class="kw">POST </text>
+<text x="413.6" y="321" class="">/items/{sku}/shipments  </text>
+<text x="586.4" y="321" class="dim">body quantity  </text>
+<text x="694.4" y="321" class="">ship</text>
+<text x="723.2" y="321" class="dim opt-signatures">(&amp;self, sku: String, quantity: u32) -&gt; Result&lt;String, ShipError&gt;</text>
 </g>
 <g data-id="StockTracker/Warehouse/fn:pending_reorders">
 <title class="opt-docs">Lists the reorders waiting to be placed, one per line: the SKU, then the quantity.</title>
-<text x="357.6" y="305" class="kw">GET </text>
-<text x="386.4" y="305" class="">/reorders  </text>
-<text x="465.6" y="305" class="">pending_reorders</text>
-<text x="580.8" y="305" class="dim opt-signatures">(&amp;self) -&gt; String</text>
+<text x="377.6" y="337" class="kw">GET </text>
+<text x="406.4" y="337" class="">/reorders  </text>
+<text x="485.6" y="337" class="">pending_reorders</text>
+<text x="600.8" y="337" class="dim opt-signatures">(&amp;self) -&gt; String</text>
 </g>
-<text x="357.6" y="321" class="sec opt-failures">failure</text>
+<text x="377.6" y="353" class="sec opt-failures">failure</text>
 <g data-id="StockTracker/Warehouse/failure:message:inventory">
-<text x="357.6" y="337" class="warn opt-failures">Message(inventory) =&gt; rollback</text>
+<text x="377.6" y="369" class="warn opt-failures">Message(inventory) =&gt; rollback</text>
 </g>
-<text x="357.6" y="353" class="doc opt-failures opt-failure-reasons">  Inventory rolls back a request whose database call fails, so</text>
-<text x="357.6" y="369" class="doc opt-failures opt-failure-reasons">  this request fails too.</text>
-<rect x="547.2" y="382" width="767.2" height="144" rx="4" class="comp" data-id="StockTracker/Warehouse/reorders"/>
+<text x="377.6" y="385" class="doc opt-failures opt-failure-reasons">  Inventory rolls back a request whose database call fails, so</text>
+<text x="377.6" y="401" class="doc opt-failures opt-failure-reasons">  this request fails too.</text>
+<rect x="603.2" y="414" width="767.2" height="144" rx="4" class="comp" data-id="StockTracker/Warehouse/reorders"/>
 <g data-id="StockTracker/Warehouse/reorders">
-<text x="557.2" y="400" class="title">reorders: </text>
-<text x="629.2" y="400" class="title">Reorders</text>
+<text x="613.2" y="432" class="title">reorders: </text>
+<text x="685.2" y="432" class="title">Reorders</text>
 </g>
-<text x="557.2" y="416" class="doc opt-docs">Keeps the reorders waiting to be placed, at most one per item.</text>
-<text x="557.2" y="432" class="dim opt-handoffs">start { orders: Vec::new() }</text>
-<text x="557.2" y="448" class="sec">fields</text>
+<text x="613.2" y="448" class="doc opt-docs">Keeps the reorders waiting to be placed, at most one per item.</text>
+<text x="613.2" y="464" class="dim opt-handoffs">start { orders: Vec::new() }</text>
+<text x="613.2" y="480" class="sec">fields</text>
 <g data-id="StockTracker/Warehouse/reorders/field:orders">
-<text x="557.2" y="464" class="">orders</text>
-<text x="600.4" y="464" class="dim opt-field-types">: Vec&lt;Reorder&gt;</text>
+<text x="613.2" y="496" class="">orders</text>
+<text x="656.4" y="496" class="dim opt-field-types">: Vec&lt;Reorder&gt;</text>
 </g>
-<text x="557.2" y="480" class="sec">messages</text>
+<text x="613.2" y="512" class="sec">messages</text>
 <g data-id="StockTracker/Warehouse/reorders/fn:raise">
 <title class="opt-docs">Records a reorder, replacing any earlier one for the same item.</title>
-<text x="557.2" y="496" class="">raise</text>
-<text x="593.2" y="496" class="dim opt-signatures">(&amp;mut self, order: Reorder)</text>
+<text x="613.2" y="528" class="">raise</text>
+<text x="649.2" y="528" class="dim opt-signatures">(&amp;mut self, order: Reorder)</text>
 </g>
 <g data-id="StockTracker/Warehouse/reorders/fn:pending">
 <title class="opt-docs">Every reorder waiting to be placed, oldest first.</title>
-<text x="557.2" y="512" class="">pending</text>
-<text x="607.6" y="512" class="dim opt-signatures">(&amp;self) -&gt; Vec&lt;Reorder&gt;</text>
+<text x="613.2" y="544" class="">pending</text>
+<text x="663.6" y="544" class="dim opt-signatures">(&amp;self) -&gt; Vec&lt;Reorder&gt;</text>
 </g>
-<rect x="547.2" y="544" width="767.2" height="272" rx="4" class="comp" data-id="StockTracker/Warehouse/inventory"/>
+<rect x="603.2" y="576" width="767.2" height="304" rx="4" class="comp" data-id="StockTracker/Warehouse/inventory"/>
 <g data-id="StockTracker/Warehouse/inventory">
-<text x="571.2" y="562" class="title">inventory: </text>
-<text x="650.4" y="562" class="title">Inventory</text>
+<text x="627.2" y="594" class="title">inventory: </text>
+<text x="706.4" y="594" class="title">Inventory</text>
 </g>
-<text x="571.2" y="578" class="doc opt-docs">Keeps the stock record of every item, and raises a reorder when</text>
-<text x="571.2" y="594" class="doc opt-docs">stock runs low.</text>
-<text x="571.2" y="610" class="dim opt-handoffs">start { items: move items, low_stock: send reorders.raise }</text>
-<text x="571.2" y="626" class="sec">fields</text>
+<text x="627.2" y="610" class="doc opt-docs">Keeps the stock record of every item, and raises a reorder when</text>
+<text x="627.2" y="626" class="doc opt-docs">stock runs low.</text>
+<text x="627.2" y="642" class="dim opt-handoffs">start { items: move items, low_stock: send reorders.raise }</text>
+<text x="627.2" y="658" class="sec">fields</text>
 <g data-id="StockTracker/Warehouse/inventory/field:low_stock">
 <title class="opt-docs">A reorder for each item that shipping leaves at or below its reorder level.</title>
-<text x="571.2" y="642" class="">low_stock</text>
-<text x="636" y="642" class="dim opt-outlet-types">: Outlet&lt;Reorder&gt;</text>
-<text x="758.4" y="642" class="dim">  &lt;- </text>
-<text x="794.4" y="642" class="kw">send </text>
-<text x="830.4" y="642" class="">low_stock.emit</text>
-<text x="931.2" y="642" class="dim opt-message-params">(Reorder { sku: sku.to_string(), quantity: order })</text>
-<circle cx="547.2" cy="638" r="4" class="port"/>
+<text x="627.2" y="674" class="">low_stock</text>
+<text x="692" y="674" class="dim opt-outlet-types">: Outlet&lt;Reorder&gt;</text>
+<text x="814.4" y="674" class="dim">  &lt;- </text>
+<text x="850.4" y="674" class="kw">send </text>
+<text x="886.4" y="674" class="">low_stock.emit</text>
+<text x="987.2" y="674" class="dim opt-message-params">(Reorder { sku: sku.to_string(), quantity: order })</text>
+<circle cx="603.2" cy="670" r="4" class="port"/>
 </g>
-<text x="571.2" y="658" class="sec">messages</text>
+<text x="627.2" y="690" class="sec">messages</text>
 <g data-id="StockTracker/Warehouse/inventory/fn:item">
 <title class="opt-docs">The item with this SKU, if there is one.</title>
-<text x="571.2" y="674" class="">item</text>
-<text x="600" y="674" class="dim opt-signatures">(&amp;self, sku: &amp;str) -&gt; Option&lt;Item&gt;</text>
+<text x="627.2" y="706" class="">item</text>
+<text x="656" y="706" class="dim opt-signatures">(&amp;self, sku: &amp;str) -&gt; Option&lt;Item&gt;</text>
+</g>
+<g data-id="StockTracker/Warehouse/inventory/fn:levels">
+<title class="opt-docs">Every item's stock, in SKU order, or only that of the items at or&#10;below their reorder level.</title>
+<text x="627.2" y="722" class="">levels</text>
+<text x="670.4" y="722" class="dim opt-signatures">(&amp;self, low_only: bool) -&gt; Vec&lt;StockLevel&gt;</text>
+</g>
+<g data-id="StockTracker/Warehouse/inventory/fn:stock">
+<title class="opt-docs">Stores an item under its SKU, replacing any item stored there.</title>
+<text x="627.2" y="738" class="">stock</text>
+<text x="663.2" y="738" class="dim opt-signatures">(&amp;mut self, sku: &amp;str, item: Item)</text>
 </g>
 <g data-id="StockTracker/Warehouse/inventory/fn:receive">
 <title class="opt-docs">Adds to an item's stock, and returns the item as it now stands.</title>
-<text x="571.2" y="690" class="">receive</text>
-<text x="621.6" y="690" class="dim opt-signatures">(&amp;mut self, sku: &amp;str, quantity: u32) -&gt; Option&lt;Item&gt;</text>
+<text x="627.2" y="754" class="">receive</text>
+<text x="677.6" y="754" class="dim opt-signatures">(&amp;mut self, sku: &amp;str, quantity: u32) -&gt; Option&lt;Item&gt;</text>
 </g>
 <g data-id="StockTracker/Warehouse/inventory/fn:ship">
 <title class="opt-docs">Takes from an item's stock if it holds enough, and returns the item as it now stands.&#10;Raises a reorder if that leaves stock at or below its reorder level.</title>
-<text x="571.2" y="706" class="">ship</text>
-<text x="600" y="706" class="dim opt-signatures">(&amp;mut self, sku: &amp;str, quantity: u32) -&gt; Result&lt;Item, ShipError&gt;</text>
+<text x="627.2" y="770" class="">ship</text>
+<text x="656" y="770" class="dim opt-signatures">(&amp;mut self, sku: &amp;str, quantity: u32) -&gt; Result&lt;Item, ShipError&gt;</text>
 </g>
-<text x="571.2" y="722" class="sec">algorithms</text>
+<text x="627.2" y="786" class="sec">algorithms</text>
 <g data-id="StockTracker/Warehouse/inventory/fn:reorder_quantity">
 <title class="opt-docs">How many to reorder so that stock goes back up to its target level.</title>
-<text x="571.2" y="738" class="">reorder_quantity</text>
-<text x="686.4" y="738" class="dim opt-signatures">(on_hand: u32, reorder_level: u32, target_level: u32) -&gt; u32</text>
+<text x="627.2" y="802" class="">reorder_quantity</text>
+<text x="742.4" y="802" class="dim opt-signatures">(on_hand: u32, reorder_level: u32, target_level: u32) -&gt; u32</text>
 </g>
-<text x="571.2" y="754" class="sec opt-failures">failure</text>
+<text x="627.2" y="818" class="sec opt-failures">failure</text>
 <g data-id="StockTracker/Warehouse/inventory/failure:capability:items">
-<text x="571.2" y="770" class="warn opt-failures">Capability(items) =&gt; rollback</text>
+<text x="627.2" y="834" class="warn opt-failures">Capability(items) =&gt; rollback</text>
 </g>
-<text x="571.2" y="786" class="doc opt-failures opt-failure-reasons">  A database error affects only the request it happened in. The</text>
-<text x="571.2" y="802" class="doc opt-failures opt-failure-reasons">  next request may succeed, so the program keeps running.</text>
-<path d="M354.6,253 L308.6,253 L308.6,670 L547.2,670" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/fn:stock-&gt;StockTracker/Warehouse/inventory/fn:item"/>
-<text x="467.2" y="666" class="">item</text>
-<text x="496" y="666" class="dim opt-message-params">(&amp;sku)</text>
-<path d="M354.6,269 L318.6,269 L318.6,686 L547.2,686" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/fn:receive-&gt;StockTracker/Warehouse/inventory/fn:receive"/>
-<text x="373.6" y="682" class="">receive</text>
-<text x="424" y="682" class="dim opt-message-params">(&amp;sku, quantity)</text>
-<path d="M354.6,285 L328.6,285 L328.6,702 L547.2,702" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/fn:ship-&gt;StockTracker/Warehouse/inventory/fn:ship"/>
-<text x="395.2" y="698" class="">ship</text>
-<text x="424" y="698" class="dim opt-message-params">(&amp;sku, quantity)</text>
-<path d="M354.6,301 L338.6,301 L338.6,508 L547.2,508" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/fn:pending_reorders-&gt;StockTracker/Warehouse/reorders/fn:pending"/>
-<text x="474.4" y="504" class="">pending</text>
-<text x="524.8" y="504" class="dim opt-message-params">()</text>
-<path d="M568.2,702 L562.2,702 L562.2,638 L568.2,638" class="edge send" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/inventory/fn:ship-&gt;StockTracker/Warehouse/inventory/field:low_stock"/>
-<path d="M547.2,638 L348.6,638 L348.6,492 L547.2,492" class="edge send" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/inventory/field:low_stock-&gt;StockTracker/Warehouse/reorders/fn:raise"/>
-<text x="402.4" y="488" class="kw">send </text>
-<text x="438.4" y="488" class="">reorders.raise</text>
+<text x="627.2" y="850" class="doc opt-failures opt-failure-reasons">  A database error affects only the request it happened in. The</text>
+<text x="627.2" y="866" class="doc opt-failures opt-failure-reasons">  next request may succeed, so the program keeps running.</text>
+<path d="M374.6,253 L308.6,253 L308.6,702 L603.2,702" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/fn:stock-&gt;StockTracker/Warehouse/inventory/fn:item"/>
+<text x="523.2" y="698" class="">item</text>
+<text x="552" y="698" class="dim opt-message-params">(&amp;sku)</text>
+<path d="M374.6,269 L318.6,269 L318.6,718 L603.2,718" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/fn:stock_levels-&gt;StockTracker/Warehouse/inventory/fn:levels"/>
+<text x="393.6" y="714" class="">levels</text>
+<text x="436.8" y="714" class="dim opt-message-params">(low.unwrap_or(false))</text>
+<path d="M374.6,285 L328.6,285 L328.6,734 L603.2,734" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/fn:stock_item-&gt;StockTracker/Warehouse/inventory/fn:stock"/>
+<text x="436.8" y="730" class="">stock</text>
+<text x="472.8" y="730" class="dim opt-message-params">(&amp;sku, move item)</text>
+<path d="M374.6,301 L338.6,301 L338.6,750 L603.2,750" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/fn:receive-&gt;StockTracker/Warehouse/inventory/fn:receive"/>
+<text x="429.6" y="746" class="">receive</text>
+<text x="480" y="746" class="dim opt-message-params">(&amp;sku, quantity)</text>
+<path d="M374.6,317 L348.6,317 L348.6,766 L603.2,766" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/fn:ship-&gt;StockTracker/Warehouse/inventory/fn:ship"/>
+<text x="451.2" y="762" class="">ship</text>
+<text x="480" y="762" class="dim opt-message-params">(&amp;sku, quantity)</text>
+<path d="M374.6,333 L358.6,333 L358.6,540 L603.2,540" class="edge" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/fn:pending_reorders-&gt;StockTracker/Warehouse/reorders/fn:pending"/>
+<text x="530.4" y="536" class="">pending</text>
+<text x="580.8" y="536" class="dim opt-message-params">()</text>
+<path d="M624.2,766 L618.2,766 L618.2,670 L624.2,670" class="edge send" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/inventory/fn:ship-&gt;StockTracker/Warehouse/inventory/field:low_stock"/>
+<path d="M603.2,670 L368.6,670 L368.6,524 L603.2,524" class="edge send" marker-end="url(#arrow)" data-id="StockTracker/Warehouse/inventory/field:low_stock-&gt;StockTracker/Warehouse/reorders/fn:raise"/>
+<text x="458.4" y="520" class="kw">send </text>
+<text x="494.4" y="520" class="">reorders.raise</text>
 <path d="M116.4,253 L293.6,253" class="cap" marker-end="url(#arrow-cap)" data-id="StockTracker/Warehouse/field:http-&gt;StockTracker/grant:http"/>
 <text x="126.4" y="248" class=" opt-capability-names">http</text>
 <text x="155.2" y="248" class="dim opt-capability-types">: HttpServer</text>
 <rect x="10" y="242" width="106.4" height="22" rx="11" class="outside" data-id="StockTracker/grant:http/outside"/>
 <text x="20" y="257" class="">HTTP clients</text>
-<path d="M1314.4,558 L1565.6,558" class="cap" marker-end="url(#arrow-cap)" data-id="StockTracker/Warehouse/inventory/field:items-&gt;StockTracker/grant:items"/>
-<text x="1356.4" y="553" class=" opt-capability-names">items</text>
-<text x="1392.4" y="553" class="dim opt-capability-types">: Table&lt;String, Item&gt;</text>
-<text x="1356.4" y="572" class="dim opt-capability-operations">get, insert</text>
-<rect x="1565.6" y="547" width="77.6" height="22" rx="11" class="outside" data-id="StockTracker/grant:items/outside"/>
-<text x="1575.6" y="562" class="">stock.db</text>
+<rect x="10" y="280" width="120.8" height="22" rx="4" class="outside" data-id="StockTracker/front_end"/>
+<text x="20" y="295" class="title">front end</text>
+<text x="84.8" y="295" class="dim"> web/</text>
+<path d="M130.8,291 L138.8,291 L138.8,269 L293.6,269" class="edge" marker-end="url(#arrow)" data-id="StockTracker/front_end-&gt;StockTracker/Warehouse/fn:stock_levels"/>
+<path d="M130.8,291 L148.8,291 L148.8,285 L293.6,285" class="edge" marker-end="url(#arrow)" data-id="StockTracker/front_end-&gt;StockTracker/Warehouse/fn:stock_item"/>
+<path d="M1370.4,590 L1621.6,590" class="cap" marker-end="url(#arrow-cap)" data-id="StockTracker/Warehouse/inventory/field:items-&gt;StockTracker/grant:items"/>
+<text x="1412.4" y="585" class=" opt-capability-names">items</text>
+<text x="1448.4" y="585" class="dim opt-capability-types">: Table&lt;String, Item&gt;</text>
+<text x="1412.4" y="604" class="dim opt-capability-operations">entries, get, insert</text>
+<rect x="1621.6" y="579" width="77.6" height="22" rx="11" class="outside" data-id="StockTracker/grant:items/outside"/>
+<text x="1631.6" y="594" class="">stock.db</text>
 </svg>

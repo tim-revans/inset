@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:3:120-3:125
+`Kind` has no variant `Crate`
+not a variant of `Kind`
+help: the variants of `Kind` are `Part` and `BoxOf`

@@ -1,0 +1,35 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `Product` has no field `stock` here
+   ╭─[ requirements/main.req.inset:3:56 ]
+   │
+ 3 │     when Catalogue receives PUT /products/bolt-m6 with Product { display_name: "M6 bolt", net_price: 0.10, kind: Kind::BoxOf(50) }
+   │                                                        ───┬───  
+   │                                                           ╰───── give `stock` a value
+───╯
+Error: `Product` has no field `stock` here
+   ╭─[ requirements/main.req.inset:6:41 ]
+   │
+ 6 │     then Catalogue replies OK with vec![Product { display_name: "M6 bolt", net_price: 0.10, kind: Kind::BoxOf(50) }]
+   │                                         ───┬───  
+   │                                            ╰───── give `stock` a value
+───╯
+Error: a `Vec<Product>` cannot be replied as JSON
+    ╭─[ src/main.inset:33:51 ]
+    │
+ 33 │     async fn list(&self, limit: Option<usize>) -> Json<Vec<Product>> {
+    │                                                   ─────────┬────────  
+    │                                                            ╰────────── it holds a map with `u32` keys, and a JSON object's keys are text
+    │ 
+    │ Help: use `String` keys, or a `Vec` of pairs
+────╯
+Error: a `Product` cannot be read from JSON
+    ╭─[ src/main.inset:43:51 ]
+    │
+ 43 │     async fn put(&mut self, sku: String, product: Json<Product>) -> String {
+    │                                                   ──────┬──────  
+    │                                                         ╰──────── it holds a map with `u32` keys, and a JSON object's keys are text
+    │ 
+    │ Help: use `String` keys, or a `Vec` of pairs
+────╯

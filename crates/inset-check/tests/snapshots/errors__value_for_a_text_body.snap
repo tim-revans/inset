@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: a body written as a value is compared as JSON
+   ╭─[ requirements/main.req.inset:4:36 ]
+   │
+ 4 │     then Catalogue replies OK with 20
+   │                                    ─┬  
+   │                                     ╰── this route replies with text
+   │ 
+   │ Help: write a text body as a string, such as "40"; a value is for a route that replies with a `Json<T>`
+───╯

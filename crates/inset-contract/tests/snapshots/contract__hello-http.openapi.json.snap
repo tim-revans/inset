@@ -1,0 +1,45 @@
+---
+source: crates/inset-contract/tests/contract.rs
+expression: document
+---
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "HelloHttp",
+    "version": "0.0.0",
+    "description": "Hello HTTP: the smallest Inset program that serves the web."
+  },
+  "paths": {
+    "/hello/{name}": {
+      "get": {
+        "operationId": "hello",
+        "description": "Replies with a greeting for the name in the path.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A failure ended the handler, and a `failure` block rolled it back."
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,9 +1,11 @@
 # Stock tracker
 
-Tracks how many of each item a warehouse holds. Staff record stock that arrives and stock that is shipped, over HTTP. When shipping leaves an item at or below its reorder level, the tracker raises a reorder that brings it back up to its target level.
+Tracks how many of each item a warehouse holds. Staff record stock that arrives and stock that is shipped, over HTTP. When shipping leaves an item at or below its reorder level, the tracker raises a reorder that brings it back up to its target level. A page in the browser lists the stock and stocks new items.
 
 | Request | Reply |
 | --- | --- |
+| `GET /items?low=true` | Every item's stock as JSON, in SKU order. With `low=true`, only the items at or below their reorder level |
+| `PUT /items/{sku}`, body an `Item` as JSON | The quantity on hand, or `400 Bad Request` if the body is not an item |
 | `GET /items/{sku}` | The quantity on hand, or `404 Not Found` |
 | `POST /items/{sku}/receipts`, body a quantity | The new quantity on hand, or `404 Not Found` |
 | `POST /items/{sku}/shipments`, body a quantity | The new quantity on hand, `404 Not Found`, or `409 Conflict` if there is not enough stock |
@@ -16,6 +18,7 @@ Tracks how many of each item a warehouse holds. Staff record stock that arrives 
 | `src/main.inset` | The root module: the app, which is granted the network and the stock table, and the data types |
 | `src/warehouse.inset` | The `warehouse` module: `Warehouse` and the two components nested in it, `Inventory` and `Reorders` |
 | `requirements/stock.req.inset` | The requirement tests, written against the app's HTTP boundary |
+| `web/` | The front end: `index.html`, `app.js` and `style.css`. `app.js` is JavaScript checked by `tsc` against the TypeScript types `inset build` writes to `target/inset/stock-tracker.d.ts` |
 
 The program is split into two modules to show that Inset's modules are Rust's: `mod warehouse;` and `use warehouse::Warehouse;` in `main.inset`, `use crate::{Item, Reorder, ShipError};` and `pub component Warehouse` in `warehouse.inset`.
 
@@ -35,6 +38,10 @@ The program is split into two modules to show that Inset's modules are Rust's: `
 | Boundary notation | `move` for capabilities, `&sku` for a lent string, a bare `quantity` for a copied number, and `Reorder { ... }` for a value built in place |
 | Component state | `Reorders` holds its list of reorders in a field and changes it in `&mut self` handlers |
 | Request bodies | `body = quantity` reads the request body as a `u32` |
+| JSON bodies and replies | `stock_item` reads a `Json<Item>`, and `stock_levels` replies with a `Json<Vec<StockLevel>>`. `#[serde(rename_all = "camelCase")]` makes `on_hand` `onHand` in JSON |
+| A query parameter | `GET /items?{low}`, with `low: Option<bool>`, so a request may leave it out |
+| A front end | `front end via http calls [...]` in the app, with its files in `web/`, drawn as a box with an arrow to each route it calls |
+| JSON in requirements | "Stock levels are listed in SKU order" compares a JSON reply with a value, and "An item is stocked with the levels it is given" sends one |
 | Error replies | `Option` replies `404 Not Found` for `None`. `ShipError` names a status on each variant |
 | Algorithm in a component | `Inventory::reorder_quantity`, which takes no `self` and so touches no capability |
 | Examples table | "Stock that falls to its reorder level...", one row per case of reordering, which covers every branch of `reorder_quantity` from outside |
@@ -48,7 +55,7 @@ It covers the brief's Stock tracker row: several actors, a database capability, 
 
 ## Running it
 
-`inset test examples/stock-tracker` runs the requirements, with each row of the examples table on a line of its own. `inset run examples/stock-tracker` serves the program, and keeps `stock.db` in the directory it is run from. The tracker has no route that adds an item, so `cargo xtask e2e stock-tracker` stores one in a fresh `stock.db` before it serves the program.
+`inset test examples/stock-tracker` runs the requirements, with each row of the examples table on a line of its own. `inset run examples/stock-tracker` serves the program and its page at `http://localhost:8080/`, and keeps `stock.db` in the directory it is run from. `cargo xtask e2e stock-tracker` stocks an item through `PUT /items/{sku}` and checks the replies over HTTP. `cargo xtask contract` checks `web/app.js` against the TypeScript types, and checks that renaming `on_hand` in the Inset source makes that check fail.
 
 No requirement names a component or an algorithm, yet every branch of the code is reached by some requirement, so the coverage overlay should leave nothing uncovered.
 
@@ -56,7 +63,7 @@ No requirement names a component or an algorithm, yet every branch of the code i
 
 `expected/diagram.json` is the diagram data the compiler must emit, written by hand. The SVGs are drawn from it with `inset-diagram render` (see [diagrams.md](../../docs/language/diagrams.md)). Solid arrows are messages that wait for a reply. Dashed arrows are messages sent without waiting, and outlet connections. A `○` on a box's edge is an outlet.
 
-**Component view** (`expected/diagram.svg`). `Warehouse` is collapsed, so the `items` edge leaves from it.
+**Component view** (`expected/diagram.svg`). `Warehouse` is collapsed, so the `items` edge leaves from it. The front end is the box below the HTTP clients, with an arrow to each of the two routes it calls.
 
 ![The StockTracker app with Warehouse collapsed inside it, HTTP clients calling its four routes, and the items edge to stock.db](expected/diagram.svg)
 

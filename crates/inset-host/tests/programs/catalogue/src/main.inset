@@ -1,0 +1,89 @@
+/// A shop's catalogue, read and written as JSON, with a page to browse it.
+app Catalogue {
+    grant http: HttpServer { port: 8080 };
+    grant products: Table<String, Product> { file: "catalogue.db", name: "products" };
+    /// The page that lists the catalogue.
+    front end via http calls ["GET /products?{limit}&{parts}", "PUT /products/{sku}"];
+    start Shop { http: move http, products: move products };
+}
+
+/// A product for sale.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Product {
+    /// What the product is called.
+    display_name: String,
+    #[serde(rename = "net")]
+    net_price: Decimal,
+    kind: Kind,
+    /// A note for staff, if there is one.
+    note: Option<String>,
+    sizes: Vec<(u8, String)>,
+}
+
+/// How a product is sold.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Kind {
+    /// One at a time.
+    Part,
+    BoxOf(u32),
+    #[serde(rename = "kit")]
+    KitOf(u32, String),
+}
+
+/// A product in a listing, with its SKU.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct Listed {
+    sku: String,
+    product: Product,
+}
+
+/// Why a product was not stored.
+#[derive(Clone, Debug, PartialEq)]
+enum PutError {
+    /// The product has no name.
+    #[status(UnprocessableContent)]
+    NoName,
+}
+
+component Shop {
+    http: HttpServer,
+    products: Table<String, Product>,
+
+    /// Lists products in SKU order: at most `limit`, and only parts if `parts` is true.
+    #[get("/products?{limit}&{parts}", via = http)]
+    async fn list(&self, limit: Option<usize>, parts: Option<bool>) -> Json<Vec<Listed>> {
+        let mut listed = Vec::new();
+        for (sku, product) in self.products.entries().await {
+            if parts != Some(true) || product.kind == Kind::Part {
+                listed.push(Listed { sku, product });
+            }
+        }
+        listed.truncate(limit.unwrap_or(listed.len()));
+        Json(listed)
+    }
+
+    /// The SKUs of the products whose name holds `name`, which every request gives.
+    #[get("/search?{name}", via = http)]
+    async fn search(&self, name: String) -> Json<Vec<String>> {
+        let mut found = Vec::new();
+        for (sku, product) in self.products.entries().await {
+            if product.display_name.contains(name.as_str()) {
+                found.push(sku);
+            }
+        }
+        Json(found)
+    }
+
+    /// Stores a product under its SKU, and replies with it as stored.
+    #[put("/products/{sku}", via = http, body = product)]
+    async fn put(&mut self, sku: String, product: Json<Product>) -> Result<Json<Product>, PutError> {
+        let Json(product) = product;
+        if product.display_name.is_empty() {
+            return Err(PutError::NoName);
+        }
+        self.products.insert(sku, product.clone()).await;
+        Ok(Json(product))
+    }
+}

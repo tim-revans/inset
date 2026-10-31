@@ -1,0 +1,309 @@
+---
+source: crates/inset-contract/tests/contract.rs
+expression: document
+---
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "StockTracker",
+    "version": "0.0.0",
+    "description": "Stock tracker: how many of each item the warehouse holds, and what to reorder."
+  },
+  "paths": {
+    "/items/{sku}": {
+      "get": {
+        "operationId": "stock",
+        "description": "Replies with the quantity on hand.",
+        "parameters": [
+          {
+            "name": "sku",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found: the handler replied `None`."
+          },
+          "500": {
+            "description": "A failure ended the handler, and a `failure` block rolled it back."
+          }
+        }
+      },
+      "put": {
+        "operationId": "stock_item",
+        "description": "Stocks an item with the levels given, replacing any it had, and\nreplies with the quantity on hand.",
+        "parameters": [
+          {
+            "name": "sku",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Item"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body could not be read."
+          },
+          "500": {
+            "description": "A failure ended the handler, and a `failure` block rolled it back."
+          }
+        }
+      }
+    },
+    "/items": {
+      "get": {
+        "operationId": "stock_levels",
+        "description": "Lists every item's stock in SKU order, or with `low=true`, only the\nitems at or below their reorder level.",
+        "parameters": [
+          {
+            "name": "low",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StockLevel"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A query parameter was missing or could not be read."
+          },
+          "500": {
+            "description": "A failure ended the handler, and a `failure` block rolled it back."
+          }
+        }
+      }
+    },
+    "/items/{sku}/receipts": {
+      "post": {
+        "operationId": "receive",
+        "description": "Adds stock that has arrived, and replies with the new quantity on hand.",
+        "parameters": [
+          {
+            "name": "sku",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "text/plain; charset=utf-8": {
+              "schema": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body could not be read."
+          },
+          "404": {
+            "description": "Not found: the handler replied `None`."
+          },
+          "500": {
+            "description": "A failure ended the handler, and a `failure` block rolled it back."
+          }
+        }
+      }
+    },
+    "/items/{sku}/shipments": {
+      "post": {
+        "operationId": "ship",
+        "description": "Takes away stock that has been shipped, and replies with the new quantity on hand.",
+        "parameters": [
+          {
+            "name": "sku",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "text/plain; charset=utf-8": {
+              "schema": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body could not be read."
+          },
+          "404": {
+            "description": "`UnknownItem`: No item has the SKU."
+          },
+          "409": {
+            "description": "`NotEnoughStock`: The warehouse holds fewer than the quantity asked for."
+          },
+          "500": {
+            "description": "A failure ended the handler, and a `failure` block rolled it back."
+          }
+        }
+      }
+    },
+    "/reorders": {
+      "get": {
+        "operationId": "pending_reorders",
+        "description": "Lists the reorders waiting to be placed, one per line: the SKU, then the quantity.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A failure ended the handler, and a `failure` block rolled it back."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Item": {
+        "type": "object",
+        "properties": {
+          "onHand": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295,
+            "description": "How many the warehouse holds."
+          },
+          "reorderLevel": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295,
+            "description": "Stock at or below this level is reordered."
+          },
+          "targetLevel": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295,
+            "description": "A reorder brings stock back up to this level."
+          }
+        },
+        "required": [
+          "onHand",
+          "reorderLevel",
+          "targetLevel"
+        ],
+        "description": "A stocked item, stored under its SKU."
+      },
+      "StockLevel": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "onHand": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "reorderLevel": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "low": {
+            "type": "boolean",
+            "description": "Whether stock is at or below its reorder level."
+          }
+        },
+        "required": [
+          "sku",
+          "onHand",
+          "reorderLevel",
+          "low"
+        ],
+        "description": "An item's stock, as the front end lists it."
+      }
+    }
+  }
+}

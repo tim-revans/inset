@@ -44,8 +44,10 @@
 //!
 //! Diagnostic wording is pinned by `insta` snapshot tests in `tests/`.
 
+mod api;
 mod body;
 mod data;
+mod front;
 mod index;
 mod items;
 mod modules;
@@ -62,12 +64,14 @@ use std::collections::HashMap;
 use inset_syntax::ast::{self, HttpMethod};
 use inset_syntax::{Diagnostic, Ident, Span, is_requirements_file, parse_requirements};
 
+pub use api::{Api, ApiBody, ApiError, ApiParam, ApiRoute, ApiSegment, TypeDocs, api};
 pub use index::{Index, Reference, Symbol, SymbolKind};
 pub use modules::{Module, Modules};
 use names::Names;
-pub use program::{MAIN, Program, SourceFile};
+pub use program::{Asset, MAIN, Program, SourceFile};
 pub use requirements::{
-    Plan, Planned, PlannedExamples, PlannedFact, PlannedRequirement, PlannedRow, PlannedStep,
+    Plan, Planned, PlannedBody, PlannedExamples, PlannedFact, PlannedRequirement, PlannedRow,
+    PlannedStep,
 };
 use types::Ty;
 
@@ -206,6 +210,11 @@ fn finish(
             }
         }
     }
+    let web: Option<Vec<String>> = program
+        .web
+        .as_ref()
+        .map(|web| web.iter().map(|a| a.path.clone()).collect());
+    checker.check_web(web.as_deref());
     reports.extend(
         checker
             .diagnostics
@@ -324,15 +333,41 @@ pub(crate) struct RouteDecl {
     pub method: HttpMethod,
     pub template: String,
     pub segments: Vec<Segment>,
+    /// The query parameters, in the order the path writes them.
+    pub query: Vec<QueryParam>,
     /// The `HttpServer` field named by `via`.
     pub via: String,
-    /// Whether a body is read and converted, which can fail.
-    pub body: bool,
+    /// The body read, if any, which can fail to convert.
+    pub body: Option<BodyDecl>,
     pub reply: Reply,
+    /// `T`, when the route replies with a `Json<T>`.
+    pub reply_json: Option<Ty>,
+    /// The error enum of a route that returns a `Result`, by its index in
+    /// [`Checker::datas`].
+    pub error: Option<usize>,
     /// The route attribute.
     pub span: Span,
     /// The name of the handler.
     pub function: Span,
+}
+
+/// A query parameter, `{name}` after `?` in a route's path.
+#[derive(Clone, Debug)]
+pub(crate) struct QueryParam {
+    pub name: String,
+    /// The type it is read as: the parameter's, or what its `Option` holds.
+    pub ty: Ty,
+    /// Whether a request must give it, which it must unless its type is an `Option`.
+    pub required: bool,
+}
+
+/// What a route reads its body as.
+#[derive(Clone, Debug)]
+pub(crate) enum BodyDecl {
+    /// Text, converted to the parameter's type as a path segment is.
+    Text(Ty),
+    /// JSON for `T`, from a `Json<T>` parameter.
+    Json(Ty),
 }
 
 /// A route of a running component, and the grant its requests arrive through.
@@ -373,6 +408,7 @@ impl<'a> Checker<'a> {
         self.check_cycles();
         self.check_bodies();
         self.collect_routes();
+        self.check_front_end();
     }
 
     pub(crate) fn error(&mut self, diagnostic: Diagnostic) {

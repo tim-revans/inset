@@ -6,7 +6,13 @@
 //!
 //! `inset build <dir>` checks the program and compiles it to a WebAssembly
 //! component. The generated Cargo project is written to `<dir>/target/inset/`
-//! and the component's path is printed.
+//! and the component's path is printed. Beside the component it writes the
+//! program's API contract, `<package>.openapi.json` and `<package>.d.ts`, so
+//! a front end can import the TypeScript types.
+//!
+//! `inset contract <dir> [--openapi | --typescript] [-o file]` checks the
+//! program and prints its API contract, as OpenAPI 3.1 (the default) or as
+//! TypeScript types, or writes it to `file`.
 //!
 //! `inset run <dir> [--set name=value]...` builds the program and runs it in
 //! `inset-host` with real capabilities, applying each `--set` to a setting,
@@ -48,6 +54,7 @@ mod requirements;
 
 const USAGE: &str = "usage: inset check <dir>
        inset build <dir>
+       inset contract <dir> [--openapi | --typescript] [-o file]
        inset run <dir> [--set name=value]...
        inset test <dir> [--json]
        inset diagram <dir> [--json] [view options]
@@ -74,6 +81,7 @@ fn main() -> ExitCode {
             }
             Err(code) => code,
         },
+        ["contract", dir, options @ ..] => contract(dir, options),
         ["run", dir, sets @ ..] => run(dir, sets),
         ["test", dir] => test(dir, false),
         ["test", dir, "--json"] => test(dir, true),
@@ -123,7 +131,10 @@ fn build(dir: &str) -> Result<PathBuf, ExitCode> {
 fn build_program(dir: &str, program: &Program) -> Result<PathBuf, ExitCode> {
     let out = Path::new(dir).join("target").join("inset");
     match inset_codegen::build(program, &out, None) {
-        Ok(built) => Ok(built.component),
+        Ok(built) => {
+            write_contract(program, &built.component)?;
+            Ok(built.component)
+        }
         Err(BuildError::Rejected(reports)) => {
             print_reports(program, &reports);
             Err(ExitCode::FAILURE)
@@ -131,6 +142,89 @@ fn build_program(dir: &str, program: &Program) -> Result<PathBuf, ExitCode> {
         Err(e) => {
             eprintln!("inset: {e}");
             Err(ExitCode::FAILURE)
+        }
+    }
+}
+
+/// Writes the API contract beside the component, named as it is.
+fn write_contract(program: &Program, component: &Path) -> Result<(), ExitCode> {
+    let fail = |e: String| {
+        eprintln!("inset: {e}");
+        ExitCode::FAILURE
+    };
+    let api = inset_check::api(program).map_err(|reports| {
+        print_reports(program, &reports);
+        ExitCode::FAILURE
+    })?;
+    for (extension, text) in [
+        ("openapi.json", inset_contract::openapi(&api)),
+        ("d.ts", inset_contract::typescript(&api)),
+    ] {
+        let text = text.map_err(fail)?;
+        let path = component.with_extension(extension);
+        if std::fs::read_to_string(&path).is_ok_and(|old| old == text) {
+            continue;
+        }
+        std::fs::write(&path, text)
+            .map_err(|e| fail(format!("cannot write {}: {e}", path.display())))?;
+    }
+    Ok(())
+}
+
+fn contract(dir: &str, options: &[&str]) -> ExitCode {
+    let mut typescript = false;
+    let mut out = None;
+    let mut options = options.iter();
+    while let Some(option) = options.next() {
+        match (*option, options.clone().next()) {
+            ("--openapi", _) => typescript = false,
+            ("--typescript", _) => typescript = true,
+            ("-o", Some(file)) => {
+                out = Some(*file);
+                options.next();
+            }
+            _ => {
+                eprintln!("{}", usage());
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    let program = match load(dir) {
+        Ok(program) => program,
+        Err(code) => return code,
+    };
+    let api = match inset_check::api(&program) {
+        Ok(api) => api,
+        Err(reports) => {
+            print_reports(&program, &reports);
+            return ExitCode::FAILURE;
+        }
+    };
+    let text = if typescript {
+        inset_contract::typescript(&api)
+    } else {
+        inset_contract::openapi(&api)
+    };
+    let written = text.and_then(|text| match out {
+        Some(path) => {
+            if let Some(dir) = Path::new(path)
+                .parent()
+                .filter(|d| !d.as_os_str().is_empty())
+            {
+                std::fs::create_dir_all(dir).map_err(|e| format!("cannot write {path}: {e}"))?;
+            }
+            std::fs::write(path, text).map_err(|e| format!("cannot write {path}: {e}"))
+        }
+        None => {
+            print!("{text}");
+            Ok(())
+        }
+    });
+    match written {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("inset: {e}");
+            ExitCode::FAILURE
         }
     }
 }

@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: the struct `Product` cannot derive `Deserialize`
+    ╭─[ src/main.inset:10:46 ]
+    │
+ 10 │ #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    │                                              ─────┬─────  
+    │                                                   ╰─────── its field `kind` holds a `Kind`, which is not `Deserialize`
+    │ 
+    │ Help: remove `Deserialize` from the `#[derive]`, or change the type of `kind`
+────╯

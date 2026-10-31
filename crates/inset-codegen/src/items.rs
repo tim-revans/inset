@@ -15,7 +15,7 @@ use crate::body::{docs, ident, pattern};
 
 /// Names the generated route code gives its own variables. A handler
 /// parameter with one of these names is renamed where it is read.
-const ROUTE_LOCALS: [&str; 4] = ["field", "request", "path", "component"];
+const ROUTE_LOCALS: [&str; 5] = ["field", "request", "path", "query", "component"];
 
 impl<'a> Emitter<'a> {
     /// A module's items, with each module it declares inside it, as a Rust
@@ -69,10 +69,11 @@ impl<'a> Emitter<'a> {
                     .iter()
                     .map(|field| {
                         let docs = docs(&field.docs);
+                        let serde = serde_attrs(&field.attrs);
                         let vis = self.vis(&field.vis);
                         let name = ident(&field.name.name);
                         let ty = self.ty(&field.ty);
-                        quote!(#docs #vis #name: #ty)
+                        quote!(#docs #serde #vis #name: #ty)
                     })
                     .collect();
                 let stored = stored_struct(s);
@@ -95,13 +96,14 @@ impl<'a> Emitter<'a> {
                     .iter()
                     .map(|variant| {
                         let docs = docs(&variant.docs);
+                        let serde = serde_attrs(&variant.attrs);
                         let name = ident(&variant.name.name);
                         if variant.fields.is_empty() {
-                            quote!(#docs #name)
+                            quote!(#docs #serde #name)
                         } else {
                             let fields: Vec<_> =
                                 variant.fields.iter().map(|t| self.ty(t)).collect();
-                            quote!(#docs #name(#(#fields),*))
+                            quote!(#docs #serde #name(#(#fields),*))
                         }
                     })
                     .collect();
@@ -128,24 +130,37 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    /// `#[derive(...)]`, with the traits as written.
+    /// `#[derive(...)]`, with the traits as written, and any `#[serde]`.
+    /// Serde's derives are the runtime's re-export, so the generated
+    /// project depends on the runtime alone, and `#[serde(crate)]` tells
+    /// them where serde is.
     fn derive(&mut self, item: &Item) -> Option<TokenStream> {
         let mut traits = Vec::new();
+        let mut serde = false;
         for attr in &item.attrs {
             if let AttributeKind::Derive(names) = &attr.kind {
                 for name in names {
+                    let name_ident = ident(&name.name);
                     if matches!(name.name.as_str(), "Serialize" | "Deserialize") {
-                        self.unsupported(
-                            &format!("deriving `{}`", name.name),
-                            name.span,
-                            "derived here",
-                        );
+                        serde = true;
+                        traits.push(quote!(::inset_runtime::serde::#name_ident));
+                    } else {
+                        traits.push(quote!(#name_ident));
                     }
-                    traits.push(ident(&name.name));
                 }
             }
         }
-        (!traits.is_empty()).then(|| quote!(#[derive(#(#traits),*)]))
+        if traits.is_empty() {
+            return None;
+        }
+        let serde_attrs = serde.then(|| {
+            let own = serde_attrs(&item.attrs);
+            quote! {
+                #[serde(crate = "::inset_runtime::serde")]
+                #own
+            }
+        });
+        Some(quote!(#[derive(#(#traits),*)] #serde_attrs))
     }
 
     fn vis(&mut self, vis: &Visibility) -> TokenStream {
@@ -269,6 +284,22 @@ impl<'a> Emitter<'a> {
         } else {
             quote!(grants)
         };
+        // The files are copied beside `src/` into the generated project's
+        // `web/`, so the paths here do not depend on where it is.
+        let front_end = app.front_ends.first().map(|front| {
+            let server = &front.via.name;
+            let files = self.web.iter().map(|path| {
+                let file = format!("../web/{path}");
+                let content_type = content_type(path);
+                quote!((#path, #content_type, include_bytes!(#file)))
+            });
+            quote! {
+                const FRONT_END: Option<::inset_runtime::FrontEnd> = Some(::inset_runtime::FrontEnd {
+                    server: #server,
+                    files: &[#(#files),*],
+                });
+            }
+        });
 
         quote! {
             #docs
@@ -280,6 +311,8 @@ impl<'a> Emitter<'a> {
                 const SETTINGS: &'static [::inset_runtime::Setting] = &[#(#settings),*];
 
                 const GRANTS: &'static [::inset_runtime::Grant] = &[#(#grants),*];
+
+                #front_end
 
                 fn start(
                     #scope: &::inset_runtime::Scope,
@@ -720,13 +753,13 @@ impl<'a> Emitter<'a> {
             }
 
             impl ::inset_runtime::Stored for #message {
-                fn to_json(&self) -> ::inset_runtime::Json {
+                fn to_json(&self) -> ::inset_runtime::serde_json::Value {
                     match self {
                         #(#writes)*
                     }
                 }
 
-                fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+                fn from_json(json: &::inset_runtime::serde_json::Value) -> Result<Self, String> {
                     let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
                     match variant {
                         #(#reads)*
@@ -865,12 +898,19 @@ impl<'a> Emitter<'a> {
     }
 }
 
-/// One route: match the method and path, convert the path parameters and
-/// the body, and call the handler.
+/// One route: match the method and path, convert the path and query
+/// parameters and the body, and call the handler.
 fn route_arm(route: &Route, f: &Function) -> TokenStream {
-    let template = &route.path.value;
+    let (template, query) = match route.path.value.split_once('?') {
+        Some((path, query)) => (path, query),
+        None => (route.path.value.as_str(), ""),
+    };
     let path_params: Vec<&str> = template
         .split('/')
+        .filter_map(|s| s.strip_prefix('{')?.strip_suffix('}'))
+        .collect();
+    let query_params: Vec<&str> = query
+        .split('&')
         .filter_map(|s| s.strip_prefix('{')?.strip_suffix('}'))
         .collect();
     let names: Vec<String> = f
@@ -883,13 +923,33 @@ fn route_arm(route: &Route, f: &Function) -> TokenStream {
         .collect();
     let locals = locals(&names);
     let mut from_path = (Vec::new(), Vec::new());
-    let mut from_body = None;
-    for (name, local) in names.iter().zip(&locals) {
+    let mut from_query = Vec::new();
+    let mut read_body = None;
+    for ((name, local), param) in names.iter().zip(&locals).zip(&f.params) {
         if path_params.contains(&name.as_str()) {
             from_path.0.push(quote!(Some(#local)));
             from_path.1.push(quote!(path.get(#name)));
+        } else if query_params.contains(&name.as_str()) {
+            // An `Option` may be left out; any other parameter must be given.
+            let pattern = if is_named(&param.ty.kind, "Option") {
+                quote!(Ok(#local))
+            } else {
+                quote!(Ok(Some(#local)))
+            };
+            from_query.push(quote! {
+                let #pattern = query.get(#name) else {
+                    return ::inset_runtime::Route::BadRequest;
+                };
+            });
         } else if route.body.as_ref().is_some_and(|b| b.name == *name) {
-            from_body = Some(local);
+            let read = if is_named(&param.ty.kind, "Json") {
+                quote!(request.json())
+            } else {
+                quote!(request.body())
+            };
+            read_body = Some(
+                quote!(let Some(#local) = #read else { return ::inset_runtime::Route::BadRequest; };),
+            );
         }
     }
     let method = ident(match route.method {
@@ -912,8 +972,11 @@ fn route_arm(route: &Route, f: &Function) -> TokenStream {
             };
         }),
     };
-    let read_body = from_body.map(|local| {
-        quote!(let Some(#local) = request.body() else { return ::inset_runtime::Route::BadRequest; };)
+    let read_query = (!from_query.is_empty()).then(|| {
+        quote! {
+            let query = request.query();
+            #(#from_query)*
+        }
     });
     let name = ident(&f.name.name);
     let (component, call) = match f.receiver {
@@ -940,6 +1003,7 @@ fn route_arm(route: &Route, f: &Function) -> TokenStream {
         quote! {
             if let Some(path) = #matched {
                 #read_path
+                #read_query
                 #read_body
                 #to
             }
@@ -947,6 +1011,7 @@ fn route_arm(route: &Route, f: &Function) -> TokenStream {
     } else {
         quote! {
             if #matched.is_some() {
+                #read_query
                 #read_body
                 #to
             }
@@ -1033,6 +1098,49 @@ fn free_name<S: AsRef<str>>(name: &str, taken: &[S]) -> String {
 }
 
 /// Whether a type is the standard type `name`, with any arguments.
+/// The `#[serde(...)]` attributes as written.
+fn serde_attrs(attrs: &[inset_syntax::ast::Attribute]) -> TokenStream {
+    let attrs = attrs.iter().filter_map(|attr| match &attr.kind {
+        AttributeKind::Serde(args) => {
+            let args = args.iter().map(|arg| {
+                let name = ident(&arg.name.name);
+                match &arg.value {
+                    Some(value) => {
+                        let value = &value.value;
+                        quote!(#name = #value)
+                    }
+                    None => quote!(#name),
+                }
+            });
+            Some(quote!(#[serde(#(#args),*)]))
+        }
+        _ => None,
+    });
+    quote!(#(#attrs)*)
+}
+
+/// The front end's content type for a file, from its extension.
+fn content_type(path: &str) -> &'static str {
+    let extension = path.rsplit_once('.').map_or("", |(_, e)| e);
+    match extension.to_ascii_lowercase().as_str() {
+        "html" | "htm" => "text/html; charset=utf-8",
+        "js" | "mjs" => "text/javascript; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "json" | "map" => "application/json",
+        "txt" => "text/plain; charset=utf-8",
+        "svg" => "image/svg+xml",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "ico" => "image/x-icon",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        "wasm" => "application/wasm",
+        _ => "application/octet-stream",
+    }
+}
+
 fn is_named(ty: &TypeKind, name: &str) -> bool {
     matches!(ty, TypeKind::Path(p) if matches!(p.segments.as_slice(), [only] if only.ident.name == name))
 }
@@ -1092,13 +1200,13 @@ fn stored_struct(s: &Struct) -> TokenStream {
     };
     quote! {
         impl ::inset_runtime::Stored for #name {
-            fn to_json(&self) -> ::inset_runtime::Json {
+            fn to_json(&self) -> ::inset_runtime::serde_json::Value {
                 ::inset_runtime::data::object(Vec::from([
                     #((#names, ::inset_runtime::Stored::to_json(&self.#vars))),*
                 ]))
             }
 
-            fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+            fn from_json(json: &::inset_runtime::serde_json::Value) -> Result<Self, String> {
                 #read
             }
         }
@@ -1144,13 +1252,13 @@ fn stored_enum(e: &Enum) -> TokenStream {
     }
     quote! {
         impl ::inset_runtime::Stored for #name {
-            fn to_json(&self) -> ::inset_runtime::Json {
+            fn to_json(&self) -> ::inset_runtime::serde_json::Value {
                 match self {
                     #(#writes)*
                 }
             }
 
-            fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+            fn from_json(json: &::inset_runtime::serde_json::Value) -> Result<Self, String> {
                 let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
                 match variant {
                     #(#reads)*

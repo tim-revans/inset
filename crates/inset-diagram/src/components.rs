@@ -193,11 +193,17 @@ pub(crate) fn render(diagram: &Diagram, view: &View) -> String {
             .fold(0.0, f64::max)
     };
 
-    let left = if clients.is_empty() {
+    let front_label = [Seg::new("front end", "title"), Seg::new(" web/", "dim")];
+    let front_w = width(&front_label) + 20.0;
+    let mut left = if clients.is_empty() {
         16.0
     } else {
         10.0 + node_w(&clients) + 16.0 + label_w(&clients) + 16.0
     };
+    if let Some(front) = &app.front_end {
+        // Room for the box, and a lane for each call's arrow beside it.
+        left = left.max(10.0 + front_w + 8.0 + front.calls.len() as f64 * LANE + 16.0);
+    }
     place(&mut nodes, 0, left, 16.0);
     let app_right = nodes[0].x + nodes[0].w;
     let resource_x = app_right + 16.0 + label_w(&resources) + 16.0;
@@ -206,7 +212,7 @@ pub(crate) fn render(diagram: &Diagram, view: &View) -> String {
     } else {
         resource_x + node_w(&resources) + 10.0
     };
-    let total_h = nodes[0].y + nodes[0].h + 16.0;
+    let mut total_h = nodes[0].y + nodes[0].h + 16.0;
 
     let mut canvas = Canvas::new(view);
     for node in &nodes {
@@ -222,6 +228,8 @@ pub(crate) fn render(diagram: &Diagram, view: &View) -> String {
         (node, nodes[node].id == owner)
     };
     let client_w = node_w(&clients);
+    // Below the last client's labels, so the front end's box clears them.
+    let mut clients_bottom: f64 = 0.0;
     for (id, field, grant, ops) in &clients {
         let (holder, own) = find(field);
         let holder = &nodes[holder];
@@ -235,6 +243,7 @@ pub(crate) fn render(diagram: &Diagram, view: &View) -> String {
             0
         };
         let y = holder.row_y(row);
+        clients_bottom = clients_bottom.max(y + 14.0);
         let x = 10.0 + client_w;
         canvas.path(&[(x, y), (holder.x, y)], "cap", Some("arrow-cap"), Some(id));
         canvas.text(x + 10.0, y - 5.0, &field_label(field));
@@ -251,6 +260,65 @@ pub(crate) fn render(diagram: &Diagram, view: &View) -> String {
             &outside_label(grant),
             &grant.id,
         );
+    }
+    if let Some(front) = &app.front_end {
+        // The front end is opaque: a box outside the app, on the side of
+        // those who call in, with an arrow to each route it calls. An
+        // arrow to a route of a component that is not expanded ends at the
+        // box that hides it.
+        let targets: Vec<(&str, f64, f64)> = front
+            .calls
+            .iter()
+            .map(|call| {
+                let owner = call.rsplit_once("/fn:").map_or(call.as_str(), |(o, _)| o);
+                let node = &nodes[visible_node(&visible, owner)];
+                let row = node
+                    .rows
+                    .iter()
+                    .position(|r| r.anchor.as_deref() == Some(call.as_str()))
+                    .unwrap_or(0);
+                (call.as_str(), node.x, node.row_y(row))
+            })
+            .collect();
+        // Level with the middle of the routes it calls, below the clients.
+        let middle = if targets.is_empty() {
+            nodes[0].row_y(0)
+        } else {
+            targets.iter().map(|t| t.2).sum::<f64>() / targets.len() as f64
+        };
+        let y = middle.max(clients_bottom + 24.0);
+        total_h = total_h.max(y + 11.0 + 16.0);
+        let x = 10.0;
+        canvas.rect(
+            (x, y - 11.0, front_w, 22.0),
+            4.0,
+            "outside",
+            Some(&front.id),
+        );
+        canvas.text(x + 10.0, y + 4.0, &front_label);
+        // Lanes nearest the box go to the routes furthest above it and
+        // nearest below it, so no two arrows cross.
+        let mut order: Vec<usize> = (0..targets.len()).collect();
+        order.sort_by(|&a, &b| {
+            let key = |t: f64| if t <= y { (0, t) } else { (1, -t) };
+            let (ka, kb) = (key(targets[a].2), key(targets[b].2));
+            ka.partial_cmp(&kb).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        for (lane, &i) in order.iter().enumerate() {
+            let (call, end_x, end_y) = targets[i];
+            let lane_x = x + front_w + 8.0 + lane as f64 * LANE;
+            canvas.path(
+                &[
+                    (x + front_w, y),
+                    (lane_x, y),
+                    (lane_x, end_y),
+                    (end_x, end_y),
+                ],
+                "edge",
+                Some("arrow"),
+                Some(&format!("{}->{call}", front.id)),
+            );
+        }
     }
     let mut per_holder: BTreeMap<usize, usize> = BTreeMap::new();
     let resource_w = node_w(&resources);

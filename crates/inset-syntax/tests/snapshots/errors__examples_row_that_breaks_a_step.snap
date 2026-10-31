@@ -1,20 +1,13 @@
 ---
 source: crates/inset-syntax/tests/errors.rs
-description: "requirement \"Visitors are greeted by the name in the web address\"\n    when HelloHttp receives GET /hello/Ada\n    then HelloHttp replies OK with <greeting> please\n    examples\n    | greeting      |\n    | \"Hello, Ada!\" |\n    | Hello         |\n"
+description: "requirement \"Visitors are greeted by the name in the web address\"\n    when HelloHttp receives GET /hello/Ada\n    then HelloHttp replies OK with <greeting>\n    examples\n    | greeting      |\n    | \"Hello, Ada!\" |\n    | \"Hello        |\n"
 ---
-Error: expected the body as a string
+Error: unterminated string
    ╭─[ hello.req.inset:3:36 ]
    │
- 3 │     then HelloHttp replies OK with <greeting> please
-   │                                    ┬  
-   │                                    ╰── expected `"`
+ 3 │     then HelloHttp replies OK with <greeting>
+   │                                    ─────┬────  
+   │                                         ╰────── this string has no closing `"`
    │ 
-   │ Help: an HTTP body is text, written as a string such as "Hello, Ada!"; in the examples row on line 7
-───╯
-Error: unexpected text at the end of the step
-   ╭─[ hello.req.inset:3:47 ]
-   │
- 3 │     then HelloHttp replies OK with <greeting> please
-   │                                               ───┬──  
-   │                                                  ╰──── the step is complete before this
+   │ Help: in the examples row on line 7
 ───╯

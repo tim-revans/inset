@@ -1,0 +1,30 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: the struct `Product` cannot derive `Serialize`
+    ╭─[ src/main.inset:10:35 ]
+    │
+ 10 │ #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    │                                   ────┬────  
+    │                                       ╰────── its field `kind` holds a `Kind`, which is not `Serialize`
+    │ 
+    │ Help: remove `Serialize` from the `#[derive]`, or change the type of `kind`
+────╯
+Error: the struct `Product` cannot derive `Deserialize`
+    ╭─[ src/main.inset:10:46 ]
+    │
+ 10 │ #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    │                                              ─────┬─────  
+    │                                                   ╰─────── its field `kind` holds a `Kind`, which is not `Deserialize`
+    │ 
+    │ Help: remove `Deserialize` from the `#[derive]`, or change the type of `kind`
+────╯
+Error: `#[serde]` needs a serde derive
+    ╭─[ src/main.inset:21:1 ]
+    │
+ 21 │ #[serde(rename_all = "snake_case")]
+    │ ─────────────────┬─────────────────  
+    │                  ╰─────────────────── `Kind` derives neither `Serialize` nor `Deserialize`
+    │ 
+    │ Help: derive `Serialize` for a type replied as JSON, and `Deserialize` for one read from JSON
+────╯

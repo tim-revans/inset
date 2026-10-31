@@ -9,11 +9,14 @@ app StockTracker {
     grant http: HttpServer { port };
     // The stock database belongs to this tool alone, so its file is fixed.
     grant items: Table<String, Item> { file: "stock.db", name: "items" };
+    /// The page staff use in a browser to see stock levels and stock new items.
+    front end via http calls ["GET /items?{low}", "PUT /items/{sku}"];
     start Warehouse { http: move http, items: move items };
 }
 
 /// A stocked item, stored under its SKU.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Item {
     /// How many the warehouse holds.
     on_hand: u32,
@@ -21,6 +24,17 @@ struct Item {
     reorder_level: u32,
     /// A reorder brings stock back up to this level.
     target_level: u32,
+}
+
+/// An item's stock, as the front end lists it.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StockLevel {
+    sku: String,
+    on_hand: u32,
+    reorder_level: u32,
+    /// Whether stock is at or below its reorder level.
+    low: bool,
 }
 
 /// An order to place with a supplier.

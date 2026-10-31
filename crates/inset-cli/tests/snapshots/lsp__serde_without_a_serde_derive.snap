@@ -1,0 +1,17 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:10:35-10:44
+the struct `Product` cannot derive `Serialize`
+its field `kind` holds a `Kind`, which is not `Serialize`
+help: remove `Serialize` from the `#[derive]`, or change the type of `kind`
+
+src/main.inset:10:46-10:57
+the struct `Product` cannot derive `Deserialize`
+its field `kind` holds a `Kind`, which is not `Deserialize`
+help: remove `Deserialize` from the `#[derive]`, or change the type of `kind`
+
+src/main.inset:21:1-21:36
+`#[serde]` needs a serde derive
+`Kind` derives neither `Serialize` nor `Deserialize`
+help: derive `Serialize` for a type replied as JSON, and `Deserialize` for one read from JSON

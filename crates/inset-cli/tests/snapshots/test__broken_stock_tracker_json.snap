@@ -4,7 +4,7 @@ expression: stdout(&json)
 ---
 {
   "app": "StockTracker",
-  "passed": 7,
+  "passed": 11,
   "failed": 1,
   "requirements": [
     {
@@ -106,6 +106,30 @@ expression: stdout(&json)
       "sentence": "A database failure fails the request and changes nothing",
       "file": "requirements/stock.req.inset",
       "line": 56,
+      "result": "pass"
+    },
+    {
+      "sentence": "An item is stocked with the levels it is given",
+      "file": "requirements/stock.req.inset",
+      "line": 63,
+      "result": "pass"
+    },
+    {
+      "sentence": "Levels that are not a whole item in JSON are refused",
+      "file": "requirements/stock.req.inset",
+      "line": 69,
+      "result": "pass"
+    },
+    {
+      "sentence": "Stock levels are listed in SKU order",
+      "file": "requirements/stock.req.inset",
+      "line": 80,
+      "result": "pass"
+    },
+    {
+      "sentence": "Only items at or below their reorder level are listed as low stock",
+      "file": "requirements/stock.req.inset",
+      "line": 89,
       "result": "pass"
     }
   ]

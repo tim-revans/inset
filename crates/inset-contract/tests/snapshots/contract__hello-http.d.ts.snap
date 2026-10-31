@@ -1,0 +1,19 @@
+---
+source: crates/inset-contract/tests/contract.rs
+expression: types
+---
+// The API contract of the Inset app `HelloHttp`, written by `inset contract`.
+// It is written again on every build: change the Inset source, not this file.
+
+/**
+ * Every route, by its method and its path as its attribute writes it: what it
+ * takes, what it replies on success, and every status it can reply with.
+ */
+export interface Routes {
+  /** Replies with a greeting for the name in the path. */
+  "GET /hello/{name}": {
+    path: { name: string };
+    reply: string;
+    status: 200 | 500;
+  };
+}

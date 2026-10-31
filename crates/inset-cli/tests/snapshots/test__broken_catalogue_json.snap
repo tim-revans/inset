@@ -1,0 +1,48 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&json)
+---
+{
+  "app": "Catalogue",
+  "passed": 4,
+  "failed": 1,
+  "requirements": [
+    {
+      "sentence": "A product is stored as it was sent, and replied as stored",
+      "file": "requirements/catalogue.req.inset",
+      "line": 1,
+      "result": "pass"
+    },
+    {
+      "sentence": "A body or reply written as a string is exactly the JSON sent or replied",
+      "file": "requirements/catalogue.req.inset",
+      "line": 25,
+      "result": "pass"
+    },
+    {
+      "sentence": "Products are listed in SKU order, at most as many as asked for, and parts alone when asked",
+      "file": "requirements/catalogue.req.inset",
+      "line": 40,
+      "result": "fail",
+      "failure": {
+        "line": 51,
+        "step": "then Catalogue replies OK with vec![\n        Listed {\n            sku: \"b\",\n            product: Product { display_name: \"Bolt\", net_price: 0.10, kind: Kind::Part, note: None, sizes: vec![] },\n        },\n    ]",
+        "message": "but the reply is another value\n  expected: [Listed { sku: \"b\", product: Product { display_name: \"Bolt\", net_price: 0.10, kind: Part, note: None, sizes: [] } }]\n  actual:   [Listed { sku: \"a\", product: Product { display_name: \"Nut\", net_price: 0.05, kind: BoxOf(10), note: Some(\"loose\"), sizes: [] } }, Listed { sku: \"b\", product: Product { display_name: \"Bolt\", net_price: 0.10, kind: Part, note: None, sizes: [] } }]",
+        "expected": "[Listed { sku: \"b\", product: Product { display_name: \"Bolt\", net_price: 0.10, kind: Part, note: None, sizes: [] } }]",
+        "actual": "[Listed { sku: \"a\", product: Product { display_name: \"Nut\", net_price: 0.05, kind: BoxOf(10), note: Some(\"loose\"), sizes: [] } }, Listed { sku: \"b\", product: Product { display_name: \"Bolt\", net_price: 0.10, kind: Part, note: None, sizes: [] } }]"
+      }
+    },
+    {
+      "sentence": "A search gives the SKUs of the products with the name in theirs",
+      "file": "requirements/catalogue.req.inset",
+      "line": 58,
+      "result": "pass"
+    },
+    {
+      "sentence": "A request without what it needs is refused",
+      "file": "requirements/catalogue.req.inset",
+      "line": 66,
+      "result": "pass"
+    }
+  ]
+}

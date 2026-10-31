@@ -84,10 +84,60 @@ impl Request {
     pub fn body<T: FromStr>(&self) -> Option<T> {
         std::str::from_utf8(&self.body).ok()?.parse().ok()
     }
+
+    /// The body read as JSON for `T`, or `None` if it is not. The request's
+    /// content type is not checked, because the host does not pass headers yet.
+    pub fn json<T: serde::de::DeserializeOwned>(&self) -> Option<Json<T>> {
+        serde_json::from_slice(&self.body).ok().map(Json)
+    }
+
+    /// The query parameters: the part of the path after `?`.
+    pub fn query(&self) -> Query {
+        let query = self.path.split_once('?').map_or("", |(_, query)| query);
+        Query(
+            query
+                .split('&')
+                .filter(|pair| !pair.is_empty())
+                .map(|pair| {
+                    let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
+                    // A form's encoding, which browsers use for queries, writes a space as `+`.
+                    let decode = |text: &str| percent_decode(&text.replace('+', " "));
+                    (decode(name), decode(value))
+                })
+                .collect(),
+        )
+    }
 }
 
+/// A request's query parameters, decoded. A pair that is not UTF-8 once
+/// decoded is kept as `None`, so a parameter of that name does not convert.
+pub struct Query(Vec<(Option<String>, Option<String>)>);
+
+impl Query {
+    /// The first parameter called `name`, converted to the handler's
+    /// parameter type: `Ok(None)` when the request does not give it, and
+    /// `Err` when it does not convert, which is a bad request.
+    #[allow(clippy::result_unit_err)]
+    pub fn get<T: FromStr>(&self, name: &str) -> Result<Option<T>, ()> {
+        let Some((_, value)) = self.0.iter().find(|(n, _)| n.as_deref() == Some(name)) else {
+            return Ok(None);
+        };
+        value
+            .as_deref()
+            .ok_or(())?
+            .parse()
+            .map(Some)
+            .map_err(|_| ())
+    }
+}
+
+/// A JSON body or reply, as axum's and actix-web's `Json<T>` is: a tuple
+/// struct around the value.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Json<T>(pub T);
+
 /// Decodes `%XX` escapes. `None` if the result is not UTF-8.
-fn percent_decode(segment: &str) -> Option<String> {
+pub(crate) fn percent_decode(segment: &str) -> Option<String> {
     let bytes = segment.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -159,6 +209,21 @@ impl IntoResponse for String {
     }
 }
 
+impl<T: serde::Serialize> IntoResponse for Json<T> {
+    fn into_reply(self) -> Reply {
+        // The checker allows only types serde can write as JSON, so this
+        // fails only on a bug, which replies as a failure would.
+        match serde_json::to_vec(&self.0) {
+            Ok(body) => Reply {
+                status: 200,
+                content_type: Some("application/json"),
+                body,
+            },
+            Err(_) => Reply::empty(500),
+        }
+    }
+}
+
 impl<T: IntoResponse> IntoResponse for Option<T> {
     fn into_reply(self) -> Reply {
         self.map_or_else(|| Reply::empty(404), T::into_reply)
@@ -225,6 +290,31 @@ mod tests {
         assert!(!route(get("/hello")));
         assert!(!route(get("/hello/Ada/more")));
         assert!(!route(get("/goodbye/Ada")));
+    }
+
+    #[test]
+    fn query_parameters_are_decoded_and_converted() {
+        let query = get("/items?low=true&name=M6+bolt%21&n=x&n=2").query();
+        assert_eq!(query.get::<bool>("low"), Ok(Some(true)));
+        assert_eq!(query.get::<String>("name"), Ok(Some("M6 bolt!".into())));
+        assert_eq!(query.get::<u32>("missing"), Ok(None));
+        // The first of a repeated parameter is the one read.
+        assert_eq!(query.get::<u32>("n"), Err(()));
+    }
+
+    #[test]
+    fn a_json_body_is_read_and_a_json_reply_written() {
+        let request = Request {
+            body: br#"{"a": [1, 2]}"#.to_vec(),
+            ..get("/")
+        };
+        let Json(value): Json<std::collections::BTreeMap<String, Vec<u8>>> =
+            request.json().unwrap();
+        assert_eq!(value["a"], [1, 2]);
+        assert!(get("/").json::<u8>().is_none());
+        let reply = Json(value).into_reply();
+        assert_eq!(reply.content_type, Some("application/json"));
+        assert_eq!(reply.body, br#"{"a":[1,2]}"#);
     }
 
     #[test]

@@ -18,8 +18,41 @@ pub trait App {
     const SETTINGS: &'static [Setting];
     const GRANTS: &'static [Grant];
 
+    /// The app's front end, if it has one.
+    const FRONT_END: Option<FrontEnd> = None;
+
     /// The app's `start` statements.
     fn start(scope: &Scope, grants: &mut Grants) -> Result<(), Stopped>;
+}
+
+/// `front end via server calls [...];`: the files of `web/`, compiled in.
+#[derive(Clone, Copy)]
+pub struct FrontEnd {
+    /// The `HttpServer` grant that serves them.
+    pub server: &'static str,
+    /// Each file's path from `web/`, its content type, and its bytes, in
+    /// order of path.
+    pub files: &'static [(&'static str, &'static str, &'static [u8])],
+}
+
+impl FrontEnd {
+    /// The file a `GET` of `path` asks for: `index.html` for `/` or a path
+    /// ending in `/`, and otherwise the file at the path.
+    fn file(&self, path: &str) -> Option<Reply> {
+        let path = path.split_once('?').map_or(path, |(path, _)| path);
+        let path = crate::http::percent_decode(path.strip_prefix('/')?)?;
+        let path = if path.is_empty() || path.ends_with('/') {
+            format!("{path}index.html")
+        } else {
+            path
+        };
+        let (_, content_type, bytes) = self.files.iter().find(|(p, _, _)| *p == path)?;
+        Some(Reply {
+            status: 200,
+            content_type: Some(content_type),
+            body: bytes.to_vec(),
+        })
+    }
 }
 
 /// `setting name: Type = default;`
@@ -83,6 +116,7 @@ struct Program {
     servers: BTreeMap<String, (&'static str, Rc<dyn Running>)>,
     /// Every component, in start order.
     actors: Vec<Rc<dyn Running>>,
+    front_end: Option<FrontEnd>,
     stopped: Option<Stopped>,
 }
 
@@ -123,6 +157,7 @@ pub(crate) fn start<A: App>(restore: Option<Vec<u8>>) -> Result<(), Stopped> {
             previous(info);
         }));
     });
+    PROGRAM.with_borrow_mut(|p| p.front_end = A::FRONT_END);
     A::start(&Scope::root(A::NAME), &mut Grants(()))?;
     if let Some(state) = restore {
         let Recovery {
@@ -200,11 +235,19 @@ pub(crate) fn handle(server: &str, request: Request) -> Result<Reply, Stopped> {
     if let Some(stopped) = stopped() {
         return Err(stopped);
     }
+    // A `GET` that no route takes may be for a file of the front end.
+    let file = || {
+        let front_end = PROGRAM.with_borrow(|p| p.front_end)?;
+        (request.method == "GET" && front_end.server == server)
+            .then(|| front_end.file(&request.path))
+            .flatten()
+    };
     let Some((field, actor)) = PROGRAM.with_borrow(|p| p.servers.get(server).cloned()) else {
-        return Ok(Reply::empty(404));
+        return Ok(file().unwrap_or_else(|| Reply::empty(404)));
     };
     let reply = match actor.serve(field, &request) {
         Ok(reply) => reply,
+        Err(answered) if answered.status == 404 => return Ok(file().unwrap_or(answered)),
         Err(answered) => return Ok(answered),
     };
     run_until_idle()?;

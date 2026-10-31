@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:5:19-5:27
+`products` is not an `HttpServer`
+the front end is served through an `HttpServer`
+help: the servers of `Catalogue` are `http`

@@ -2,7 +2,9 @@
 //!
 //! Plain Rust with no dependencies, so it works for any contributor or agent
 //! without extra tooling. The VS Code extension's tests and packaging need
-//! Node.js, so those steps shell out to `npm` in `editors/vscode`. Its
+//! Node.js, so those steps shell out to `npm` in `editors/vscode`. The
+//! TypeScript compiler that checks the Stock tracker's front end against its
+//! API contract is installed there too, as the repository's one Node.js project. Its
 //! integration tests start VS Code, which needs a display: under `xvfb-run`
 //! when that is installed, as in CI, and on the desktop otherwise.
 
@@ -18,8 +20,9 @@ tasks:
   ci                format check, clippy, tests, editor grammar and integration tests
   editor            package the VS Code extension as a .vsix
   editor-test       run the VS Code extension's integration tests alone
+  contract          check the Stock tracker's front end against its TypeScript contract
   e2e hello         build Hello HTTP from its source, serve it and request a greeting
-  e2e stock-tracker build the Stock tracker, serve it with a stocked item, and ship it";
+  e2e stock-tracker build the Stock tracker, serve it, stock an item as JSON, and ship it";
 
 fn main() -> ExitCode {
     let task = std::env::args().nth(1);
@@ -27,6 +30,7 @@ fn main() -> ExitCode {
         Some("ci") => ci(),
         Some("editor") => editor(),
         Some("editor-test") => npm_install().and_then(|()| editor_integration()),
+        Some("contract") => npm_install().and_then(|()| contract()),
         Some("e2e") => match std::env::args().nth(2).as_deref() {
             Some("hello") => hello(),
             Some("stock-tracker") => stock_tracker(),
@@ -74,7 +78,83 @@ fn ci() -> Result<(), String> {
     cargo(&["test", "--workspace"])?;
     npm_install()?;
     npm(&["test"])?;
+    contract()?;
     editor_integration()
+}
+
+/// Checks the Stock tracker's front end with `tsc` against the TypeScript
+/// types `inset contract` writes, and checks that renaming a field the front
+/// end uses, in a copy of the Inset source, makes the same check fail.
+fn contract() -> Result<(), String> {
+    cargo(&["build", "--quiet", "-p", "inset-cli"])?;
+    let example = repo_dir().join("examples/stock-tracker");
+    typecheck(&example)?;
+    let copy = target_dir().join("contract-rename");
+    let _ = std::fs::remove_dir_all(&copy);
+    for sub in ["src", "web"] {
+        copy_dir(&example.join(sub), &copy.join(sub))?;
+    }
+    for file in ["src/main.inset", "src/warehouse.inset"] {
+        let path = copy.join(file);
+        let text = std::fs::read_to_string(&path).map_err(|e| format!("read {file} ({e})"))?;
+        std::fs::write(&path, text.replace("on_hand", "in_stock"))
+            .map_err(|e| format!("write {file} ({e})"))?;
+    }
+    eprintln!("xtask: with `on_hand` renamed `in_stock`, `tsc` must fail");
+    if typecheck(&copy).is_ok() {
+        return Err("tsc passed the front end after a field it uses was renamed".into());
+    }
+    std::fs::remove_dir_all(&copy).map_err(|e| format!("remove {} ({e})", copy.display()))
+}
+
+/// Writes the TypeScript contract of the program in `dir` where its front
+/// end imports it from, and checks the front end's JavaScript with `tsc`.
+fn typecheck(dir: &Path) -> Result<(), String> {
+    let types = dir.join("target/inset/stock-tracker.d.ts");
+    run(
+        Command::new(target_dir().join("debug/inset"))
+            .arg("contract")
+            .arg(dir)
+            .arg("--typescript")
+            .arg("-o")
+            .arg(&types),
+        format!("inset contract {} --typescript", dir.display()),
+    )?;
+    let tsc = extension_dir().join("node_modules/.bin/tsc");
+    run(
+        Command::new(tsc)
+            .args([
+                "--noEmit",
+                "--allowJs",
+                "--checkJs",
+                "--strict",
+                "--target",
+                "es2022",
+                "--module",
+                "es2022",
+                "--moduleResolution",
+                "bundler",
+                "--lib",
+                "es2022,dom,dom.iterable",
+            ])
+            .arg(dir.join("web/app.js")),
+        format!("tsc {}", dir.join("web/app.js").display()),
+    )
+}
+
+fn copy_dir(from: &Path, to: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(to).map_err(|e| format!("create {} ({e})", to.display()))?;
+    let entries = std::fs::read_dir(from).map_err(|e| format!("read {} ({e})", from.display()))?;
+    for entry in entries {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        let target = to.join(path.file_name().unwrap_or_default());
+        if path.is_dir() {
+            copy_dir(&path, &target)?;
+        } else {
+            std::fs::copy(&path, &target).map_err(|e| format!("copy {} ({e})", path.display()))?;
+        }
+    }
+    Ok(())
 }
 
 /// Opens the VS Code extension's panels on Hello HTTP in a real VS Code,
@@ -157,36 +237,28 @@ fn stock_tracker() -> Result<(), String> {
         Command::new(&inset).arg("build").arg(&example),
         "inset build examples/stock-tracker".into(),
     )?;
-    let component = example.join("target/inset/stock-tracker.wasm");
     // `stock.db` is fixed in the source, so it lands where `inset run` runs.
     let dir = target_dir().join("e2e-stock-tracker");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| format!("create {} ({e})", dir.display()))?;
-    let item = r#"{"on_hand":12,"reorder_level":10,"target_level":50}"#;
-    let component = component.to_string_lossy();
     let dir_text = dir.to_string_lossy();
-    cargo(&[
-        "run",
-        "--quiet",
-        "-p",
-        "inset-host",
-        "--example",
-        "seed",
-        "--",
-        &component,
-        &dir_text,
-        "items",
-        "bolt-m6",
-        item,
-    ])?;
+    let page = std::fs::read_to_string(example.join("web/index.html"))
+        .map_err(|e| format!("read the front end's page ({e})"))?;
+    let item = r#"{"onHand": 12, "reorderLevel": 10, "targetLevel": 50}"#;
+    let levels = r#"[{"sku":"bolt-m6","onHand":10,"reorderLevel":10,"low":true}]"#;
     let exchanges: [&[(&str, &str, &str, &str)]; 2] = [
         &[
+            ("GET", "/items/bolt-m6", "", "404 Not Found|"),
+            ("PUT", "/items/bolt-m6", item, "200 OK|12"),
             ("GET", "/items/bolt-m6", "", "200 OK|12"),
             ("POST", "/items/bolt-m6/shipments", "2", "200 OK|10"),
-            ("GET", "/reorders", "", "200 OK|bolt-m6 40\n"),
+            ("GET", "/reorders", "", "200 OK|bolt-m6 40\\n"),
+            ("GET", "/items?low=true", "", &format!("200 OK|{levels}")),
             ("POST", "/items/bolt-m6/receipts", "5", "200 OK|15"),
             ("POST", "/items/bolt-m6/shipments", "100", "409 Conflict|"),
+            ("PUT", "/items/nut-m6", "{}", "400 Bad Request|"),
             ("GET", "/items/nut-m6", "", "404 Not Found|"),
+            ("GET", "/", "", &format!("200 OK|{page}")),
         ],
         // Reorders are kept in memory, and the stock in `stock.db`.
         &[

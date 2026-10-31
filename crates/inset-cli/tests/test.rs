@@ -26,15 +26,26 @@ fn inset(args: &[&str], dir: &Path) -> Command {
 fn copy(dir: &str, name: &str) -> PathBuf {
     let to = std::env::temp_dir().join(format!("inset-test-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&to);
-    for sub in ["src", "requirements"] {
+    for sub in ["src", "requirements", "web"] {
         let from = repo().join(dir).join(sub);
-        std::fs::create_dir_all(to.join(sub)).unwrap();
-        for entry in std::fs::read_dir(&from).unwrap() {
-            let path = entry.unwrap().path();
-            std::fs::copy(&path, to.join(sub).join(path.file_name().unwrap())).unwrap();
+        if from.is_dir() {
+            copy_dir(&from, &to.join(sub));
         }
     }
     to
+}
+
+fn copy_dir(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let path = entry.unwrap().path();
+        let target = to.join(path.file_name().unwrap());
+        if path.is_dir() {
+            copy_dir(&path, &target);
+        } else {
+            std::fs::copy(&path, target).unwrap();
+        }
+    }
 }
 
 /// Runs `inset`, one at a time. Programs built from copies of one example
@@ -217,4 +228,37 @@ fn a_restarted_child_starts_again_from_nothing() {
         stdout(&out),
         "pass  A tally that fails starts again from nothing, with its part\n\n1 requirement passed\n"
     );
+}
+
+/// Requirements send JSON bodies written as values and compare JSON
+/// replies as values. They pass only if the test runner writes and reads
+/// JSON as the program's own serde derives do.
+#[test]
+fn json_bodies_and_replies_are_values() {
+    let dir = copy("crates/inset-host/tests/programs/catalogue", "catalogue");
+    let out = run(&mut inset(&["test"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(out.status.success(), "{}{}", stdout(&out), stderr(&out));
+    insta::assert_snapshot!("catalogue_text", stdout(&out));
+}
+
+/// A copy of the catalogue that lists every product when asked for parts,
+/// so a JSON reply differs from the value a requirement expects.
+#[test]
+fn a_json_reply_that_differs_shows_both_values() {
+    let dir = copy(
+        "crates/inset-host/tests/programs/catalogue",
+        "broken-catalogue",
+    );
+    let main = dir.join("src/main.inset");
+    let source = std::fs::read_to_string(&main).unwrap();
+    let broken = source.replace("parts != Some(true) ||", "parts != Some(false) ||");
+    assert_ne!(source, broken);
+    std::fs::write(&main, broken).unwrap();
+    let text = run(&mut inset(&["test"], &dir));
+    let json = run(&mut inset(&["test", "--json"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(text.status.code(), Some(1), "{}", stderr(&text));
+    insta::assert_snapshot!("broken_catalogue_text", stdout(&text));
+    insta::assert_snapshot!("broken_catalogue_json", stdout(&json));
 }

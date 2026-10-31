@@ -261,6 +261,7 @@ impl<'a> Builder<'_, 'a> {
             }
             notes.push(format!("An error that replies {}.", names(unique)));
         }
+        let json = data.derives("Serialize") || data.derives("Deserialize");
         let code = format!("{kind} {}", data.name.name);
         let symbol_kind = if data.is_enum {
             SymbolKind::Enum
@@ -275,7 +276,7 @@ impl<'a> Builder<'_, 'a> {
         );
         match &item.kind {
             ItemKind::Struct(s) => {
-                for (field, info) in s.fields.iter().zip(&data.fields) {
+                for (i, (field, info)) in s.fields.iter().zip(&data.fields).enumerate() {
                     let code = format!("{}: {}", field.name.name, self.source(field.ty.span));
                     let ty = info.ty.to_string();
                     let mut note = format!("A field of `{}`", data.name.name);
@@ -283,21 +284,28 @@ impl<'a> Builder<'_, 'a> {
                         note.push_str(&format!(", a `{ty}`"));
                     }
                     note.push('.');
-                    let hover = hover(&code, &field.docs, &[note]);
+                    let mut notes = vec![note];
+                    if json && let Some(name) = data.json.get(i) {
+                        notes.push(format!("Written `{name}` in JSON."));
+                    }
+                    let hover = hover(&code, &field.docs, &notes);
                     self.symbol(&field.name, SymbolKind::Field, field.span, hover);
                 }
             }
             ItemKind::Enum(e) => {
-                for (variant, info) in e.variants.iter().zip(&data.variants) {
+                for (i, (variant, info)) in e.variants.iter().zip(&data.variants).enumerate() {
                     let code = format!(
                         "{}::{}",
                         data.name.name,
                         self.source(Span::new(variant.name.span.start, variant.span.end))
                     );
-                    let notes = match &info.status {
+                    let mut notes = match &info.status {
                         Some(status) => vec![format!("Replies `{}`.", status.name)],
                         None => Vec::new(),
                     };
+                    if json && let Some(name) = data.json.get(i) {
+                        notes.push(format!("Written `{name}` in JSON."));
+                    }
                     let hover = hover(&code, &variant.docs, &notes);
                     self.symbol(&variant.name, SymbolKind::Variant, variant.span, hover);
                 }

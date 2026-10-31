@@ -1,0 +1,28 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: no route of `http` is `GET /products`
+   ╭─[ src/main.inset:5:31 ]
+   │
+ 5 │     front end via http calls ["GET /products", "get /products/{sku}", "PUT /products/{sku}", "PUT /products/{sku}"];
+   │                               ───────┬───────  
+   │                                      ╰───────── the front end calls a route that does not exist
+   │ 
+   │ Help: write the path as its attribute does: "GET /products?{limit}"
+───╯
+Error: unknown HTTP method `get`
+   ╭─[ src/main.inset:5:48 ]
+   │
+ 5 │     front end via http calls ["GET /products", "get /products/{sku}", "PUT /products/{sku}", "PUT /products/{sku}"];
+   │                                                ──────────┬──────────  
+   │                                                          ╰──────────── the call starts with its route's method
+   │ 
+   │ Help: methods are written in capitals: `GET`
+───╯
+Error: the front end lists this route twice
+   ╭─[ src/main.inset:5:94 ]
+   │
+ 5 │     front end via http calls ["GET /products", "get /products/{sku}", "PUT /products/{sku}", "PUT /products/{sku}"];
+   │                                                                                              ──────────┬──────────  
+   │                                                                                                        ╰──────────── this repeats an earlier call
+───╯

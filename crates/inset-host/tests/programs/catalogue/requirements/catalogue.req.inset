@@ -1,0 +1,76 @@
+requirement "A product is stored as it was sent, and replied as stored"
+    given products is empty
+    when Catalogue receives PUT /products/kit-1 with Product {
+            display_name: "M6 kit",
+            net_price: 2.50,
+            kind: Kind::KitOf(4, "M6"),
+            note: None,
+            sizes: vec![(6, "M6")],
+        }
+    then Catalogue replies OK with Product {
+            display_name: "M6 kit",
+            net_price: 2.5,
+            kind: Kind::KitOf(4, "M6"),
+            note: None,
+            sizes: vec![(6, "M6")],
+        }
+    and products["kit-1"] is Product {
+            display_name: "M6 kit",
+            net_price: 2.50,
+            kind: Kind::KitOf(4, "M6"),
+            note: None,
+            sizes: vec![(6, "M6")],
+        }
+
+requirement "A body or reply written as a string is exactly the JSON sent or replied"
+    given products is empty
+    when Catalogue receives PUT /products/bolt with
+        """
+        {"displayName": "M6 bolt", "net": "0.10", "kind": {"box_of": 50}, "sizes": []}
+        """
+    then Catalogue replies OK with "{\"displayName\":\"M6 bolt\",\"net\":\"0.10\",\"kind\":{\"box_of\":50},\"note\":null,\"sizes\":[]}"
+    and products["bolt"] is Product {
+            display_name: "M6 bolt",
+            net_price: 0.10,
+            kind: Kind::BoxOf(50),
+            note: None,
+            sizes: vec![],
+        }
+
+requirement "Products are listed in SKU order, at most as many as asked for, and parts alone when asked"
+    given products["b"] is Product { display_name: "Bolt", net_price: 0.10, kind: Kind::Part, note: None, sizes: vec![] }
+    and products["a"] is Product { display_name: "Nut", net_price: 0.05, kind: Kind::BoxOf(10), note: Some("loose"), sizes: vec![] }
+    when Catalogue receives GET /products?limit=1
+    then Catalogue replies OK with vec![
+            Listed {
+                sku: "a",
+                product: Product { display_name: "Nut", net_price: 0.05, kind: Kind::BoxOf(10), note: Some("loose"), sizes: vec![] },
+            },
+        ]
+    when Catalogue receives GET /products?parts=true
+    then Catalogue replies OK with vec![
+            Listed {
+                sku: "b",
+                product: Product { display_name: "Bolt", net_price: 0.10, kind: Kind::Part, note: None, sizes: vec![] },
+            },
+        ]
+
+requirement "A search gives the SKUs of the products with the name in theirs"
+    given products["b"] is Product { display_name: "M6 bolt", net_price: 0.10, kind: Kind::Part, note: None, sizes: vec![] }
+    and products["n"] is Product { display_name: "M6 nut", net_price: 0.05, kind: Kind::Part, note: None, sizes: vec![] }
+    when Catalogue receives GET /search?name=bolt
+    then Catalogue replies OK with vec!["b"]
+    when Catalogue receives GET /search?name=M6+
+    then Catalogue replies OK with vec!["b", "n"]
+
+requirement "A request without what it needs is refused"
+    given products is empty
+    when Catalogue receives GET /search
+    then Catalogue replies BadRequest
+    when Catalogue receives GET /products?limit=-1
+    then Catalogue replies BadRequest
+    when Catalogue receives PUT /products/x with "{}"
+    then Catalogue replies BadRequest
+    when Catalogue receives PUT /products/x with Product { display_name: "", net_price: 1, kind: Kind::Part, note: None, sizes: vec![] }
+    then Catalogue replies UnprocessableContent
+    and products is empty

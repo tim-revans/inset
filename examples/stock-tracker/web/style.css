@@ -1,0 +1,8 @@
+body { font-family: system-ui, sans-serif; margin: 2rem; color: #1d2329; }
+main { max-width: 40rem; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }
+th, td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid #d5dbe1; }
+td.number { text-align: right; font-variant-numeric: tabular-nums; }
+tr.low td { color: #b3261e; }
+form { display: grid; gap: 0.5rem; max-width: 20rem; }
+label { display: flex; justify-content: space-between; gap: 1rem; }

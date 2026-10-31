@@ -18,6 +18,20 @@ pub(crate) enum StepFact {
 }
 
 impl Parser<'_> {
+    /// A step's body written as a value, after `with`: one expression.
+    pub(crate) fn parse_step_value(&mut self) -> PResult<Expr> {
+        let value = self.parse_expr()?;
+        if *self.kind() != T::Eof {
+            let span = self.span();
+            return Err(self.report(Diagnostic::new(
+                "unexpected text after the body",
+                span,
+                "the body is complete before this",
+            )));
+        }
+        Ok(value)
+    }
+
     pub(crate) fn parse_step_fact(&mut self, allow_check: bool) -> PResult<StepFact> {
         let start = self.span().start;
         let lhs = self.parse_expr()?;

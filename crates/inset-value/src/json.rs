@@ -367,6 +367,7 @@ mod tests {
                     ("net".into(), Shape::Decimal),
                     ("state".into(), Shape::Data(1)),
                 ]),
+                json: vec!["on_hand".into(), "net".into(), "state".into()],
             },
             crate::DataShape {
                 name: "State".into(),
@@ -374,6 +375,7 @@ mod tests {
                     ("Stocked".into(), vec![]),
                     ("Held".into(), vec![Shape::String]),
                 ]),
+                json: vec!["Stocked".into(), "Held".into()],
             },
         ])
     }

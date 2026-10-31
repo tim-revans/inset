@@ -27,10 +27,17 @@
 //! and prints as `{:?}` would, which is what `assert_eq!` shows when a fact
 //! fails. A requirement's check is a [`Check`], evaluated against what the
 //! fake tables hold.
+//!
+//! A JSON body is not stored, so it does not use the stored form: it is the
+//! program's own serde form, which [`serde`] writes and reads the way
+//! `serde_json` and serde's derives do, so a requirement can send a body
+//! written as a value and compare a JSON reply as one.
 
 mod check;
 pub mod json;
 pub mod key;
+pub mod rename;
+pub mod serde;
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -76,6 +83,10 @@ pub struct Types(pub Vec<DataShape>);
 pub struct DataShape {
     pub name: String,
     pub kind: DataKind,
+    /// The name of each field or variant, in order, in the type's JSON form
+    /// as serde writes it ([`serde`]): the declared name, unless a
+    /// `#[serde(rename_all)]` or `#[serde(rename)]` changes it.
+    pub json: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -125,7 +125,7 @@ async function requirementsPanel(api) {
   const stock = tree.getChildren().find((p) => p.label === "examples/stock-tracker");
   assert.equal(tree.getTreeItem(stock).description, "");
   const stockRequirements = tree.getChildren(stock);
-  assert.equal(stockRequirements.length, 8);
+  assert.equal(stockRequirements.length, 12);
   for (const requirement of stockRequirements) {
     assert.equal(tree.getTreeItem(requirement).description, "passed", requirement.label);
   }

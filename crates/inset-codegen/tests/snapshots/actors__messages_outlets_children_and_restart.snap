@@ -98,7 +98,7 @@ enum __FrontMessage {
 }
 
 impl ::inset_runtime::Stored for __FrontMessage {
-    fn to_json(&self) -> ::inset_runtime::Json {
+    fn to_json(&self) -> ::inset_runtime::serde_json::Value {
         match self {
             __FrontMessage::logged(field0) => {
                 ::inset_runtime::data::variant(
@@ -109,7 +109,7 @@ impl ::inset_runtime::Stored for __FrontMessage {
         }
     }
 
-    fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+    fn from_json(json: &::inset_runtime::serde_json::Value) -> Result<Self, String> {
         let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
         match variant {
             "logged" => {
@@ -250,7 +250,7 @@ enum __TallyMessage {
 }
 
 impl ::inset_runtime::Stored for __TallyMessage {
-    fn to_json(&self) -> ::inset_runtime::Json {
+    fn to_json(&self) -> ::inset_runtime::serde_json::Value {
         match self {
             __TallyMessage::add(field0) => {
                 ::inset_runtime::data::variant(
@@ -262,7 +262,7 @@ impl ::inset_runtime::Stored for __TallyMessage {
         }
     }
 
-    fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+    fn from_json(json: &::inset_runtime::serde_json::Value) -> Result<Self, String> {
         let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
         match variant {
             "add" => {
@@ -382,7 +382,7 @@ enum __LogMessage {
 }
 
 impl ::inset_runtime::Stored for __LogMessage {
-    fn to_json(&self) -> ::inset_runtime::Json {
+    fn to_json(&self) -> ::inset_runtime::serde_json::Value {
         match self {
             __LogMessage::record(field0) => {
                 ::inset_runtime::data::variant(
@@ -399,7 +399,7 @@ impl ::inset_runtime::Stored for __LogMessage {
         }
     }
 
-    fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+    fn from_json(json: &::inset_runtime::serde_json::Value) -> Result<Self, String> {
         let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
         match variant {
             "record" => {
@@ -496,13 +496,13 @@ enum __ClockMessage {
 }
 
 impl ::inset_runtime::Stored for __ClockMessage {
-    fn to_json(&self) -> ::inset_runtime::Json {
+    fn to_json(&self) -> ::inset_runtime::serde_json::Value {
         match self {
             __ClockMessage::tick => ::inset_runtime::data::variant("tick", Vec::new()),
         }
     }
 
-    fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+    fn from_json(json: &::inset_runtime::serde_json::Value) -> Result<Self, String> {
         let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
         match variant {
             "tick" => {

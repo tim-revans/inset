@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `products` is not an `HttpServer`
+   ╭─[ src/main.inset:5:19 ]
+   │
+ 5 │     front end via products calls ["GET /products?{limit}", "PUT /products/{sku}"];
+   │                   ────┬───  
+   │                       ╰───── the front end is served through an `HttpServer`
+   │ 
+   │ Help: the servers of `Catalogue` are `http`
+───╯

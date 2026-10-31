@@ -1,6 +1,6 @@
 # Inset syntax
 
-The living reference for Inset's syntax. It is a draft: the parser in [`crates/inset-syntax/`](../../crates/inset-syntax/) and the checker in [`crates/inset-check/`](../../crates/inset-check/) cover everything Hello HTTP and the Stock tracker use: components that start children and send them messages, outlets, `failure` blocks that roll back and restart, modules, structs and enums, error enums, `match` and loops, and requirements that set up and check what a table holds, with `examples` tables. They report the rest as not supported yet. The syntax changes as each example program is compiled.
+The living reference for Inset's syntax. It is a draft: the parser in [`crates/inset-syntax/`](../../crates/inset-syntax/) and the checker in [`crates/inset-check/`](../../crates/inset-check/) cover everything Hello HTTP and the Stock tracker use: components that start children and send them messages, outlets, `failure` blocks that roll back and restart, modules, structs and enums, error enums, `match` and loops, JSON bodies and query parameters, a front end, and requirements that set up and check what a table holds, with `examples` tables. They report the rest as not supported yet. The syntax changes as each example program is compiled.
 
 Each construct is marked with its status:
 
@@ -42,9 +42,10 @@ The code dialect uses Rust's lexical rules: identifiers, integer and string lite
 
 - Doc comments become the descriptions shown on diagram elements. They may go on items, fields, functions and enum variants.
 - String literals do not interpolate, as in Rust. Build text with `format!`.
-- Inset adds these keywords to Rust's: `app`, `component`, `setting`, `grant`, `start`, `send`, `fork`, and `failure` with its responses `rollback` and `restart`. It also gives Rust's `extern` a new use, in `extern component`.
+- Inset adds these keywords to Rust's: `app`, `component`, `setting`, `grant`, `start`, `send`, `fork`, and `failure` with its responses `rollback` and `restart`. It also gives Rust's `extern` a new use, in `extern component`. In an app, `front end`, `via` and `calls` declare the front end (see [Front end](#front-end)).
 - Inset adds these attributes: the route attributes `#[get]`, `#[post]`, `#[put]`, `#[patch]` and `#[delete]`, and `#[message]`, `#[handed_down]`, `#[status]`, `#[rust]` and `#[defensive]`. Attributes that change what an item does are familiar from Rust frameworks, so these keep Rust's meaning of an attribute.
-- Inset adds two standard types alongside the capability types: `Handle<C>`, for a running component, and `Outlet<T>`, for announcing events (see [Outlets](#outlets)).
+- Inset adds three standard types alongside the capability types: `Handle<C>`, for a running component, `Outlet<T>`, for announcing events (see [Outlets](#outlets)), and `Json<T>`, for a JSON body or reply (see [Routes](#routes)).
+- Serde's `#[serde(...)]` attribute keeps its Rust meaning on a data type that derives `Serialize` or `Deserialize` (see [Types](#types)).
 
 ### What Inset keeps from Rust
 
@@ -95,6 +96,7 @@ app PriceImport {
 - `setting name: Type = default;` declares a value that whoever runs the program may choose, such as `inset run --set port=9090`. Without one, the default is used, and requirement tests always use the default.
 - `grant name: Capability { fields };` asks the host for a capability and binds it to `name`. The fields configure it, such as the port to listen on. Each field is a literal, fixed in the source, or the name of a setting.
 - `start Component { handoffs };` starts a component and hands it its fields (see [Starting components](#starting-components)).
+- `front end via server calls [...];` declares the program's browser front end and the routes it calls (see [Front end](#front-end)).
 - `grant` is the only way to create a capability. `setting` and `grant` may appear only in an app.
 - Settings may be `bool`, an integer type, or `String`. Passing a setting to a component in `start` is Draft.
 - A relative file path in a grant is resolved against the directory the program is run from, as any command-line tool resolves the paths it is given (see [`runtime.md`](runtime.md#settings-and-grants)).
@@ -227,7 +229,7 @@ async fn ship(&self, sku: String, quantity: u32) -> Result<String, ShipError> {
 - The attributes are `get`, `post`, `put`, `patch` and `delete`, one for each HTTP method.
 - `via = field` names the `HttpServer` capability the requests arrive through. It is always required.
 - A path segment in `{` `}` is a path parameter. It binds to the function parameter of the same name, and takes that parameter's type.
-- `body = name` binds the request body to the function parameter `name`. The body is read as UTF-8 text and converted to the parameter's type as a path segment is, so a `u32` body is the digits of the number.
+- `body = name` binds the request body to the function parameter `name`. The body is read as UTF-8 text and converted to the parameter's type as a path segment is, so a `u32` body is the digits of the number. A body parameter of type `Json<T>` is read as JSON instead (see below).
 - The compiler rejects a path parameter or `body` with no matching function parameter, and a function parameter that nothing supplies.
 - Each path segment is URL-decoded before it is converted to the parameter's type. A request whose path or parameter types match no route gets `404 Not Found` without reaching a handler. A body that cannot be converted gets `400 Bad Request`.
 - The function's value is the reply, as with any Rust function: its final expression, or a `return`.
@@ -237,8 +239,9 @@ The return type decides the response:
 | Return type | Response |
 | --- | --- |
 | `String` | `200 OK` with the string as a `text/plain; charset=utf-8` body |
-| `Option<String>` | `Some` as for `String`. `None` replies `404 Not Found` with an empty body |
-| `Result<String, E>` | `Ok` as for `String`. `Err` replies with the status named on the error's variant |
+| `Json<T>` | `200 OK` with the value as an `application/json` body, written by serde |
+| `Option<String>` or `Option<Json<T>>` | `Some` as for what it holds. `None` replies `404 Not Found` with an empty body |
+| `Result<String, E>` or `Result<Json<T>, E>` | `Ok` as for what it holds. `Err` replies with the status named on the error's variant |
 
 The error type `E` is an enum whose every variant has a `#[status(Name)]` attribute, using the status names of the requirements dialect. A unit variant replies with an empty body. A variant holding one `String` replies with that string as the body.
 
@@ -254,34 +257,68 @@ enum ShipError {
 }
 ```
 
-**JSON, query parameters and headers.** *(Draft: no example uses them yet. They are confirmed against the typed API contract when an example needs them.)* They take the forms of Rust web frameworks.
+**JSON and query parameters.** *(Used: the Stock tracker lists its stock as JSON, filtered by a query parameter, and stocks an item from a JSON body.)* They take the forms of Rust web frameworks.
 
 ```inset
-#[put("/products/{sku}?{dry_run}", via = http, body = product, header("If-Match") = version)]
-async fn update(
-    &self,
-    sku: String,
-    dry_run: Option<bool>,
-    version: String,
-    product: Json<Product>,
-) -> Result<Json<Product>, UpdateError> {
-    let Json(product) = product;
+#[get("/items?{low}", via = http)]
+async fn stock_levels(&self, low: Option<bool>) -> Json<Vec<StockLevel>> {
+    let levels = self.inventory.levels(low.unwrap_or(false)).await;
+    Json(levels)
+}
+
+#[put("/items/{sku}", via = http, body = item)]
+async fn stock_item(&self, sku: String, item: Json<Item>) -> String {
+    let Json(item) = item;
     ...
 }
 ```
 
-- `Json<T>` is axum's and actix-web's type of the same name, a tuple struct around the value. A body parameter of type `Json<T>` reads the request body as JSON. A request whose body is not valid JSON for `T` gets `400 Bad Request` without reaching the handler.
-- A reply of type `Json<T>` is `200 OK` with `T` as an `application/json` body. `Option<Json<T>>` and `Result<Json<T>, E>` reply as `Option<String>` and `Result<String, E>` do.
-- `T` must derive serde's `Serialize` to be replied, and `Deserialize` to be read, as it would in Rust. Serde's attributes, such as `#[serde(rename_all = "camelCase")]`, mean what they mean in Rust, and the API contract shows their effect.
+- `Json<T>` is axum's and actix-web's type of the same name, a tuple struct around the value. It is built with `Json(value)`, taken apart with the pattern `Json(value)`, and its value is also `.0`.
+- A body parameter of type `Json<T>` reads the request body as JSON. A request with a body that is not valid JSON for `T` gets `400 Bad Request` without reaching the handler. The request's `Content-Type` is not checked, because the host does not pass request headers yet.
+- `T` must derive serde's `Serialize` to be replied, and `Deserialize` to be read, as it would in Rust. Serde's `rename_all` and `rename` mean what they mean in Rust, and the API contract shows their effect (see [Types](#types)).
+- A map in a JSON body has `String` keys, because a JSON object's keys are text.
 - A query parameter is written after `?` in the path template, in `{` `}` like a path parameter, and binds to the function parameter of the same name. Several are separated by `&`: `"/items?{limit}&{after}"`. A parameter of type `Option<T>` may be left out of the request. Any other must be present, or the request gets `400 Bad Request`.
-- `header("Name") = param` binds a request header to a parameter, converted as a path segment is. As for query parameters, an `Option` header may be missing and any other must be present.
+- A query parameter is converted as a path segment is, after `%XX` escapes are decoded and `+` is read as a space, as browsers write a form. A value that does not convert gets `400 Bad Request`. A parameter the route does not name is ignored, and of two with the same name the first is read.
+- *(Draft: no example needs one yet.)* `header("Name") = param` binds a request header to a parameter, converted as a path segment is. As for query parameters, an `Option` header may be missing and any other must be present. The parser reports it as not supported yet.
 - Headers in the reply, other than `Content-Type`, are not yet supported.
 
 *Why query parameters go in the path template:* every input of a route is then visible in one string, which is what the diagram labels the route with and what the API contract describes. Rocket writes them the same way, with `<` `>` where Inset uses `{` `}` for its path parameters.
 
+*Why headers wait:* no example program reads a request header, and the host passes a request's method, path and body to the program but not its headers. Headers come with the first program that needs one, with the WebAssembly interface change that carries them.
+
 *Why `via` is required:* the capability is the source of the diagram arrow, so it is always written down. It also lets a component hold two servers, such as a public one and an admin one.
 
 *Why statuses are attributes on the error type:* the same enum is often both a message's error and a route's, as `ShipError` is. The `?` operator then carries an error from a child straight to the HTTP reply, and the status sits next to the variant that means it.
+
+### Front end
+
+**Status:** Used.
+
+A program's browser front end is free-form HTML and JavaScript in `web/`, beside `src/`. The app declares the front end, the server for its files, and the routes the page calls.
+
+```inset
+app StockTracker {
+    setting port: u16 = 8080;
+    grant http: HttpServer { port };
+    grant items: Table<String, Item> { file: "stock.db", name: "items" };
+    /// The page staff use in a browser to see stock levels and stock new items.
+    front end via http calls ["GET /items?{low}", "PUT /items/{sku}"];
+    start Warehouse { http: move http, items: move items };
+}
+```
+
+- `front end via server calls [...];` goes in the app. `server` is an `HttpServer` grant, and an app has at most one front end.
+- Each call names a route of that server by its method and its path, exactly as the route's attribute writes it, with any query.
+- The compiler builds every file under `web/` into the program. A `GET` that no route of the server takes is answered with a file. The path `/`, or any path ending in `/`, gets `index.html`, and any other path gets the file at that path under `web/`. The content type follows the file's extension. A path with no file gets `404 Not Found`.
+- `web/` must hold `index.html`, the page at `/`. A `web/` that holds files when the app declares no front end is an error, as a file under `src/` that no `mod` declares is.
+- The diagram draws the front end as one box outside the app, on the side of the clients, with an arrow to each route it calls.
+- `inset build` writes the program's API contract beside the component, as `target/inset/<package>.d.ts` and `target/inset/<package>.openapi.json`. `inset contract` writes either one alone. The front end imports the TypeScript types to check what it sends and reads, as the Stock tracker's `web/app.js` does with JSDoc.
+
+*Why the calls are declared:* the compiler does not read JavaScript, and a call found by reading it would depend on how the code was written, such as a path built from parts. A list in the app is exact, and the checker holds each entry to a real route, so every arrow on the diagram is true. The list cannot show a call the front end makes without listing it, so the arrows are the author's statement, checked against the routes. The reviewer, who reviews the front end by using it, sees which routes it claims to call.
+
+*Why `web/` and not a grant:* the files are part of the program, written and reviewed with it, so they are built into it as its source is, and the program never reads a file at run time. They are served through the `HttpServer` the app already grants, so the front end adds no capability. The server's holder still answers every route, and the files answer only what no route takes.
+
+*Why the front end is opaque:* business logic stays in the back end, where requirements test it, and the front end is reviewed by using it. The diagram shows only what the front end can reach, which is the routes it calls.
 
 ### Messages between components
 
@@ -461,8 +498,11 @@ struct Item {
 
 - `struct` and `enum` are declared at the top level of a module, as in Rust. A struct has named fields, and an enum's variants hold nothing or a list of types.
 - A struct or enum holds data. It cannot hold a capability, a handle or an outlet.
-- `#[derive(...)]` may list `Clone`, `Copy`, `Debug`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash` and `Default`, and serde's `Serialize` and `Deserialize` for JSON bodies *(Draft)*. Other standard traits are implemented by hand (see [What Inset keeps from Rust](#what-inset-keeps-from-rust)).
+- `#[derive(...)]` may list `Clone`, `Copy`, `Debug`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash` and `Default`, and serde's `Serialize` and `Deserialize` for JSON bodies. Other standard traits are implemented by hand (see [What Inset keeps from Rust](#what-inset-keeps-from-rust)).
+- Of serde's attributes, a type that derives `Serialize` or `Deserialize` may take `#[serde(rename_all = "...")]`, with any of serde's rules such as `"camelCase"`, and a field or variant may take `#[serde(rename = "...")]`. They mean what they mean in Rust, and change only the JSON form. The compiler reports any other serde argument as not supported here, and two fields or variants that end up with one name in JSON.
+- A data type cannot be called `Json`, which is the JSON body type.
 - A derive needs what Rust needs: `Copy` needs `Clone`, `Eq` and `PartialOrd` need `PartialEq`, and `Ord` needs `PartialOrd` and `Eq`. Each field must have the trait too, so a struct holding a `String` cannot derive `Copy`, and one holding an `f64` cannot derive `Eq`. The compiler reports these, rather than leaving them to rustc.
+- Serde writes a struct as an object of its fields, a unit variant as its name, a variant holding one value as `{"name": value}`, one holding several as `{"name": [values]}`, `None` as `null`, and a `Decimal` as text, such as `"0.10"`. Serde reads a missing `Option` field as `None`. The API contract and requirement tests use the same form.
 - *(Not supported yet.)* Generic structs and enums, tuple and unit structs, variants with named fields, and deriving `Default` for an enum.
 - A type compared in a requirement step must derive `PartialEq` and `Debug`, so that a failed test can show both values.
 - The compiler decides how a stored type is written to a `Table` (see [`runtime.md`](runtime.md#tables)). No derive is needed for it, because the stored form belongs to the program. A JSON body is seen outside, so its form is stated with serde, as in Rust, and serde's attributes never change what is stored.
@@ -593,9 +633,9 @@ The compiler resolves every step against the program, so a step that names an un
 | --- | --- |
 | `given <fact>` | Sets up what a fake capability holds before the test |
 | `when App receives METHOD /path` | Delivers an HTTP request to the app |
-| `when App receives METHOD /path with body` | Delivers an HTTP request with a body |
+| `when App receives METHOD /path with body` | Delivers an HTTP request with a body: text, or a value sent as JSON |
 | `then App replies Status` | The response has the status and an empty body |
-| `then App replies Status with body` | The response has the status, and its body equals `body` |
+| `then App replies Status with body` | The response has the status, and its body equals `body`, as text or as a value read from JSON |
 | `then <fact>` | A fake capability holds this now |
 | `then <check>` | A Rust condition on what fake capabilities hold is true |
 | `and ...` | Repeats the kind of the step before it |
@@ -609,7 +649,7 @@ The compiler resolves every step against the program, so a step that names an un
 - Statuses are written with their standard names from the HTTP specification (RFC 9110) in `UpperCamelCase`, such as `OK`, `NotFound`, `Conflict`, `BadRequest` and `InternalServerError`.
 - When the app grants more than one `HttpServer`, the `when` step names the one to use: `when HelloHttp receives GET /hello/Ada via http`. `via` comes before any `with`. *(Draft.)*
 - The request must match a route, with each path parameter converting to its type, so a requirement cannot ask for a path the program has no route for. A route that returns `Option<String>` is how a requirement tests `NotFound`.
-- The status must be one the route can reply: `OK` for a `String`, `OK` or `NotFound` for an `Option<String>`, `OK` or any status named on the error type for a `Result<String, E>`, `BadRequest` too when the route reads a body, and `InternalServerError` for any route, since a rolled-back failure replies with it.
+- The status must be one the route can reply: `OK` for a `String` or a `Json<T>`, `OK` or `NotFound` for an `Option`, `OK` or any status named on the error type for a `Result`, `BadRequest` too when the route reads a body or a query parameter, and `InternalServerError` for any route, since a rolled-back failure replies with it.
 
 *Why steps use HTTP terms:* requirements are reviewed by software engineers, so steps use the precise terms of the boundary they test. At an HTTP boundary, the method and the status are often the requirement itself, such as a missing item giving `NotFound`. Plain verbs such as "asks for" would hide them behind a vocabulary the reviewer has to learn anyway. The plain-English part of a requirement is its sentence, which is what test reports show.
 
@@ -647,8 +687,10 @@ Values in facts are written as Rust literals and constructors: `40`, `"M6 bolt"`
 - A value takes the type the program expects in that place. `"M6 bolt"` is a `String` in a `String` field, and `0.10` is a `Decimal` in a `Decimal` field.
 - A value is a literal, `dec!(...)`, a struct that gives every field, an enum's variant, `Some`, `None`, `Ok` or `Err` with a value, a tuple, or a list as `vec![...]`. Names resolve as they would in `src/main.inset`, so a variant is written with its enum, as in `Place::Shelf(3)`. *(Not supported yet: maps and sets.)*
 - An HTTP body is text. It is written as a string literal, or as a text block.
-- *(Draft)* A JSON body is written as a value of the route's type, such as `with Product { sku: "bolt-m6", net: dec!(0.10) }`. The test converts it to JSON with the type's serde form, and a reply is compared as a value after it is read back, so the order of keys and spacing do not matter. A string literal or text block is still sent as written, for when the exact JSON is the requirement.
-- *(Draft)* A query parameter is part of the path, as in an address bar: `when StockTracker receives GET /items?limit=10`. A request header is a line of its own after the `when` step: `and header If-Match is "3"`.
+- A JSON body is written as a value of the route's `Json<T>` type, such as `with Item { on_hand: 40, reorder_level: 10, target_level: 50 }`. The test sends it as JSON in serde's form for the type. After `replies`, a value is compared with the reply once the reply is read back as the route's type, so the order of keys and the spacing do not matter, and a `Decimal` compares by value. A string literal or text block is still sent, or compared, exactly as written, for when the exact JSON is the requirement.
+- A value may run onto the lines below its step, indented further, as a step can.
+- A query parameter is part of the path, as in an address bar: `when StockTracker receives GET /items?low=true`. Each parameter must be one the route names. Its value is not checked, so a requirement can show that a value that does not convert gets `BadRequest`.
+- *(Draft)* A request header is a line of its own after the `when` step: `and header If-Match is "3"`.
 
 **Text blocks.** A body that spans lines is written as a text block, after `with` at the end of the step's line. The block starts and ends with `"""` on lines of their own, indented under the step. Each line between them is one line of the text, ending in a newline, with the block's indentation removed. Text blocks come from Gherkin's doc strings.
 
@@ -752,10 +794,11 @@ use_decl     = a Rust `use` declaration ;
 mod_decl     = [ "pub" ] "mod" ident ";" ;
 item         = { doc } [ "pub" ] ( app | component | extern_comp | struct | enum | algorithm ) ;
 
-app          = "app" Ident "{" { { doc } setting | grant | start } "}" ;
+app          = "app" Ident "{" { { doc } ( setting | grant | start | front_end ) } "}" ;
 setting      = "setting" ident ":" type "=" literal ";" ;
 grant        = "grant" ident ":" type "{" [ fields ] "}" ";" ;
 start        = "start" [ ident ":" ] Ident "{" [ handoffs ] "}" ";" ;
+front_end    = "front" "end" "via" ident "calls" "[" [ STRING { "," STRING } [ "," ] ] "]" ";" ;
 handoffs     = handoff { "," handoff } [ "," ] ;
 handoff      = ident ":" ( "move" place | "&" ident | "send" ( "self" | ident ) "." ident | expr ) ;
 
@@ -765,7 +808,7 @@ condition    = "Panic" | "Overflow" | "Capability" "(" ident ")" | "Message" "("
 response     = "rollback" | "restart" ;
 field_decl   = { doc } [ "#[handed_down]" ] ident ":" type ;
 function     = [ route_attr | "#[message]" ] [ "pub" ] [ "async" ] "fn" ident "(" fn_params ")" [ "->" type ] block ;
-route_attr   = "#[" METHOD "(" STRING "," "via" "=" ident [ "," "body" "=" ident ] ")" "]" ;
+route_attr   = "#[" METHOD "(" ROUTE_PATH "," "via" "=" ident [ "," "body" "=" ident ] ")" "]" ;
 fn_params    = [ receiver [ "," ] ] [ params ] ;
 receiver     = "&self" | "&mut self" ;
 
@@ -773,11 +816,12 @@ extern_comp  = rust_attr "extern" "component" Ident "{" [ field_decls ] { { doc 
 rust_attr    = "#[" "rust" "(" "path" "=" STRING "," "crates" "=" "[" STRING { "," STRING } "]" ")" "]" ;
 signature    = "#[message]" [ "pub" ] [ "async" ] "fn" ident "(" fn_params ")" [ "->" type ] ";" ;
 
-struct       = [ derive ] "struct" Ident "{" [ struct_field { "," struct_field } [ "," ] ] "}" ;
-struct_field = { doc } [ "pub" [ "(" ( "crate" | "super" ) ")" ] ] ident ":" type ;
-enum         = [ derive ] "enum" Ident "{" variant { "," variant } [ "," ] "}" ;
-variant      = { doc } [ "#[" "status" "(" Ident ")" "]" ] Ident [ "(" type { "," type } ")" ] ;
+struct       = [ derive ] [ serde ] "struct" Ident "{" [ struct_field { "," struct_field } [ "," ] ] "}" ;
+struct_field = { doc } [ serde ] [ "pub" [ "(" ( "crate" | "super" ) ")" ] ] ident ":" type ;
+enum         = [ derive ] [ serde ] "enum" Ident "{" variant { "," variant } [ "," ] "}" ;
+variant      = { doc } [ "#[" "status" "(" Ident ")" "]" ] [ serde ] Ident [ "(" type { "," type } ")" ] ;
 derive       = "#[" "derive" "(" Ident { "," Ident } ")" "]" ;
+serde        = "#[" "serde" "(" ident "=" STRING ")" "]" ;
 
 algorithm    = "fn" ident "(" [ params ] ")" [ "->" type ] block ;
 
@@ -796,7 +840,7 @@ expr         = a Rust expression, using the features Inset keeps, such as `match
              | "fork" "for" pattern "in" expr block ;
 ```
 
-`METHOD` is one of `get`, `post`, `put`, `patch` or `delete`. `Ident` is an `UpperCamelCase` identifier and `ident` a `lower_snake_case` one. An algorithm inside a component uses the `function` rule with no attribute and no receiver.
+`METHOD` is one of `get`, `post`, `put`, `patch` or `delete`. A `ROUTE_PATH` is a string: the path, with `{name}` segments, then optionally `?` and `{name}` query parameters separated by `&`. The `serde` argument is `rename_all` on a struct or enum, and `rename` on a field or variant. `Ident` is an `UpperCamelCase` identifier and `ident` a `lower_snake_case` one. An algorithm inside a component uses the `function` rule with no attribute and no receiver.
 
 Requirements dialect (`*.req.inset`):
 
@@ -806,12 +850,13 @@ requirement  = "requirement" STRING NEWLINE INDENT [ for_all ] step { step } [ e
 for_all      = "for" "all" ident ":" type [ "where" EXPR ] NEWLINE ;
 
 step         = ( "given" fact
-               | "when" Ident "receives" HTTP_METHOD path [ "via" ident ] [ "with" text ]
-               | "then" ( Ident "replies" Ident [ "with" text ] | fact | EXPR )
+               | "when" Ident "receives" HTTP_METHOD path [ "via" ident ] [ "with" body ]
+               | "then" ( Ident "replies" Ident [ "with" body ] | fact | EXPR )
                | "and" step_rest ) NEWLINE ;
 fact         = ident "[" value "]" "is" value | ident "is" "empty" | ident "fails" ;
+body         = text | value ;
 text         = STRING | NEWLINE INDENT '"""' NEWLINE { LINE NEWLINE } '"""' DEDENT ;
-path         = "/" segment { "/" segment } ;
+path         = "/" segment { "/" segment } [ "?" query { "&" query } ] ;
 
 examples     = "examples" NEWLINE heading row { row } ;
 heading      = "|" HEADING { "|" HEADING } "|" NEWLINE ;
@@ -820,7 +865,7 @@ row          = "|" CELL { "|" CELL } "|" NEWLINE ;
 value        = a Rust literal, or a struct, enum or list built from values ;
 ```
 
-`HTTP_METHOD` is one of `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. A `segment` is one or more characters other than whitespace and `/`. `step_rest` is the rest of a step of the same kind as the one before. `EXPR` is a Rust expression. A `HEADING` is free text, and a `CELL` the text that replaces its placeholder. Placeholders, `<` free text `>`, are replaced before a step is read, so they may appear anywhere in a step.
+`HTTP_METHOD` is one of `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. A `segment` is one or more characters other than whitespace, `/` and `?`, and a `query` is `name=value`. `step_rest` is the rest of a step of the same kind as the one before. `EXPR` is a Rust expression. A `HEADING` is free text, and a `CELL` the text that replaces its placeholder. Placeholders, `<` free text `>`, are replaced before a step is read, so they may appear anywhere in a step.
 
 Expressions, types, patterns and blocks may nest at most 64 levels deep. Deeper code is an error, whose help suggests moving the inner part into a function of its own.
 

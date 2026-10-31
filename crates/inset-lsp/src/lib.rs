@@ -249,7 +249,8 @@ impl Server<'_> {
     /// A program's files: those on disk, with the open documents' text in
     /// place of what is saved.
     fn program(&self, root: &Path) -> Program {
-        let mut files = Program::load(root).map_or_else(|_| Vec::new(), |p| p.files);
+        let (mut files, web) =
+            Program::load(root).map_or_else(|_| (Vec::new(), None), |p| (p.files, p.web));
         for (path, text) in self.open_paths() {
             let Some(relative) = program_path(root, &path) else {
                 continue;
@@ -262,7 +263,9 @@ impl Server<'_> {
                 }),
             }
         }
-        Program::from_files(files)
+        let mut program = Program::from_files(files);
+        program.web = web;
+        program
     }
 
     /// The text of a document: as open, or as saved.

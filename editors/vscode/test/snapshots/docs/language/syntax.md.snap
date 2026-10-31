@@ -303,98 +303,223 @@
 #^ punctuation.brackets.curly.inset
 
 ## Routes (inset)
->#[put("/products/{sku}?{dry_run}", via = http, body = product, header("If-Match") = version)]
+>#[get("/items?{low}", via = http)]
 #^ meta.attribute.route.inset punctuation.definition.attribute.inset
 # ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
 #  ^^^ meta.attribute.route.inset constant.language.http-method.inset
 #     ^ meta.attribute.route.inset punctuation.brackets.round.inset
 #      ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.begin.inset
-#       ^^^^^^^^^^ meta.attribute.route.inset string.quoted.double.route.inset
-#                 ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.begin.inset
-#                  ^^^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset variable.parameter.route.inset
-#                     ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.end.inset
-#                      ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.separator.query.inset
-#                       ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.begin.inset
-#                        ^^^^^^^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset variable.parameter.route.inset
-#                               ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.end.inset
-#                                ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.end.inset
-#                                 ^ meta.attribute.route.inset punctuation.separator.comma.inset
-#                                   ^^^ meta.attribute.route.inset keyword.other.route-option.inset
-#                                       ^ meta.attribute.route.inset keyword.operator.assignment.inset
-#                                         ^^^^ meta.attribute.route.inset variable.other.capability.inset
-#                                             ^ meta.attribute.route.inset punctuation.separator.comma.inset
-#                                               ^^^^ meta.attribute.route.inset keyword.other.route-option.inset
-#                                                    ^ meta.attribute.route.inset keyword.operator.assignment.inset
-#                                                      ^^^^^^^ meta.attribute.route.inset variable.parameter.inset
-#                                                             ^ meta.attribute.route.inset punctuation.separator.comma.inset
-#                                                               ^^^^^^ meta.attribute.route.inset keyword.other.route-option.inset
-#                                                                     ^ meta.attribute.route.inset punctuation.brackets.round.inset
-#                                                                      ^^^^^^^^^^ meta.attribute.route.inset string.quoted.double.header.inset
-#                                                                                ^ meta.attribute.route.inset punctuation.brackets.round.inset
-#                                                                                  ^ meta.attribute.route.inset keyword.operator.assignment.inset
-#                                                                                    ^^^^^^^ meta.attribute.route.inset variable.parameter.inset
-#                                                                                           ^ meta.attribute.route.inset punctuation.brackets.round.inset
-#                                                                                            ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
->async fn update(
+#       ^^^^^^ meta.attribute.route.inset string.quoted.double.route.inset
+#             ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.separator.query.inset
+#              ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.begin.inset
+#               ^^^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset variable.parameter.route.inset
+#                  ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.end.inset
+#                   ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.end.inset
+#                    ^ meta.attribute.route.inset punctuation.separator.comma.inset
+#                      ^^^ meta.attribute.route.inset keyword.other.route-option.inset
+#                          ^ meta.attribute.route.inset keyword.operator.assignment.inset
+#                            ^^^^ meta.attribute.route.inset variable.other.capability.inset
+#                                ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#                                 ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+>async fn stock_levels(&self, low: Option<bool>) -> Json<Vec<StockLevel>> {
 #^^^^^ storage.modifier.inset
 #      ^^ storage.type.function.inset
-#         ^^^^^^ entity.name.function.inset
-#               ^ punctuation.brackets.round.inset
->    &self,
-#    ^ keyword.operator.borrow.inset
-#     ^^^^ variable.language.self.inset
-#         ^ punctuation.separator.comma.inset
->    sku: String,
-#    ^^^ variable.other.inset
-#       ^ punctuation.separator.colon.inset
-#         ^^^^^^ entity.name.type.inset
-#               ^ punctuation.separator.comma.inset
->    dry_run: Option<bool>,
-#    ^^^^^^^ variable.other.inset
-#           ^ punctuation.separator.colon.inset
-#             ^^^^^^ entity.name.type.inset
-#                   ^ punctuation.brackets.angle.inset
-#                    ^^^^ entity.name.type.primitive.inset
-#                        ^ punctuation.brackets.angle.inset
-#                         ^ punctuation.separator.comma.inset
->    version: String,
-#    ^^^^^^^ variable.other.inset
-#           ^ punctuation.separator.colon.inset
-#             ^^^^^^ entity.name.type.inset
-#                   ^ punctuation.separator.comma.inset
->    product: Json<Product>,
-#    ^^^^^^^ variable.other.inset
-#           ^ punctuation.separator.colon.inset
-#             ^^^^ entity.name.type.inset
-#                 ^ punctuation.brackets.angle.inset
-#                  ^^^^^^^ entity.name.type.inset
-#                         ^ punctuation.brackets.angle.inset
-#                          ^ punctuation.separator.comma.inset
->) -> Result<Json<Product>, UpdateError> {
-#^ punctuation.brackets.round.inset
-#  ^^ keyword.operator.arrow.skinny.inset
-#     ^^^^^^ entity.name.type.inset
-#           ^ punctuation.brackets.angle.inset
-#            ^^^^ entity.name.type.inset
-#                ^ punctuation.brackets.angle.inset
-#                 ^^^^^^^ entity.name.type.inset
-#                        ^ punctuation.brackets.angle.inset
-#                         ^ punctuation.separator.comma.inset
-#                           ^^^^^^^^^^^ entity.name.type.inset
-#                                      ^ punctuation.brackets.angle.inset
-#                                        ^ punctuation.brackets.curly.inset
->    let Json(product) = product;
+#         ^^^^^^^^^^^^ entity.name.function.inset
+#                     ^ punctuation.brackets.round.inset
+#                      ^ keyword.operator.borrow.inset
+#                       ^^^^ variable.language.self.inset
+#                           ^ punctuation.separator.comma.inset
+#                             ^^^ variable.other.inset
+#                                ^ punctuation.separator.colon.inset
+#                                  ^^^^^^ entity.name.type.inset
+#                                        ^ punctuation.brackets.angle.inset
+#                                         ^^^^ entity.name.type.primitive.inset
+#                                             ^ punctuation.brackets.angle.inset
+#                                              ^ punctuation.brackets.round.inset
+#                                                ^^ keyword.operator.arrow.skinny.inset
+#                                                   ^^^^ support.type.inset
+#                                                       ^ punctuation.brackets.angle.inset
+#                                                        ^^^ entity.name.type.inset
+#                                                           ^ punctuation.brackets.angle.inset
+#                                                            ^^^^^^^^^^ entity.name.type.inset
+#                                                                      ^ punctuation.brackets.angle.inset
+#                                                                       ^ punctuation.brackets.angle.inset
+#                                                                         ^ punctuation.brackets.curly.inset
+>    let levels = self.inventory.levels(low.unwrap_or(false)).await;
 #    ^^^ storage.type.inset
-#        ^^^^ entity.name.type.inset
+#        ^^^^^^ variable.other.inset
+#               ^ keyword.operator.assignment.inset
+#                 ^^^^ variable.language.self.inset
+#                     ^ punctuation.accessor.dot.inset
+#                      ^^^^^^^^^ variable.other.inset
+#                               ^ punctuation.accessor.dot.inset
+#                                ^^^^^^ entity.name.function.inset
+#                                      ^ punctuation.brackets.round.inset
+#                                       ^^^ variable.other.inset
+#                                          ^ punctuation.accessor.dot.inset
+#                                           ^^^^^^^^^ entity.name.function.inset
+#                                                    ^ punctuation.brackets.round.inset
+#                                                     ^^^^^ constant.language.bool.inset
+#                                                          ^ punctuation.brackets.round.inset
+#                                                           ^ punctuation.brackets.round.inset
+#                                                            ^ punctuation.accessor.dot.inset
+#                                                             ^^^^^ keyword.control.inset
+#                                                                  ^ punctuation.terminator.statement.inset
+>    Json(levels)
+#    ^^^^ support.type.inset
+#        ^ punctuation.brackets.round.inset
+#         ^^^^^^ variable.other.inset
+#               ^ punctuation.brackets.round.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>#[put("/items/{sku}", via = http, body = item)]
+#^ meta.attribute.route.inset punctuation.definition.attribute.inset
+# ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+#  ^^^ meta.attribute.route.inset constant.language.http-method.inset
+#     ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#      ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.begin.inset
+#       ^^^^^^^ meta.attribute.route.inset string.quoted.double.route.inset
+#              ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.begin.inset
+#               ^^^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset variable.parameter.route.inset
+#                  ^ meta.attribute.route.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.end.inset
+#                   ^ meta.attribute.route.inset string.quoted.double.route.inset punctuation.definition.string.end.inset
+#                    ^ meta.attribute.route.inset punctuation.separator.comma.inset
+#                      ^^^ meta.attribute.route.inset keyword.other.route-option.inset
+#                          ^ meta.attribute.route.inset keyword.operator.assignment.inset
+#                            ^^^^ meta.attribute.route.inset variable.other.capability.inset
+#                                ^ meta.attribute.route.inset punctuation.separator.comma.inset
+#                                  ^^^^ meta.attribute.route.inset keyword.other.route-option.inset
+#                                       ^ meta.attribute.route.inset keyword.operator.assignment.inset
+#                                         ^^^^ meta.attribute.route.inset variable.parameter.inset
+#                                             ^ meta.attribute.route.inset punctuation.brackets.round.inset
+#                                              ^ meta.attribute.route.inset punctuation.brackets.attribute.inset
+>async fn stock_item(&self, sku: String, item: Json<Item>) -> String {
+#^^^^^ storage.modifier.inset
+#      ^^ storage.type.function.inset
+#         ^^^^^^^^^^ entity.name.function.inset
+#                   ^ punctuation.brackets.round.inset
+#                    ^ keyword.operator.borrow.inset
+#                     ^^^^ variable.language.self.inset
+#                         ^ punctuation.separator.comma.inset
+#                           ^^^ variable.other.inset
+#                              ^ punctuation.separator.colon.inset
+#                                ^^^^^^ entity.name.type.inset
+#                                      ^ punctuation.separator.comma.inset
+#                                        ^^^^ variable.other.inset
+#                                            ^ punctuation.separator.colon.inset
+#                                              ^^^^ support.type.inset
+#                                                  ^ punctuation.brackets.angle.inset
+#                                                   ^^^^ entity.name.type.inset
+#                                                       ^ punctuation.brackets.angle.inset
+#                                                        ^ punctuation.brackets.round.inset
+#                                                          ^^ keyword.operator.arrow.skinny.inset
+#                                                             ^^^^^^ entity.name.type.inset
+#                                                                    ^ punctuation.brackets.curly.inset
+>    let Json(item) = item;
+#    ^^^ storage.type.inset
+#        ^^^^ support.type.inset
 #            ^ punctuation.brackets.round.inset
-#             ^^^^^^^ variable.other.inset
-#                    ^ punctuation.brackets.round.inset
-#                      ^ keyword.operator.assignment.inset
-#                        ^^^^^^^ variable.other.inset
-#                               ^ punctuation.terminator.statement.inset
+#             ^^^^ variable.other.inset
+#                 ^ punctuation.brackets.round.inset
+#                   ^ keyword.operator.assignment.inset
+#                     ^^^^ variable.other.inset
+#                         ^ punctuation.terminator.statement.inset
 >    ...
 #    ^^ keyword.operator.range.inset
 #      ^ punctuation.accessor.dot.inset
+>}
+#^ punctuation.brackets.curly.inset
+
+## Front end (inset)
+>app StockTracker {
+#^^^ storage.type.app.inset
+#    ^^^^^^^^^^^^ entity.name.type.app.inset
+#                 ^ punctuation.brackets.curly.inset
+>    setting port: u16 = 8080;
+#    ^^^^^^^ storage.type.setting.inset
+#            ^^^^ variable.other.setting.inset
+#                ^ punctuation.separator.colon.inset
+#                  ^^^ entity.name.type.primitive.inset
+#                      ^ keyword.operator.assignment.inset
+#                        ^^^^ constant.numeric.decimal.inset
+#                            ^ punctuation.terminator.statement.inset
+>    grant http: HttpServer { port };
+#    ^^^^^ storage.type.grant.inset
+#          ^^^^ variable.other.capability.inset
+#              ^ punctuation.separator.colon.inset
+#                ^^^^^^^^^^ support.type.capability.inset
+#                           ^ punctuation.brackets.curly.inset
+#                             ^^^^ variable.other.inset
+#                                  ^ punctuation.brackets.curly.inset
+#                                   ^ punctuation.terminator.statement.inset
+>    grant items: Table<String, Item> { file: "stock.db", name: "items" };
+#    ^^^^^ storage.type.grant.inset
+#          ^^^^^ variable.other.capability.inset
+#               ^ punctuation.separator.colon.inset
+#                 ^^^^^ support.type.capability.inset
+#                      ^ punctuation.brackets.angle.inset
+#                       ^^^^^^ entity.name.type.inset
+#                             ^ punctuation.separator.comma.inset
+#                               ^^^^ entity.name.type.inset
+#                                   ^ punctuation.brackets.angle.inset
+#                                     ^ punctuation.brackets.curly.inset
+#                                       ^^^^ variable.other.inset
+#                                           ^ punctuation.separator.colon.inset
+#                                             ^ string.quoted.double.inset punctuation.definition.string.begin.inset
+#                                              ^^^^^^^^ string.quoted.double.inset
+#                                                      ^ string.quoted.double.inset punctuation.definition.string.end.inset
+#                                                       ^ punctuation.separator.comma.inset
+#                                                         ^^^^ variable.other.inset
+#                                                             ^ punctuation.separator.colon.inset
+#                                                               ^ string.quoted.double.inset punctuation.definition.string.begin.inset
+#                                                                ^^^^^ string.quoted.double.inset
+#                                                                     ^ string.quoted.double.inset punctuation.definition.string.end.inset
+#                                                                       ^ punctuation.brackets.curly.inset
+#                                                                        ^ punctuation.terminator.statement.inset
+>    /// The page staff use in a browser to see stock levels and stock new items.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    front end via http calls ["GET /items?{low}", "PUT /items/{sku}"];
+#    ^^^^^ meta.front-end.inset storage.type.front-end.inset
+#          ^^^ meta.front-end.inset storage.type.front-end.inset
+#              ^^^ meta.front-end.inset keyword.other.route-option.inset
+#                  ^^^^ meta.front-end.inset variable.other.capability.inset
+#                       ^^^^^ meta.front-end.inset keyword.other.front-end.inset
+#                             ^ meta.front-end.inset punctuation.brackets.square.inset
+#                              ^ meta.front-end.inset string.quoted.double.route.inset punctuation.definition.string.begin.inset
+#                               ^^^ meta.front-end.inset string.quoted.double.route.inset constant.language.http-method.inset
+#                                  ^^^^^^^ meta.front-end.inset string.quoted.double.route.inset
+#                                         ^ meta.front-end.inset string.quoted.double.route.inset punctuation.separator.query.inset
+#                                          ^ meta.front-end.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.begin.inset
+#                                           ^^^ meta.front-end.inset string.quoted.double.route.inset meta.route-parameter.inset variable.parameter.route.inset
+#                                              ^ meta.front-end.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.end.inset
+#                                               ^ meta.front-end.inset string.quoted.double.route.inset punctuation.definition.string.end.inset
+#                                                ^ meta.front-end.inset punctuation.separator.comma.inset
+#                                                  ^ meta.front-end.inset string.quoted.double.route.inset punctuation.definition.string.begin.inset
+#                                                   ^^^ meta.front-end.inset string.quoted.double.route.inset constant.language.http-method.inset
+#                                                      ^^^^^^^^ meta.front-end.inset string.quoted.double.route.inset
+#                                                              ^ meta.front-end.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.begin.inset
+#                                                               ^^^ meta.front-end.inset string.quoted.double.route.inset meta.route-parameter.inset variable.parameter.route.inset
+#                                                                  ^ meta.front-end.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.end.inset
+#                                                                   ^ meta.front-end.inset string.quoted.double.route.inset punctuation.definition.string.end.inset
+#                                                                    ^ meta.front-end.inset punctuation.brackets.square.inset
+#                                                                     ^ punctuation.terminator.statement.inset
+>    start Warehouse { http: move http, items: move items };
+#    ^^^^^ meta.start.inset storage.type.start.inset
+#          ^^^^^^^^^ meta.start.inset entity.name.type.component.inset
+#                    ^ meta.start.inset punctuation.brackets.curly.inset
+#                      ^^^^ meta.start.inset variable.other.member.inset
+#                          ^ meta.start.inset punctuation.separator.colon.inset
+#                            ^^^^ meta.start.inset storage.modifier.boundary.move.inset
+#                                 ^^^^ meta.start.inset variable.other.inset
+#                                     ^ meta.start.inset punctuation.separator.comma.inset
+#                                       ^^^^^ meta.start.inset variable.other.member.inset
+#                                            ^ meta.start.inset punctuation.separator.colon.inset
+#                                              ^^^^ meta.start.inset storage.modifier.boundary.move.inset
+#                                                   ^^^^^ meta.start.inset variable.other.inset
+#                                                         ^ meta.start.inset punctuation.brackets.curly.inset
+#                                                          ^ punctuation.terminator.statement.inset
 >}
 #^ punctuation.brackets.curly.inset
 

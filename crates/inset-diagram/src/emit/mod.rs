@@ -33,8 +33,9 @@ use inset_syntax::ast::{
 use inset_syntax::{Diagnostic, Span};
 
 use crate::model::{
-    App, Component, Condition, Config, Diagram, Edge, FailureArm, Field, FieldKind, Function,
-    Grant, Handoff, Method, Outside, OutsideKind, Param, Receiver, Response, Route, Setting,
+    App, Component, Condition, Config, Diagram, Edge, FailureArm, Field, FieldKind, FrontEnd,
+    Function, Grant, Handoff, Method, Outside, OutsideKind, Param, Receiver, Response, Route,
+    Setting,
 };
 
 /// Checks the program and emits its diagram data. The reports are the
@@ -212,6 +213,10 @@ impl<'a> Emitter<'a> {
             }
         }
         let components = self.starts(&app_id, &app.starts, None);
+        let front_end = app
+            .front_ends
+            .first()
+            .map(|f| self.front_end(f, &components));
         let algorithms = algorithms
             .into_iter()
             .map(|(owner, item, f)| self.function(&owner, f, &item.docs, None))
@@ -228,12 +233,45 @@ impl<'a> Emitter<'a> {
                 doc: doc(&item.docs),
                 settings,
                 grants,
-                front_end: None,
+                front_end,
                 components,
             },
             algorithms,
             edges,
             coverage: None,
+        }
+    }
+
+    /// The front end, with each call as the ID of the handler of the route
+    /// it names, on a component that the `via` grant reaches.
+    fn front_end(&mut self, front: &ast::FrontEnd, components: &[Component]) -> FrontEnd {
+        let id = format!("{}/front_end", self.app);
+        self.locate(&id, front.span);
+        let via = format!("{}/grant:{}", self.app, front.via.name);
+        let mut routes = Vec::new();
+        collect_routes(components, &mut routes);
+        let calls = front
+            .calls
+            .iter()
+            .filter_map(|call| {
+                let (method, path) = call.value.split_once(' ')?;
+                routes
+                    .iter()
+                    .find(|route| {
+                        let mut origin = &route.via;
+                        while let Some(next) = self.moved_from.get(origin) {
+                            origin = next;
+                        }
+                        *origin == via && route.path == path && route.method.as_str() == method
+                    })
+                    .map(|route| route.handler.id.clone())
+            })
+            .collect();
+        FrontEnd {
+            id,
+            via,
+            doc: doc(&front.docs),
+            calls,
         }
     }
 
@@ -675,6 +713,13 @@ struct Scope<'a> {
     /// For each field that holds a handle, by its name, the ID of the
     /// component behind it, and that component's declaration.
     handles: Vec<(String, String, &'a ast::Component)>,
+}
+
+fn collect_routes<'c>(components: &'c [Component], out: &mut Vec<&'c Route>) {
+    for component in components {
+        out.extend(&component.routes);
+        collect_routes(&component.components, out);
+    }
 }
 
 fn doc(docs: &[ast::Doc]) -> Option<String> {

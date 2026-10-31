@@ -1,0 +1,22 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:5:31-5:54
+no route of `http` is `GET /products?{limit}`
+the front end calls a route that does not exist
+help: the routes of `http` are "PUT /products/{sku}"
+
+src/main.inset:31:11-31:38
+the query parameter `{after}` has no function parameter
+`list` takes no parameter `after`
+help: add `after: Option<String>` to the function's parameters, or `after: String` if every request must give it
+
+requirements/main.req.inset:5:33-5:50
+no route of `Catalogue` takes `GET /products`
+no route matches this request
+help: the routes of `Catalogue` are `PUT /products/{sku}`
+
+requirements/main.req.inset:7:33-7:53
+no route of `Catalogue` takes `GET /products`
+no route matches this request
+help: the routes of `Catalogue` are `PUT /products/{sku}`

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stock tracker</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Stock</h1>
+    <label><input type="checkbox" id="low"> Low stock only</label>
+    <table>
+      <thead>
+        <tr><th>SKU</th><th>On hand</th><th>Reorder level</th><th></th></tr>
+      </thead>
+      <tbody id="levels"></tbody>
+    </table>
+
+    <h2>Stock an item</h2>
+    <form id="stock">
+      <label>SKU <input name="sku" required pattern="[^/]+"></label>
+      <label>On hand <input name="onHand" type="number" min="0" required></label>
+      <label>Reorder level <input name="reorderLevel" type="number" min="0" required></label>
+      <label>Target level <input name="targetLevel" type="number" min="0" required></label>
+      <button>Stock</button>
+    </form>
+    <p id="outcome" role="status"></p>
+  </main>
+</body>
+</html>

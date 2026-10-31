@@ -1,0 +1,21 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `#[serde(default)]` is not supported here
+    ╭─[ src/main.inset:15:29 ]
+    │
+ 15 │     #[serde(rename = "net", default)]
+    │                             ───┬───  
+    │                                ╰───── Inset takes serde's `rename_all` on a struct or enum, and `rename` on a field or variant
+    │ 
+    │ Help: write `rename = "..."`, or remove this
+────╯
+Error: serde has no rule `snake`
+    ╭─[ src/main.inset:21:22 ]
+    │
+ 21 │ #[serde(rename_all = "snake")]
+    │                      ───┬───  
+    │                         ╰───── not a `rename_all` rule
+    │ 
+    │ Help: the rules are `lowercase`, `UPPERCASE`, `PascalCase`, `camelCase`, `snake_case`, `SCREAMING_SNAKE_CASE`, `kebab-case` and `SCREAMING-KEBAB-CASE`
+────╯

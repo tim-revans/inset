@@ -585,7 +585,7 @@ impl<'a> ReqParser<'a> {
         let (keyword, kind) = step?;
         let span = match &kind {
             StepKind::Request { body: Some(b), .. } | StepKind::Reply { body: Some(b), .. } => {
-                span.to(b.span)
+                span.to(b.span())
             }
             _ => span,
         };
@@ -879,15 +879,16 @@ impl<'a> ReqParser<'a> {
         }
     }
 
-    /// `with "text"`, or `with` at the end of the step and a text block
-    /// below it. `Some(None)` when there is no `with`. `block_failed` says a
-    /// text block was there but has already been reported.
+    /// `with "text"`, `with` at the end of the step and a text block below
+    /// it, or `with` and a value. `Some(None)` when there is no `with`.
+    /// `block_failed` says a text block was there but has already been
+    /// reported.
     fn body(
         &mut self,
         cursor: &mut Cursor<'a>,
         text_block: &mut Option<Text>,
         block_failed: bool,
-    ) -> Option<Option<Text>> {
+    ) -> Option<Option<Body>> {
         match cursor.peek_word() {
             Some(word) if word == "with" => {}
             _ => return Some(None),
@@ -895,7 +896,7 @@ impl<'a> ReqParser<'a> {
         let (_, with) = cursor.word()?;
         if cursor.at_end() {
             if let Some(block) = text_block.take() {
-                return Some(Some(block));
+                return Some(Some(Body::Text(block)));
             }
             if block_failed {
                 return None;
@@ -906,24 +907,27 @@ impl<'a> ReqParser<'a> {
                     with,
                     "nothing follows this",
                 )
-                .with_help("write the body as a string, or as a text block between `\"\"\"` lines below the step"),
+                .with_help("write the body as a string, as a text block between `\"\"\"` lines below the step, or as a value of the route's `Json` type"),
             );
             return None;
         }
         match cursor.string() {
-            Ok(Some(text)) => Some(Some(Text {
+            Ok(Some(text)) => Some(Some(Body::Text(Text {
                 value: text.value,
                 span: text.span,
-            })),
+            }))),
             Ok(None) => {
-                let span = cursor.here();
-                self.error(
-                    Diagnostic::new("expected the body as a string", span, "expected `\"`")
-                        .with_help(
-                            "an HTTP body is text, written as a string such as \"Hello, Ada!\"",
-                        ),
-                );
-                None
+                // Anything else is a value, read as the code dialect reads it.
+                let span = cursor.span_of_rest();
+                cursor.pos = span.end;
+                let (parsed, mut diagnostics) =
+                    crate::parse_step_value(self.source, span, self.row);
+                if self.row.is_some() {
+                    self.mapped.append(&mut diagnostics);
+                } else {
+                    self.diagnostics.append(&mut diagnostics);
+                }
+                Some(Some(Body::Value(Box::new(parsed?))))
             }
             Err(diagnostic) => {
                 self.error(diagnostic);
@@ -1195,14 +1199,14 @@ impl RowMap {
                 if let Some(via) = via {
                     ident(via);
                 }
-                if let Some(body) = body {
+                if let Some(Body::Text(body)) = body {
                     text(body);
                 }
             }
             StepKind::Reply { app, status, body } => {
                 ident(app);
                 ident(status);
-                if let Some(body) = body {
+                if let Some(Body::Text(body)) = body {
                     text(body);
                 }
             }

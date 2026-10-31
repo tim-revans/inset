@@ -30,7 +30,7 @@ mod library {
     }
 
     impl ::inset_runtime::Stored for LendError {
-        fn to_json(&self) -> ::inset_runtime::Json {
+        fn to_json(&self) -> ::inset_runtime::serde_json::Value {
             match self {
                 Self::Unknown => ::inset_runtime::data::variant("Unknown", Vec::new()),
                 Self::AllOut(field0) => {
@@ -43,7 +43,7 @@ mod library {
             }
         }
 
-        fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+        fn from_json(json: &::inset_runtime::serde_json::Value) -> Result<Self, String> {
             let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
             match variant {
                 "Unknown" => {
@@ -225,7 +225,7 @@ struct Book {
 }
 
 impl ::inset_runtime::Stored for Book {
-    fn to_json(&self) -> ::inset_runtime::Json {
+    fn to_json(&self) -> ::inset_runtime::serde_json::Value {
         ::inset_runtime::data::object(
             Vec::from([
                 ("title", ::inset_runtime::Stored::to_json(&self.title)),
@@ -235,7 +235,7 @@ impl ::inset_runtime::Stored for Book {
         )
     }
 
-    fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+    fn from_json(json: &::inset_runtime::serde_json::Value) -> Result<Self, String> {
         let fields = ::inset_runtime::data::fields("Book", json)?;
         Ok(Book {
             title: fields.get("title")?,
@@ -254,7 +254,7 @@ enum Genre {
 }
 
 impl ::inset_runtime::Stored for Genre {
-    fn to_json(&self) -> ::inset_runtime::Json {
+    fn to_json(&self) -> ::inset_runtime::serde_json::Value {
         match self {
             Self::Fiction => ::inset_runtime::data::variant("Fiction", Vec::new()),
             Self::Science => ::inset_runtime::data::variant("Science", Vec::new()),
@@ -262,7 +262,7 @@ impl ::inset_runtime::Stored for Genre {
         }
     }
 
-    fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+    fn from_json(json: &::inset_runtime::serde_json::Value) -> Result<Self, String> {
         let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
         match variant {
             "Fiction" => {

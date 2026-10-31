@@ -47,7 +47,8 @@ pub struct App {
     /// The `grant` statements, in source order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub grants: Vec<Grant>,
-    /// The browser front end, drawn as one opaque box. Draft: no example has one yet.
+    /// The browser front end, drawn as one opaque box with an arrow to each
+    /// route it calls.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub front_end: Option<FrontEnd>,
     /// The components the app starts, in source order.
@@ -129,13 +130,19 @@ pub enum OutsideKind {
     Resource,
 }
 
-/// The browser front end. Draft.
+/// The browser front end: the app's `front end` statement, and the files
+/// in `web/`, which the diagram does not look into.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FrontEnd {
     /// `<app>/front_end`.
     pub id: Id,
-    /// The routes the front end calls, by handler ID.
+    /// The `HttpServer` grant that serves it, by ID.
+    pub via: Id,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
+    /// The routes the front end calls, by handler ID, in the order the
+    /// `front end` statement lists them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub calls: Vec<Id>,
 }
@@ -316,6 +323,19 @@ pub enum Method {
     Put,
     Patch,
     Delete,
+}
+
+impl Method {
+    /// The method as HTTP writes it, such as `GET`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Method::Get => "GET",
+            Method::Post => "POST",
+            Method::Put => "PUT",
+            Method::Patch => "PATCH",
+            Method::Delete => "DELETE",
+        }
+    }
 }
 
 /// A function: a route handler, a message handler or an algorithm.

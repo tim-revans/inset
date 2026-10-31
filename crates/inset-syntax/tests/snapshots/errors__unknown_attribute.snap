@@ -9,5 +9,5 @@ Error: unknown attribute `route`
    │       ──┬──  
    │         ╰──── Inset has no attribute with this name
    │ 
-   │ Help: the attributes are `get`, `post`, `put`, `patch`, `delete`, `message`, `handed_down`, `derive`, `status`, `rust` and `defensive`
+   │ Help: the attributes are `get`, `post`, `put`, `patch`, `delete`, `message`, `handed_down`, `derive`, `status`, `serde`, `rust` and `defensive`
 ───╯

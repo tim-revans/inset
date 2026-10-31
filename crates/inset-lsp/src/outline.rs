@@ -1,4 +1,4 @@
-//! A document's outline: the app with its settings, grants and children;
+//! A document's outline: the app with its settings, grants, front end and children;
 //! each component with its fields, children and handlers; and each
 //! requirement by its sentence, with the rows of its examples table. It comes from the file's syntax tree alone,
 //! so it works on a file that does not check.
@@ -159,8 +159,34 @@ impl Outline<'_> {
             let detail = Some(self.source(g.ty.span));
             self.named(&g.name, SymbolKind::PROPERTY, detail, g.span, Vec::new())
         });
+        let front_ends = app.front_ends.iter().filter_map(|f| {
+            let calls = f
+                .calls
+                .iter()
+                .filter_map(|c| {
+                    self.symbol(
+                        &c.value,
+                        SymbolKind::EVENT,
+                        None,
+                        c.span,
+                        c.span,
+                        Vec::new(),
+                    )
+                })
+                .collect();
+            let detail = Some(format!("via {}", f.via.name));
+            self.symbol(
+                "front end",
+                SymbolKind::INTERFACE,
+                detail,
+                f.span,
+                f.via.span,
+                calls,
+            )
+        });
         let children = settings
             .chain(grants)
+            .chain(front_ends)
             .chain(self.starts(&app.starts))
             .collect();
         self.named(

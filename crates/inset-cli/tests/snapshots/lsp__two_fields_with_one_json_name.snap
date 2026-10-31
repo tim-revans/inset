@@ -1,0 +1,6 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:17:5-17:9
+`net_price` and `kind` are both `kind` in JSON
+two names cannot be told apart in JSON

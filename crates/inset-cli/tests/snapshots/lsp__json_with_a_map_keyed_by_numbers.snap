@@ -1,0 +1,20 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:33:51-33:69
+a `Vec<Product>` cannot be replied as JSON
+it holds a map with `u32` keys, and a JSON object's keys are text
+help: use `String` keys, or a `Vec` of pairs
+
+src/main.inset:43:51-43:64
+a `Product` cannot be read from JSON
+it holds a map with `u32` keys, and a JSON object's keys are text
+help: use `String` keys, or a `Vec` of pairs
+
+requirements/main.req.inset:3:56-3:63
+`Product` has no field `stock` here
+give `stock` a value
+
+requirements/main.req.inset:6:41-6:48
+`Product` has no field `stock` here
+give `stock` a value

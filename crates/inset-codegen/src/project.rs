@@ -60,6 +60,7 @@ pub fn build(
     write(&out_dir.join("rust-toolchain.toml"), TOOLCHAIN)?;
     write(&out_dir.join("Cargo.lock"), LOCK)?;
     write(&out_dir.join("src/lib.rs"), &generated.source)?;
+    write_web(program, &out_dir.join("web"))?;
 
     let cargo = |args: &[&str]| {
         let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
@@ -158,6 +159,54 @@ fn write(path: &Path, contents: &str) -> Result<(), BuildError> {
         std::fs::create_dir_all(dir).map_err(fail)?;
     }
     std::fs::write(path, contents).map_err(fail)
+}
+
+/// Copies the front end's files into the project, where the generated
+/// Rust includes them, and removes any that are no longer there. A file
+/// that has not changed is left alone, so Cargo sees no change.
+fn write_web(program: &Program, web: &Path) -> Result<(), BuildError> {
+    let assets = program.web.as_deref().unwrap_or_default();
+    let mut old = Vec::new();
+    list_files(web, &mut old);
+    for path in old {
+        let kept = path
+            .strip_prefix(web)
+            .ok()
+            .and_then(|p| p.to_str())
+            .is_some_and(|p| assets.iter().any(|a| a.path == p.replace('\\', "/")));
+        if !kept {
+            std::fs::remove_file(&path).map_err(|e| {
+                BuildError::Failed(format!("cannot remove {}: {e}", path.display()))
+            })?;
+        }
+    }
+    for asset in assets {
+        let path = web.join(&asset.path);
+        if std::fs::read(&path).is_ok_and(|old| old == asset.bytes) {
+            continue;
+        }
+        let fail =
+            |e: std::io::Error| BuildError::Failed(format!("cannot write {}: {e}", path.display()));
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(fail)?;
+        }
+        std::fs::write(&path, &asset.bytes).map_err(fail)?;
+    }
+    Ok(())
+}
+
+fn list_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            list_files(&path, out);
+        } else {
+            out.push(path);
+        }
+    }
 }
 
 /// The `.wasm` file Cargo reports building for the package.

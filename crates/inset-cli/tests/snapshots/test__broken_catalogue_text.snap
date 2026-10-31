@@ -1,0 +1,21 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&text)
+---
+pass  A product is stored as it was sent, and replied as stored
+pass  A body or reply written as a string is exactly the JSON sent or replied
+FAIL  Products are listed in SKU order, at most as many as asked for, and parts alone when asked
+      requirements/catalogue.req.inset:51
+      then Catalogue replies OK with vec![
+              Listed {
+                  sku: "b",
+                  product: Product { display_name: "Bolt", net_price: 0.10, kind: Kind::Part, note: None, sizes: vec![] },
+              },
+          ]
+      but the reply is another value
+        expected: [Listed { sku: "b", product: Product { display_name: "Bolt", net_price: 0.10, kind: Part, note: None, sizes: [] } }]
+        actual:   [Listed { sku: "a", product: Product { display_name: "Nut", net_price: 0.05, kind: BoxOf(10), note: Some("loose"), sizes: [] } }, Listed { sku: "b", product: Product { display_name: "Bolt", net_price: 0.10, kind: Part, note: None, sizes: [] } }]
+pass  A search gives the SKUs of the products with the name in theirs
+pass  A request without what it needs is refused
+
+5 requirements: 4 passed, 1 failed

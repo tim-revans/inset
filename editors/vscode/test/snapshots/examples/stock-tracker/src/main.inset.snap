@@ -64,6 +64,34 @@
 #                                                                     ^ string.quoted.double.inset punctuation.definition.string.end.inset
 #                                                                       ^ punctuation.brackets.curly.inset
 #                                                                        ^ punctuation.terminator.statement.inset
+>    /// The page staff use in a browser to see stock levels and stock new items.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    front end via http calls ["GET /items?{low}", "PUT /items/{sku}"];
+#    ^^^^^ meta.front-end.inset storage.type.front-end.inset
+#          ^^^ meta.front-end.inset storage.type.front-end.inset
+#              ^^^ meta.front-end.inset keyword.other.route-option.inset
+#                  ^^^^ meta.front-end.inset variable.other.capability.inset
+#                       ^^^^^ meta.front-end.inset keyword.other.front-end.inset
+#                             ^ meta.front-end.inset punctuation.brackets.square.inset
+#                              ^ meta.front-end.inset string.quoted.double.route.inset punctuation.definition.string.begin.inset
+#                               ^^^ meta.front-end.inset string.quoted.double.route.inset constant.language.http-method.inset
+#                                  ^^^^^^^ meta.front-end.inset string.quoted.double.route.inset
+#                                         ^ meta.front-end.inset string.quoted.double.route.inset punctuation.separator.query.inset
+#                                          ^ meta.front-end.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.begin.inset
+#                                           ^^^ meta.front-end.inset string.quoted.double.route.inset meta.route-parameter.inset variable.parameter.route.inset
+#                                              ^ meta.front-end.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.end.inset
+#                                               ^ meta.front-end.inset string.quoted.double.route.inset punctuation.definition.string.end.inset
+#                                                ^ meta.front-end.inset punctuation.separator.comma.inset
+#                                                  ^ meta.front-end.inset string.quoted.double.route.inset punctuation.definition.string.begin.inset
+#                                                   ^^^ meta.front-end.inset string.quoted.double.route.inset constant.language.http-method.inset
+#                                                      ^^^^^^^^ meta.front-end.inset string.quoted.double.route.inset
+#                                                              ^ meta.front-end.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.begin.inset
+#                                                               ^^^ meta.front-end.inset string.quoted.double.route.inset meta.route-parameter.inset variable.parameter.route.inset
+#                                                                  ^ meta.front-end.inset string.quoted.double.route.inset meta.route-parameter.inset punctuation.definition.parameter.end.inset
+#                                                                   ^ meta.front-end.inset string.quoted.double.route.inset punctuation.definition.string.end.inset
+#                                                                    ^ meta.front-end.inset punctuation.brackets.square.inset
+#                                                                     ^ punctuation.terminator.statement.inset
 >    start Warehouse { http: move http, items: move items };
 #    ^^^^^ meta.start.inset storage.type.start.inset
 #          ^^^^^^^^^ meta.start.inset entity.name.type.component.inset
@@ -85,7 +113,7 @@
 >/// A stocked item, stored under its SKU.
 #^^^ comment.line.documentation.inset punctuation.definition.comment.inset
 #   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
->#[derive(Clone, Debug, PartialEq)]
+>#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #^ meta.attribute.inset punctuation.definition.attribute.inset
 # ^ meta.attribute.inset punctuation.brackets.attribute.inset
 #  ^^^^^^ meta.attribute.inset entity.name.function.attribute.inset
@@ -95,6 +123,22 @@
 #                ^^^^^ meta.attribute.inset entity.name.type.inset
 #                     ^ meta.attribute.inset punctuation.separator.comma.inset
 #                       ^^^^^^^^^ meta.attribute.inset entity.name.type.inset
+#                                ^ meta.attribute.inset punctuation.separator.comma.inset
+#                                  ^^^^^^^^^ meta.attribute.inset entity.name.type.inset
+#                                           ^ meta.attribute.inset punctuation.separator.comma.inset
+#                                             ^^^^^^^^^^^ meta.attribute.inset entity.name.type.inset
+#                                                        ^ meta.attribute.inset punctuation.brackets.round.inset
+#                                                         ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>#[serde(rename_all = "camelCase")]
+#^ meta.attribute.inset punctuation.definition.attribute.inset
+# ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#  ^^^^^ meta.attribute.inset entity.name.function.attribute.inset
+#       ^ meta.attribute.inset punctuation.brackets.round.inset
+#        ^^^^^^^^^^ meta.attribute.inset variable.parameter.attribute.inset
+#                   ^ meta.attribute.inset keyword.operator.assignment.inset
+#                     ^ meta.attribute.inset string.quoted.double.inset punctuation.definition.string.begin.inset
+#                      ^^^^^^^^^ meta.attribute.inset string.quoted.double.inset
+#                               ^ meta.attribute.inset string.quoted.double.inset punctuation.definition.string.end.inset
 #                                ^ meta.attribute.inset punctuation.brackets.round.inset
 #                                 ^ meta.attribute.inset punctuation.brackets.attribute.inset
 >struct Item {
@@ -125,6 +169,65 @@
 #                ^ punctuation.separator.colon.inset
 #                  ^^^ entity.name.type.primitive.inset
 #                     ^ punctuation.separator.comma.inset
+>}
+#^ punctuation.brackets.curly.inset
+>
+>/// An item's stock, as the front end lists it.
+#^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>#[derive(Clone, Debug, PartialEq, Serialize)]
+#^ meta.attribute.inset punctuation.definition.attribute.inset
+# ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#  ^^^^^^ meta.attribute.inset entity.name.function.attribute.inset
+#        ^ meta.attribute.inset punctuation.brackets.round.inset
+#         ^^^^^ meta.attribute.inset entity.name.type.inset
+#              ^ meta.attribute.inset punctuation.separator.comma.inset
+#                ^^^^^ meta.attribute.inset entity.name.type.inset
+#                     ^ meta.attribute.inset punctuation.separator.comma.inset
+#                       ^^^^^^^^^ meta.attribute.inset entity.name.type.inset
+#                                ^ meta.attribute.inset punctuation.separator.comma.inset
+#                                  ^^^^^^^^^ meta.attribute.inset entity.name.type.inset
+#                                           ^ meta.attribute.inset punctuation.brackets.round.inset
+#                                            ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>#[serde(rename_all = "camelCase")]
+#^ meta.attribute.inset punctuation.definition.attribute.inset
+# ^ meta.attribute.inset punctuation.brackets.attribute.inset
+#  ^^^^^ meta.attribute.inset entity.name.function.attribute.inset
+#       ^ meta.attribute.inset punctuation.brackets.round.inset
+#        ^^^^^^^^^^ meta.attribute.inset variable.parameter.attribute.inset
+#                   ^ meta.attribute.inset keyword.operator.assignment.inset
+#                     ^ meta.attribute.inset string.quoted.double.inset punctuation.definition.string.begin.inset
+#                      ^^^^^^^^^ meta.attribute.inset string.quoted.double.inset
+#                               ^ meta.attribute.inset string.quoted.double.inset punctuation.definition.string.end.inset
+#                                ^ meta.attribute.inset punctuation.brackets.round.inset
+#                                 ^ meta.attribute.inset punctuation.brackets.attribute.inset
+>struct StockLevel {
+#^^^^^^ storage.type.inset
+#       ^^^^^^^^^^ entity.name.type.inset
+#                  ^ punctuation.brackets.curly.inset
+>    sku: String,
+#    ^^^ variable.other.inset
+#       ^ punctuation.separator.colon.inset
+#         ^^^^^^ entity.name.type.inset
+#               ^ punctuation.separator.comma.inset
+>    on_hand: u32,
+#    ^^^^^^^ variable.other.inset
+#           ^ punctuation.separator.colon.inset
+#             ^^^ entity.name.type.primitive.inset
+#                ^ punctuation.separator.comma.inset
+>    reorder_level: u32,
+#    ^^^^^^^^^^^^^ variable.other.inset
+#                 ^ punctuation.separator.colon.inset
+#                   ^^^ entity.name.type.primitive.inset
+#                      ^ punctuation.separator.comma.inset
+>    /// Whether stock is at or below its reorder level.
+#    ^^^ comment.line.documentation.inset punctuation.definition.comment.inset
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.documentation.inset
+>    low: bool,
+#    ^^^ variable.other.inset
+#       ^ punctuation.separator.colon.inset
+#         ^^^^ entity.name.type.primitive.inset
+#             ^ punctuation.separator.comma.inset
 >}
 #^ punctuation.brackets.curly.inset
 >

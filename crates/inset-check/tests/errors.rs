@@ -5,8 +5,8 @@
 mod cases;
 
 use cases::{
-    COUNTING, COUNTING_REQ, HELLO, HELLO_REQ, SHELF, SHELF_LIBRARY, SHELF_REQ, STORE, STORE_REQ,
-    edit,
+    CATALOGUE, CATALOGUE_REQ, COUNTING, COUNTING_REQ, HELLO, HELLO_REQ, SHELF, SHELF_LIBRARY,
+    SHELF_REQ, STORE, STORE_REQ, edit,
 };
 use inset_check::{Program, SourceFile, check};
 
@@ -70,6 +70,7 @@ fn bases_check_clean() {
         ""
     );
     assert_eq!(rendered(STORE, STORE_REQ), "");
+    assert_eq!(rendered(CATALOGUE, CATALOGUE_REQ), "");
 }
 
 // ---- The cases Stage 6 of the plan names ------------------------------------
@@ -273,4 +274,61 @@ fn table_key_not_orderable() {
 #[test]
 fn examples_cell_of_wrong_type() {
     errors("examples_cell_of_wrong_type");
+}
+
+// ---- JSON bodies, query parameters and the front end -------------------------
+
+#[test]
+fn json_body_without_deserialize() {
+    errors("json_body_without_deserialize");
+}
+
+#[test]
+fn json_with_a_map_keyed_by_numbers() {
+    errors("json_with_a_map_keyed_by_numbers");
+}
+
+#[test]
+fn serde_rule_and_argument_not_supported() {
+    errors("serde_rule_and_argument_not_supported");
+}
+
+#[test]
+fn serde_without_a_serde_derive() {
+    errors("serde_without_a_serde_derive");
+}
+
+#[test]
+fn two_fields_with_one_json_name() {
+    errors("two_fields_with_one_json_name");
+}
+
+#[test]
+fn query_parameter_without_function_parameter() {
+    errors("query_parameter_without_function_parameter");
+}
+
+#[test]
+fn front_end_calls_unknown_route() {
+    errors("front_end_calls_unknown_route");
+}
+
+#[test]
+fn front_end_via_not_a_server() {
+    errors("front_end_via_not_a_server");
+}
+
+#[test]
+fn json_value_of_wrong_type() {
+    errors("json_value_of_wrong_type");
+}
+
+#[test]
+fn value_for_a_text_body() {
+    errors("value_for_a_text_body");
+}
+
+#[test]
+fn unknown_query_parameter() {
+    errors("unknown_query_parameter");
 }

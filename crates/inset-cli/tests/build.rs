@@ -49,21 +49,61 @@ fn builds_hello_http() {
     assert_eq!(component, dir.join("target/inset/hello-http.wasm"));
     assert!(component.is_file());
     assert!(dir.join("target/inset/src/lib.rs").is_file());
+    // The API contract is written beside the component.
+    let types = std::fs::read_to_string(dir.join("target/inset/hello-http.d.ts")).unwrap();
+    assert!(types.contains("\"GET /hello/{name}\""), "{types}");
+    assert!(dir.join("target/inset/hello-http.openapi.json").is_file());
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn refuses_a_program_with_errors() {
     let dir = hello_copy("refuse");
-    let source = std::fs::read_to_string(dir.join("src/main.inset")).unwrap();
-    let serialized = "\n#[derive(Serialize)]\nstruct Greeting {\n    text: String,\n}\n";
-    std::fs::write(dir.join("src/main.inset"), source + serialized).unwrap();
+    // A child lent to a later sibling, which `inset check` accepts but
+    // the compiler cannot emit yet.
+    let lending = "app HelloHttp {
+    grant http: HttpServer { port: 8080 };
+    start Front { http: move http };
+}
+
+component Front {
+    http: HttpServer,
+
+    start tally: Tally { total: 0 };
+    start reader: Reader { tally: &tally };
+
+    #[get(\"/total\", via = http)]
+    async fn total(&self) -> String {
+        let total = self.reader.read().await;
+        total.to_string()
+    }
+}
+
+component Tally {
+    total: u32,
+
+    #[message]
+    fn total(&self) -> u32 {
+        self.total
+    }
+}
+
+component Reader {
+    tally: &Handle<Tally>,
+
+    #[message]
+    async fn read(&self) -> u32 {
+        self.tally.total().await
+    }
+}
+";
+    std::fs::write(dir.join("src/main.inset"), lending).unwrap();
     let out = inset(&["build"], &dir).output().expect("run inset");
     std::fs::remove_dir_all(&dir).unwrap();
     assert!(!out.status.success());
     assert!(out.stdout.is_empty());
     assert!(
-        stderr(&out).contains("deriving `Serialize` cannot be compiled yet"),
+        stderr(&out).contains("a lent sibling cannot be compiled yet"),
         "{}",
         stderr(&out)
     );

@@ -34,6 +34,12 @@
         "outside": { "kind": "resource", "label": "stock.db" }
       }
     ],
+    "front_end": {
+      "id": "StockTracker/front_end",
+      "via": "StockTracker/grant:http",
+      "doc": "The page staff use in a browser to see stock levels and stock new items.",
+      "calls": ["StockTracker/Warehouse/fn:stock_levels", "StockTracker/Warehouse/fn:stock_item"]
+    },
     "components": [
       {
         "id": "StockTracker/Warehouse",
@@ -84,6 +90,55 @@
                   "exit": { "id": "StockTracker/Warehouse/fn:stock/0/err", "text": "None" }
                 },
                 { "kind": "return", "id": "StockTracker/Warehouse/fn:stock/1", "text": "Some(item.on_hand.to_string())" }
+              ]
+            }
+          },
+          {
+            "method": "GET",
+            "path": "/items?{low}",
+            "via": "StockTracker/Warehouse/field:http",
+            "handler": {
+              "id": "StockTracker/Warehouse/fn:stock_levels",
+              "name": "stock_levels",
+              "doc": "Lists every item's stock in SKU order, or with `low=true`, only the\nitems at or below their reorder level.",
+              "receiver": "ref",
+              "async": true,
+              "params": [{ "name": "low", "type": "Option<bool>" }],
+              "returns": "Json<Vec<StockLevel>>",
+              "body": [
+                {
+                  "kind": "action",
+                  "id": "StockTracker/Warehouse/fn:stock_levels/0",
+                  "text": "let levels = self.inventory.levels(low.unwrap_or(false)).await",
+                  "links": ["StockTracker/Warehouse/fn:stock_levels->StockTracker/Warehouse/inventory/fn:levels"]
+                },
+                { "kind": "return", "id": "StockTracker/Warehouse/fn:stock_levels/1", "text": "Json(levels)" }
+              ]
+            }
+          },
+          {
+            "method": "PUT",
+            "path": "/items/{sku}",
+            "via": "StockTracker/Warehouse/field:http",
+            "body": "item",
+            "handler": {
+              "id": "StockTracker/Warehouse/fn:stock_item",
+              "name": "stock_item",
+              "doc": "Stocks an item with the levels given, replacing any it had, and\nreplies with the quantity on hand.",
+              "receiver": "ref",
+              "async": true,
+              "params": [{ "name": "sku", "type": "String" }, { "name": "item", "type": "Json<Item>" }],
+              "returns": "String",
+              "body": [
+                { "kind": "action", "id": "StockTracker/Warehouse/fn:stock_item/0", "text": "let Json(item) = item" },
+                { "kind": "action", "id": "StockTracker/Warehouse/fn:stock_item/1", "text": "let on_hand = item.on_hand" },
+                {
+                  "kind": "action",
+                  "id": "StockTracker/Warehouse/fn:stock_item/2",
+                  "text": "self.inventory.stock(&sku, move item).await",
+                  "links": ["StockTracker/Warehouse/fn:stock_item->StockTracker/Warehouse/inventory/fn:stock"]
+                },
+                { "kind": "return", "id": "StockTracker/Warehouse/fn:stock_item/3", "text": "on_hand.to_string()" }
               ]
             }
           },
@@ -272,6 +327,76 @@
                 ]
               },
               {
+                "id": "StockTracker/Warehouse/inventory/fn:levels",
+                "name": "levels",
+                "doc": "Every item's stock, in SKU order, or only that of the items at or\nbelow their reorder level.",
+                "receiver": "ref",
+                "async": true,
+                "params": [{ "name": "low_only", "type": "bool" }],
+                "returns": "Vec<StockLevel>",
+                "body": [
+                  {
+                    "kind": "action",
+                    "id": "StockTracker/Warehouse/inventory/fn:levels/0",
+                    "text": "let mut levels = Vec::new()"
+                  },
+                  {
+                    "kind": "loop",
+                    "id": "StockTracker/Warehouse/inventory/fn:levels/1",
+                    "text": "for (sku, item) in self.items.entries().await",
+                    "links": ["StockTracker/Warehouse/inventory/field:items->StockTracker/grant:items"],
+                    "body": {
+                      "id": "StockTracker/Warehouse/inventory/fn:levels/1/body",
+                      "label": "each",
+                      "steps": [
+                        {
+                          "kind": "action",
+                          "id": "StockTracker/Warehouse/inventory/fn:levels/1/body/0",
+                          "text": "let low = item.on_hand <= item.reorder_level"
+                        },
+                        {
+                          "kind": "decision",
+                          "id": "StockTracker/Warehouse/inventory/fn:levels/1/body/1",
+                          "text": "if low || !low_only",
+                          "branches": [
+                            {
+                              "id": "StockTracker/Warehouse/inventory/fn:levels/1/body/1/b0",
+                              "label": "yes",
+                              "steps": [
+                                {
+                                  "kind": "action",
+                                  "id": "StockTracker/Warehouse/inventory/fn:levels/1/body/1/b0/0",
+                                  "text": "levels.push(StockLevel { sku, on_hand: item.on_hand, reorder_level: item.reorder_level, low, })"
+                                }
+                              ]
+                            },
+                            { "id": "StockTracker/Warehouse/inventory/fn:levels/1/body/1/b1", "label": "no" }
+                          ]
+                        }
+                      ]
+                    },
+                    "skip": { "id": "StockTracker/Warehouse/inventory/fn:levels/1/skip", "label": "none" }
+                  },
+                  { "kind": "return", "id": "StockTracker/Warehouse/inventory/fn:levels/2", "text": "levels" }
+                ]
+              },
+              {
+                "id": "StockTracker/Warehouse/inventory/fn:stock",
+                "name": "stock",
+                "doc": "Stores an item under its SKU, replacing any item stored there.",
+                "receiver": "mut",
+                "async": true,
+                "params": [{ "name": "sku", "type": "&str" }, { "name": "item", "type": "Item" }],
+                "body": [
+                  {
+                    "kind": "action",
+                    "id": "StockTracker/Warehouse/inventory/fn:stock/0",
+                    "text": "self.items.insert(sku.to_string(), item).await",
+                    "links": ["StockTracker/Warehouse/inventory/field:items->StockTracker/grant:items"]
+                  }
+                ]
+              },
+              {
                 "id": "StockTracker/Warehouse/inventory/fn:receive",
                 "name": "receive",
                 "doc": "Adds to an item's stock, and returns the item as it now stands.",
@@ -431,7 +556,7 @@
       "id": "StockTracker/Warehouse/inventory/field:items->StockTracker/grant:items",
       "from": "StockTracker/Warehouse/inventory/field:items",
       "to": "StockTracker/grant:items",
-      "operations": ["get", "insert"]
+      "operations": ["entries", "get", "insert"]
     },
     {
       "kind": "message",
@@ -439,6 +564,20 @@
       "from": "StockTracker/Warehouse/fn:stock",
       "to": "StockTracker/Warehouse/inventory/fn:item",
       "args": [{ "pass": "lend", "text": "sku" }]
+    },
+    {
+      "kind": "message",
+      "id": "StockTracker/Warehouse/fn:stock_levels->StockTracker/Warehouse/inventory/fn:levels",
+      "from": "StockTracker/Warehouse/fn:stock_levels",
+      "to": "StockTracker/Warehouse/inventory/fn:levels",
+      "args": [{ "pass": "new", "text": "low.unwrap_or(false)" }]
+    },
+    {
+      "kind": "message",
+      "id": "StockTracker/Warehouse/fn:stock_item->StockTracker/Warehouse/inventory/fn:stock",
+      "from": "StockTracker/Warehouse/fn:stock_item",
+      "to": "StockTracker/Warehouse/inventory/fn:stock",
+      "args": [{ "pass": "lend", "text": "sku" }, { "pass": "move", "text": "item" }]
     },
     {
       "kind": "message",

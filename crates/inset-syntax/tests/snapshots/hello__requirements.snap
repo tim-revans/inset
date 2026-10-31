@@ -30,10 +30,12 @@ RequirementsFile {
                         app: "HelloHttp" @ 118..127,
                         status: "OK" @ 136..138,
                         body: Some(
-                            Text {
-                                value: "Hello, Ada!",
-                                span: 144..157,
-                            },
+                            Text(
+                                Text {
+                                    value: "Hello, Ada!",
+                                    span: 144..157,
+                                },
+                            ),
                         ),
                     },
                     span: 113..157,

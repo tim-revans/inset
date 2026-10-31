@@ -18,5 +18,9 @@ FAIL  Stock that falls to its reorder level or below is reordered up to its targ
       pass  | 11      | 5            | 10   | ""             |
 pass  A new reorder for an item replaces its earlier one
 pass  A database failure fails the request and changes nothing
+pass  An item is stocked with the levels it is given
+pass  Levels that are not a whole item in JSON are refused
+pass  Stock levels are listed in SKU order
+pass  Only items at or below their reorder level are listed as low stock
 
-8 requirements: 7 passed, 1 failed
+12 requirements: 11 passed, 1 failed

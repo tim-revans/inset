@@ -190,6 +190,65 @@ requirement "A database failure changes nothing"
     and items is empty
 "#;
 
+pub const CATALOGUE: &str = r#"app Catalogue {
+    grant http: HttpServer { port: 8080 };
+    grant products: Table<String, Product> { file: "catalogue.db", name: "products" };
+    /// The page that lists the catalogue.
+    front end via http calls ["GET /products?{limit}", "PUT /products/{sku}"];
+    start Shop { http: move http, products: move products };
+}
+
+/// A product for sale.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Product {
+    /// What the product is called.
+    display_name: String,
+    #[serde(rename = "net")]
+    net_price: Decimal,
+    kind: Kind,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Kind {
+    Part,
+    BoxOf(u32),
+}
+
+component Shop {
+    http: HttpServer,
+    products: Table<String, Product>,
+
+    #[get("/products?{limit}", via = http)]
+    async fn list(&self, limit: Option<usize>) -> Json<Vec<Product>> {
+        let mut products = Vec::new();
+        for (_, product) in self.products.entries().await {
+            products.push(product);
+        }
+        products.truncate(limit.unwrap_or(10));
+        Json(products)
+    }
+
+    #[put("/products/{sku}", via = http, body = product)]
+    async fn put(&mut self, sku: String, product: Json<Product>) -> String {
+        let Json(product) = product;
+        self.products.insert(sku, product).await;
+        "stored".to_string()
+    }
+}
+"#;
+
+pub const CATALOGUE_REQ: &str = r#"requirement "A product is listed as it was stored"
+    given products is empty
+    when Catalogue receives PUT /products/bolt-m6 with Product { display_name: "M6 bolt", net_price: 0.10, kind: Kind::BoxOf(50) }
+    then Catalogue replies OK with "stored"
+    when Catalogue receives GET /products?limit=5
+    then Catalogue replies OK with vec![Product { display_name: "M6 bolt", net_price: 0.10, kind: Kind::BoxOf(50) }]
+    when Catalogue receives GET /products?limit=many
+    then Catalogue replies BadRequest
+"#;
+
 /// A broken program: its code and its requirements.
 pub struct Case {
     pub name: &'static str,
@@ -538,6 +597,89 @@ pub fn all() -> Vec<Case> {
         );
         add("examples_cell_of_wrong_type", STORE.to_string(), req);
     }
+    // ---- JSON bodies, query parameters and the front end ----
+    let catalogue = |from: &str, to: &str| edit(CATALOGUE, from, to);
+    let catalogue_req = |from: &str, to: &str| edit(CATALOGUE_REQ, from, to);
+    add(
+        "json_body_without_deserialize",
+        catalogue(
+            "#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]\n#[serde(rename_all = \"snake_case\")]",
+            "#[derive(Clone, Debug, PartialEq, Serialize)]\n#[serde(rename_all = \"snake_case\")]",
+        ),
+        CATALOGUE_REQ.to_string(),
+    );
+    add(
+        "json_with_a_map_keyed_by_numbers",
+        catalogue(
+            "    kind: Kind,\n}",
+            "    kind: Kind,\n    stock: HashMap<u32, u32>,\n}",
+        ),
+        CATALOGUE_REQ.to_string(),
+    );
+    add(
+        "serde_rule_and_argument_not_supported",
+        catalogue(
+            "#[serde(rename = \"net\")]",
+            "#[serde(rename = \"net\", default)]",
+        )
+        .replace("rename_all = \"snake_case\"", "rename_all = \"snake\""),
+        CATALOGUE_REQ.to_string(),
+    );
+    add(
+        "serde_without_a_serde_derive",
+        CATALOGUE.replace(
+            "#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]\n#[serde(rename_all = \"snake_case\")]",
+            "#[derive(Clone, Debug, PartialEq)]\n#[serde(rename_all = \"snake_case\")]",
+        ),
+        CATALOGUE_REQ.to_string(),
+    );
+    add(
+        "two_fields_with_one_json_name",
+        catalogue("#[serde(rename = \"net\")]", "#[serde(rename = \"kind\")]"),
+        CATALOGUE_REQ.to_string(),
+    );
+    add(
+        "query_parameter_without_function_parameter",
+        catalogue(
+            "#[get(\"/products?{limit}\"",
+            "#[get(\"/products?{limit}&{after}\"",
+        ),
+        CATALOGUE_REQ.to_string(),
+    );
+    add(
+        "front_end_calls_unknown_route",
+        catalogue(
+            "calls [\"GET /products?{limit}\", \"PUT /products/{sku}\"]",
+            "calls [\"GET /products\", \"get /products/{sku}\", \"PUT /products/{sku}\", \"PUT /products/{sku}\"]",
+        ),
+        CATALOGUE_REQ.to_string(),
+    );
+    add(
+        "front_end_via_not_a_server",
+        catalogue("front end via http", "front end via products"),
+        CATALOGUE_REQ.to_string(),
+    );
+    add(
+        "json_value_of_wrong_type",
+        CATALOGUE.to_string(),
+        catalogue_req(
+            "kind: Kind::BoxOf(50) }\n    then",
+            "kind: Kind::Crate }\n    then",
+        ),
+    );
+    add(
+        "value_for_a_text_body",
+        CATALOGUE.to_string(),
+        catalogue_req(
+            "then Catalogue replies OK with \"stored\"",
+            "then Catalogue replies OK with 20",
+        ),
+    );
+    add(
+        "unknown_query_parameter",
+        CATALOGUE.to_string(),
+        catalogue_req("GET /products?limit=5", "GET /products?limit=5&sort=name"),
+    );
     {
         let case = Case {
             name: "file_not_a_module",

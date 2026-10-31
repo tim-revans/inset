@@ -1,0 +1,76 @@
+---
+source: crates/inset-contract/tests/contract.rs
+expression: types
+---
+// The API contract of the Inset app `StockTracker`, written by `inset contract`.
+// It is written again on every build: change the Inset source, not this file.
+
+/** A stocked item, stored under its SKU. */
+export interface Item {
+  /** How many the warehouse holds. */
+  onHand: number;
+  /** Stock at or below this level is reordered. */
+  reorderLevel: number;
+  /** A reorder brings stock back up to this level. */
+  targetLevel: number;
+}
+
+/** An item's stock, as the front end lists it. */
+export interface StockLevel {
+  sku: string;
+  onHand: number;
+  reorderLevel: number;
+  /** Whether stock is at or below its reorder level. */
+  low: boolean;
+}
+
+/**
+ * Every route, by its method and its path as its attribute writes it: what it
+ * takes, what it replies on success, and every status it can reply with.
+ */
+export interface Routes {
+  /** Replies with the quantity on hand. */
+  "GET /items/{sku}": {
+    path: { sku: string };
+    reply: string;
+    status: 200 | 404 | 500;
+  };
+  /**
+   * Lists every item's stock in SKU order, or with `low=true`, only the
+   * items at or below their reorder level.
+   */
+  "GET /items?{low}": {
+    query: { low?: boolean };
+    reply: StockLevel[];
+    status: 200 | 400 | 500;
+  };
+  /**
+   * Stocks an item with the levels given, replacing any it had, and
+   * replies with the quantity on hand.
+   */
+  "PUT /items/{sku}": {
+    path: { sku: string };
+    body: Item;
+    reply: string;
+    status: 200 | 400 | 500;
+  };
+  /** Adds stock that has arrived, and replies with the new quantity on hand. */
+  "POST /items/{sku}/receipts": {
+    path: { sku: string };
+    body: string;
+    reply: string;
+    status: 200 | 400 | 404 | 500;
+  };
+  /** Takes away stock that has been shipped, and replies with the new quantity on hand. */
+  "POST /items/{sku}/shipments": {
+    path: { sku: string };
+    body: string;
+    reply: string;
+    status: 200 | 400 | 404 | 409 | 500;
+  };
+  /** Lists the reorders waiting to be placed, one per line: the SKU, then the quantity. */
+  "GET /reorders": {
+    reply: string;
+    status: 200 | 500;
+  };
+}

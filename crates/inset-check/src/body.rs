@@ -264,7 +264,8 @@ impl<'c, 'a> Body<'c, 'a> {
                         vec![args[0].clone()]
                     }
                     (1, "Err", Ty::Std("Result", args)) => vec![args[1].clone()],
-                    (1, "Some" | "Ok" | "Err", _) => vec![Ty::Unknown],
+                    (1, "Json", Ty::Std("Json", args)) => vec![args[0].clone()],
+                    (1, "Some" | "Ok" | "Err" | "Json", _) => vec![Ty::Unknown],
                     _ => match self.pattern_variant(path, &ty) {
                         Some((data, variant)) => {
                             self.cx.datas[data].variants[variant].fields.clone()
@@ -746,7 +747,7 @@ impl<'c, 'a> Body<'c, 'a> {
             }
             Ok(None) if path.segments.len() == 1 => match first.name.as_str() {
                 "None" => Ty::Std("Option", vec![Ty::Unknown]),
-                "Some" | "Ok" | "Err" => Ty::Unknown,
+                "Some" | "Ok" | "Err" | "Json" => Ty::Unknown,
                 _ => {
                     let diagnostic = self.cannot_find(first);
                     self.error(diagnostic);
@@ -874,6 +875,7 @@ impl<'c, 'a> Body<'c, 'a> {
         let base_ty = self.expr(base);
         match (base_ty.deref(), name.name.parse::<usize>()) {
             (Ty::Tuple(elems), Ok(i)) if i < elems.len() => elems[i].clone(),
+            (Ty::Std("Json", args), Ok(0)) => args[0].clone(),
             (Ty::Data { id, .. }, Err(_)) if !self.cx.datas[*id].is_enum => {
                 self.struct_field(*id, name).unwrap_or(Ty::Unknown)
             }
@@ -1385,6 +1387,7 @@ impl<'c, 'a> Body<'c, 'a> {
             ["Some"] if args.len() == 1 => Ty::Std("Option", vec![self.expr(&args[0])]),
             ["Ok"] if args.len() == 1 => Ty::Std("Result", vec![self.expr(&args[0]), Ty::Unknown]),
             ["Err"] if args.len() == 1 => Ty::Std("Result", vec![Ty::Unknown, self.expr(&args[0])]),
+            ["Json"] if args.len() == 1 => Ty::Std("Json", vec![self.expr(&args[0])]),
             _ => {
                 self.expr(callee);
                 self.args(args);

@@ -42,6 +42,7 @@ The drawing conventions:
 | Component | A box inside its parent, headed `name: Type`, or `Type` when `start` binds no name |
 | External component | A double box, with the language, file and crates it comes from, and `holds no capabilities` when it holds none |
 | Outside the program | A dashed pill: clients on the left, stored data on the right |
+| Front end | A dashed box labelled `front end web/`, on the left below the clients, with a thin arrow to the row of each route it calls. An arrow to a route of a collapsed component ends at that component's box |
 | Capability edge | An orange line between the component that holds the capability and what is outside, with the operations the component calls under it |
 | Message that waits | A solid arrow from the sending function's row to the message's row |
 | `send`, and an outlet's connection | A dashed arrow |
@@ -123,7 +124,7 @@ Every branch is an element with its own ID: each branch of a decision, a loop's 
 `docs/language/diagram.schema.json` is the JSON Schema of the format, generated from the Rust model in `crates/inset-diagram`. Its descriptions are the field reference. In outline:
 
 - `version` is 1.
-- `app` holds the settings, the grants with what is outside each one, and the tree of `components`. Each component lists its `start` handoffs, `fields`, `failure` arms, `routes`, `messages`, `algorithms` and child `components`, all in source order.
+- `app` holds the settings, the grants with what is outside each one, the `front_end` with the server that serves it and the handler of each route it calls, and the tree of `components`. Each component lists its `start` handoffs, `fields`, `failure` arms, `routes`, `messages`, `algorithms` and child `components`, all in source order.
 - `algorithms` holds the functions declared at the top level of a module.
 - `edges` holds what connects elements across the tree: `capability` (a field to its grant, with the operations used), `message` (a function to a message handler, with each argument's boundary notation, and whether it is a `send`) and `emit` (a function to its own component's outlet). An outlet's connection is a `connect` handoff in the `start` of the component that owns the outlet. The compiler lists the capability edges first, then the message edges, then the emit edges.
 - Each function's `body` is its flowchart, as nested `action`, `decision`, `loop`, `fork` and `return` steps.

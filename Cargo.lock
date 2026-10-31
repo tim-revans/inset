@@ -1115,6 +1115,7 @@ version = "0.0.0"
 dependencies = [
  "inset-check",
  "inset-codegen",
+ "inset-contract",
  "inset-diagram",
  "inset-host",
  "inset-lsp",
@@ -1137,6 +1138,18 @@ dependencies = [
  "quote",
  "serde_json",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "inset-contract"
+version = "0.0.0"
+dependencies = [
+ "inset-check",
+ "inset-syntax",
+ "inset-value",
+ "insta",
+ "jsonschema",
+ "serde_json",
 ]
 
 [[package]]
@@ -1187,6 +1200,7 @@ version = "0.0.0"
 dependencies = [
  "inset-value",
  "rust_decimal",
+ "serde",
  "serde_json",
  "wit-bindgen 0.63.0",
 ]
@@ -2591,6 +2605,7 @@ checksum = "a0181c14ddd6c7b8b0b0132a5f1ea2f32be0d893cd3ea97b6e3b28886b8a3d1c"
 dependencies = [
  "cfg-if",
  "rustversion",
+ "serde",
  "wasm-bindgen-macro",
  "wasm-bindgen-shared",
 ]

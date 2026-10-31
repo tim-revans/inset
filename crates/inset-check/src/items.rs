@@ -4,9 +4,10 @@
 use inset_syntax::ast::*;
 use inset_syntax::{Diagnostic, Span};
 
-use crate::data::Data;
 use crate::types::{Resolver, Ty};
-use crate::{Checker, Comp, Field, FnKind, Reply, RouteDecl, Segment, Sig, names};
+use crate::{
+    BodyDecl, Checker, Comp, Field, FnKind, QueryParam, Reply, RouteDecl, Segment, Sig, names,
+};
 
 impl<'a> Checker<'a> {
     pub(crate) fn collect_items(&mut self) {
@@ -186,11 +187,11 @@ fn signature<'a>(
                 attr.span,
                 "a function is not handed down",
             )),
-            AttributeKind::Derive(_) | AttributeKind::Status(_) => {
+            AttributeKind::Derive(_) | AttributeKind::Status(_) | AttributeKind::Serde(_) => {
                 diagnostics.push(Diagnostic::new(
                     "this attribute does not go on a function",
                     attr.span,
-                    "`#[derive]` goes on a struct or enum, and `#[status]` on an enum's variant",
+                    "`#[derive]` and `#[serde]` go on a struct or enum, and `#[status]` on an enum's variant",
                 ));
             }
         }
@@ -324,8 +325,7 @@ impl<'a> Checker<'a> {
         for sig in &comp.functions {
             for attr in &sig.ast.attrs {
                 if let AttributeKind::Route(route) = &attr.kind
-                    && let Some(decl) =
-                        route_decl(&self.datas, comp, sig, route, attr.span, &mut errors)
+                    && let Some(decl) = route_decl(self, comp, sig, route, attr.span, &mut errors)
                 {
                     routes.push(decl);
                 }
@@ -435,13 +435,14 @@ impl<'a> Checker<'a> {
 /// Checks one route attribute, returning it as a declaration if it can be
 /// resolved far enough to serve requests.
 fn route_decl(
-    datas: &[Data],
+    cx: &Checker,
     comp: &Comp,
     sig: &Sig,
     route: &Route,
     span: Span,
     errors: &mut Vec<Diagnostic>,
 ) -> Option<RouteDecl> {
+    let datas = &cx.datas;
     let function = sig.ast;
     let via = &route.via;
     match comp.field(&via.name) {
@@ -484,14 +485,10 @@ fn route_decl(
         );
         return None;
     }
-    if template.contains('?') {
-        errors.push(Diagnostic::new(
-            "query parameters are not supported yet",
-            path.span,
-            "the checker does not handle this yet",
-        ));
-        return None;
-    }
+    let (path_part, query_part) = match template.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (template, None),
+    };
     let param = |name: &str| {
         function
             .params
@@ -503,14 +500,21 @@ fn route_decl(
             })
     };
     let mut bound: Vec<&str> = Vec::new();
-    for text in template[1..].split('/') {
+    let twice = |name: &str, bound: &mut Vec<&str>, errors: &mut Vec<Diagnostic>| {
+        if bound.contains(&name) {
+            errors.push(Diagnostic::new(
+                format!("the parameter `{{{name}}}` appears twice"),
+                path.span,
+                "each parameter in the path binds a different function parameter",
+            ));
+            true
+        } else {
+            false
+        }
+    };
+    for text in path_part[1..].split('/') {
         if let Some(name) = text.strip_prefix('{').and_then(|t| t.strip_suffix('}')) {
-            if bound.contains(&name) {
-                errors.push(Diagnostic::new(
-                    format!("the path parameter `{{{name}}}` appears twice"),
-                    path.span,
-                    "each path parameter binds a different function parameter",
-                ));
+            if twice(name, &mut bound, errors) {
                 ok = false;
                 continue;
             }
@@ -546,32 +550,90 @@ fn route_decl(
             segments.push(Segment::Literal(text.to_string()));
         }
     }
-    if let Some(body) = &route.body {
-        if bound.contains(&body.name.as_str()) {
+    let mut query = Vec::new();
+    for text in query_part.into_iter().flat_map(|q| q.split('&')) {
+        let Some(name) = text.strip_prefix('{').and_then(|t| t.strip_suffix('}')) else {
+            errors.push(
+                Diagnostic::new(
+                    "a query parameter is written as `{name}`",
+                    path.span,
+                    format!("`{text}` is not a parameter in `{{` `}}`"),
+                )
+                .with_help("write each query parameter in `{` `}`, separated by `&`, such as \"/items?{limit}&{after}\""),
+            );
+            ok = false;
+            continue;
+        };
+        if twice(name, &mut bound, errors) {
+            ok = false;
+            continue;
+        }
+        bound.push(name);
+        match param(name) {
+            Some((p, ty)) => {
+                let (inner, required) = match ty {
+                    Ty::Std("Option", args) => (args[0].clone(), false),
+                    other => (other.clone(), true),
+                };
+                check_from_text(&inner, p, "query", errors);
+                query.push(QueryParam {
+                    name: name.to_string(),
+                    ty: inner,
+                    required,
+                });
+            }
+            None => {
+                errors.push(
+                    Diagnostic::new(
+                        format!("the query parameter `{{{name}}}` has no function parameter"),
+                        path.span,
+                        format!("`{}` takes no parameter `{name}`", function.name.name),
+                    )
+                    .with_help(format!(
+                        "add `{name}: Option<String>` to the function's parameters, or `{name}: String` if every request must give it"
+                    )),
+                );
+                ok = false;
+            }
+        }
+    }
+    let mut body = None;
+    if let Some(name) = &route.body {
+        if bound.contains(&name.name.as_str()) {
             errors.push(Diagnostic::new(
-                format!("`{}` is both a path parameter and the body", body.name),
-                body.span,
+                format!(
+                    "`{}` is both a parameter in the path and the body",
+                    name.name
+                ),
+                name.span,
                 "a parameter is supplied once",
             ));
         }
-        match param(&body.name) {
-            Some((p, ty)) => check_from_text(ty, p, "body", errors),
+        match param(&name.name) {
+            Some((p, Ty::Std("Json", args))) => {
+                check_json(cx, &args[0], "Deserialize", p.ty.span, "read from", errors);
+                body = Some(BodyDecl::Json(args[0].clone()));
+            }
+            Some((p, ty)) => {
+                check_from_text(ty, p, "body", errors);
+                body = Some(BodyDecl::Text(ty.clone()));
+            }
             None => errors.push(
                 Diagnostic::new(
                     format!(
                         "`body = {}` names no parameter of `{}`",
-                        body.name, function.name.name
+                        name.name, function.name.name
                     ),
-                    body.span,
+                    name.span,
                     "the body binds to a function parameter",
                 )
                 .with_help(format!(
                     "add `{}: String` to the function's parameters",
-                    body.name
+                    name.name
                 )),
             ),
         }
-        bound.push(&body.name);
+        bound.push(&name.name);
     }
     for p in &function.params {
         let name = match &p.pattern.kind {
@@ -580,7 +642,7 @@ fn route_decl(
                 errors.push(Diagnostic::new(
                     "a route handler's parameters are names",
                     p.pattern.span,
-                    "a path parameter or the body binds to a parameter by its name",
+                    "a parameter in the path or the body binds to a parameter by its name",
                 ));
                 continue;
             }
@@ -599,11 +661,24 @@ fn route_decl(
             );
         }
     }
+    let ret_span = function.ret.as_ref().map_or(function.name.span, |t| t.span);
+    // The type replied with on success: a `String`, or `Json<T>` for `T`.
+    let mut reply_json = None;
+    let mut error = None;
+    let mut success = |ty: &Ty, errors: &mut Vec<Diagnostic>| match ty {
+        Ty::String => true,
+        Ty::Std("Json", args) => {
+            check_json(cx, &args[0], "Serialize", ret_span, "replied as", errors);
+            reply_json = Some(args[0].clone());
+            true
+        }
+        _ => false,
+    };
     let reply = match &sig.ret {
-        Ty::String => Reply::Text,
-        Ty::Std("Option", args) if args[0] == Ty::String => Reply::Optional,
-        Ty::Std("Result", args) if args[0] == Ty::String => match &args[1] {
+        Ty::Std("Option", args) if success(&args[0], errors) => Reply::Optional,
+        Ty::Std("Result", args) if success(&args[0], errors) => match &args[1] {
             Ty::Data { id, .. } if datas[*id].statuses().is_some() => {
+                error = Some(*id);
                 Reply::Fallible(datas[*id].statuses().unwrap_or_default())
             }
             Ty::Unknown => Reply::Unknown,
@@ -619,7 +694,7 @@ fn route_decl(
                 errors.push(
                     Diagnostic::new(
                         "a route's error type is an enum with a `#[status]` on each variant",
-                        function.ret.as_ref().map_or(function.name.span, |t| t.span),
+                        ret_span,
                         format!("`{other}` names no statuses"),
                     )
                     .with_help(help),
@@ -628,14 +703,16 @@ fn route_decl(
             }
         },
         Ty::Unknown => Reply::Unknown,
+        other if success(other, errors) => Reply::Text,
         other => {
             let (span, label) = match &function.ret {
                 Some(ty) => (ty.span, format!("a route cannot reply with `{other}`")),
                 None => (function.name.span, "this route returns nothing".to_string()),
             };
             errors.push(
-                Diagnostic::new("a route returns its reply", span, label)
-                    .with_help("return a `String`, an `Option<String>` or a `Result<String, E>`"),
+                Diagnostic::new("a route returns its reply", span, label).with_help(
+                    "return a `String` or a `Json<T>`, or either in an `Option` or a `Result<_, E>`",
+                ),
             );
             Reply::Unknown
         }
@@ -644,29 +721,112 @@ fn route_decl(
         method: route.method,
         template: template.to_string(),
         segments,
+        query,
         via: via.name.clone(),
-        body: route.body.is_some(),
+        body,
         reply,
+        reply_json,
+        error,
         span,
         function: function.name.span,
     })
 }
 
-/// Path parameters and bodies are read from text, as Rust's `FromStr` reads them.
+/// Path and query parameters and text bodies are read from text, as Rust's
+/// `FromStr` reads them.
 fn check_from_text(ty: &Ty, param: &Param, from: &str, errors: &mut Vec<Diagnostic>) {
     let readable = matches!(
         ty,
         Ty::Unknown | Ty::String | Ty::Bool | Ty::Char | Ty::Int(_) | Ty::Float(_) | Ty::Decimal
     );
     if !readable {
+        let help = if from == "body" {
+            "take a `String`, a number, a `bool`, a `char` or a `Decimal`, or a `Json<T>` for a JSON body"
+        } else {
+            "take a `String`, a number, a `bool`, a `char` or a `Decimal`"
+        };
         errors.push(
             Diagnostic::new(
                 format!("a `{ty}` cannot be read from the {from}"),
                 param.ty.span,
                 format!("the {from} is text"),
             )
-            .with_help("take a `String`, a number, a `bool`, a `char` or a `Decimal`"),
+            .with_help(help),
         );
+    }
+}
+
+/// A `Json<T>` body is read with serde's `Deserialize`, and a `Json<T>`
+/// reply written with `Serialize`, so `T` must have it, as rustc would
+/// require. A JSON object's keys are text, so a map in `T` has `String` keys.
+fn check_json(
+    cx: &Checker,
+    ty: &Ty,
+    trait_name: &str,
+    span: Span,
+    what: &str,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if cx.implements(ty, trait_name, usize::MAX) == Some(false) {
+        let help = match missing_derive(cx, ty, trait_name) {
+            Some(name) => format!("add `{trait_name}` to the `#[derive]` of `{name}`"),
+            None => format!(
+                "a JSON body holds data types that derive `{trait_name}`, and standard types such as `String`, numbers, `Vec` and `Option`"
+            ),
+        };
+        errors.push(
+            Diagnostic::new(
+                format!("a `{ty}` cannot be {what} JSON"),
+                span,
+                format!("`{ty}` does not implement `{trait_name}`"),
+            )
+            .with_help(help),
+        );
+        return;
+    }
+    if let Some(key) = json_map_key(cx, ty, &mut Vec::new()) {
+        errors.push(
+            Diagnostic::new(
+                format!("a `{ty}` cannot be {what} JSON"),
+                span,
+                format!("it holds a map with `{key}` keys, and a JSON object's keys are text"),
+            )
+            .with_help("use `String` keys, or a `Vec` of pairs"),
+        );
+    }
+}
+
+/// The first data type inside `ty` that does not derive `trait_name`.
+fn missing_derive(cx: &Checker, ty: &Ty, trait_name: &str) -> Option<String> {
+    match ty {
+        Ty::Data { id, name, .. } => (!cx.datas[*id].derives(trait_name)).then(|| name.clone()),
+        Ty::Tuple(elems) | Ty::Std(_, elems) => {
+            elems.iter().find_map(|t| missing_derive(cx, t, trait_name))
+        }
+        Ty::Ref { inner, .. } => missing_derive(cx, inner, trait_name),
+        _ => None,
+    }
+}
+
+/// The key type of a map inside `ty` whose keys are not `String`.
+fn json_map_key(cx: &Checker, ty: &Ty, seen: &mut Vec<usize>) -> Option<Ty> {
+    match ty {
+        Ty::Std("HashMap" | "BTreeMap", args) if !matches!(args[0], Ty::String | Ty::Unknown) => {
+            Some(args[0].clone())
+        }
+        Ty::Tuple(elems) | Ty::Std(_, elems) => {
+            elems.iter().find_map(|t| json_map_key(cx, t, seen))
+        }
+        Ty::Data { id, .. } if !seen.contains(id) => {
+            seen.push(*id);
+            let data = &cx.datas[*id];
+            data.fields
+                .iter()
+                .map(|f| &f.ty)
+                .chain(data.variants.iter().flat_map(|v| &v.fields))
+                .find_map(|t| json_map_key(cx, t, seen))
+        }
+        _ => None,
     }
 }
 

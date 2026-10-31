@@ -1,0 +1,10 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `net_price` and `kind` are both `kind` in JSON
+    ╭─[ src/main.inset:17:5 ]
+    │
+ 17 │     kind: Kind,
+    │     ──┬─  
+    │       ╰─── two names cannot be told apart in JSON
+────╯

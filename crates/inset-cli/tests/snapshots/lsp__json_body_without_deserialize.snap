@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:10:46-10:57
+the struct `Product` cannot derive `Deserialize`
+its field `kind` holds a `Kind`, which is not `Deserialize`
+help: remove `Deserialize` from the `#[derive]`, or change the type of `kind`
