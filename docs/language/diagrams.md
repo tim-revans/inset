@@ -152,4 +152,6 @@ Every element has an ID derived from where it is in the source, so an ID stays t
 
 The `kind:` prefixes keep a field, a function and a child with the same name apart, as Rust allows. The JSON Schema checks the shape of a file, and `inset-diagram check` also checks that every ID follows these rules, that none is used twice, and that every reference names an element of the right kind.
 
+In a rendered SVG, each element that has an ID carries it in a `data-id` attribute. The VS Code extension reads this attribute to open the source of a clicked element.
+
 *Why IDs follow the source and not the picture:* the coverage overlay, a requirement report and an editor all need to name the same element. The source is the one thing they share, and a path through it is readable in a test failure.

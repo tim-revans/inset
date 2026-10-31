@@ -7,6 +7,14 @@ RUN apt-get update \
         build-essential ca-certificates curl git pkg-config xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
+# What VS Code needs to start without a screen, for the extension's
+# integration tests: a virtual display and the libraries Electron loads.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        xvfb xauth libasound2t64 libgbm1 libgtk-3-0t64 libnss3 libsecret-1-0 \
+        libxkbfile1 libxss1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Node.js, for the VS Code extension's grammar tests and packaging. Debian's
 # Node is too old for the packaging tool, so an official build is pinned here
 # by version and checksum.

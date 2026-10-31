@@ -29,16 +29,16 @@ inset run examples/hello-http                        # serve it, then open http:
 | [`crates/`](crates/) | The compiler, the `inset` command, the language server, and the runtime and WebAssembly host that built programs run on |
 | [`docs/language/`](docs/language/) | The language specification: syntax, diagrams and their data format, and the runtime |
 | [`examples/`](examples/) | Example programs, each with its expected diagram data and pictures in `expected/` |
-| [`editors/vscode/`](editors/vscode/) | The VS Code extension, which highlights Inset and starts the language server |
+| [`editors/vscode/`](editors/vscode/) | The VS Code extension, which highlights Inset, starts the language server, and shows a program's diagram and requirements |
 | [`xtask/`](xtask/) | Repository tasks run as `cargo xtask`, such as the CI gate and end-to-end runs |
 | [`.devcontainer/`](.devcontainer/) | The dev container that CI also builds in |
 
 ## Building
 
-You need [rustup](https://rustup.rs). `rust-toolchain.toml` selects the toolchain and installs the `wasm32-wasip2` target. The editor grammar tests and packaging also need [Node.js](https://nodejs.org) 22 or later with npm.
+You need [rustup](https://rustup.rs). `rust-toolchain.toml` selects the toolchain and installs the `wasm32-wasip2` target. The editor tests and packaging also need [Node.js](https://nodejs.org) 22 or later with npm, and the editor integration tests need a display or `xvfb-run`.
 
 ```sh
-cargo xtask ci                 # format check, clippy, tests, editor grammar tests
+cargo xtask ci                 # format check, clippy, tests, editor tests
 cargo xtask editor             # package the VS Code extension
 cargo install --path crates/inset-cli   # put `inset` on PATH, for the editor
 cargo xtask e2e hello          # build Hello HTTP, serve it and request a greeting

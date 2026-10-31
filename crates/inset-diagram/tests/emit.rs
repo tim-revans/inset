@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use inset_check::{Program, SourceFile, check};
-use inset_diagram::{Diagram, View, emit, render, to_json, validate};
+use inset_diagram::{Diagram, View, emit, emit_with_sources, render, to_json, validate};
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -48,6 +48,12 @@ fn every_checked_example_is_drawn_as_its_expected_diagram() {
 
 /// Every view of a diagram draws, which also checks each flowchart's ID.
 fn draw_every_view(diagram: &Diagram) {
+    every_view(diagram);
+}
+
+/// Every view of a diagram, drawn: components collapsed and expanded, and
+/// each function's flowchart.
+fn every_view(diagram: &Diagram) -> Vec<String> {
     let mut functions = Vec::new();
     let mut components = vec![&diagram.app.components];
     while let Some(list) = components.pop() {
@@ -59,14 +65,74 @@ fn draw_every_view(diagram: &Diagram) {
         }
     }
     functions.extend(&diagram.algorithms);
-    render(diagram, &View::default()).unwrap();
+    let expanded = View {
+        expand_all: true,
+        ..View::default()
+    };
+    let mut drawn = vec![
+        render(diagram, &View::default()).unwrap(),
+        render(diagram, &expanded).unwrap(),
+    ];
     for function in functions {
         let view = View {
             flowchart: Some(function.id.clone()),
             ..View::default()
         };
-        render(diagram, &view).unwrap_or_else(|e| panic!("{}: {e}", function.id));
+        drawn.push(render(diagram, &view).unwrap_or_else(|e| panic!("{}: {e}", function.id)));
     }
+    drawn
+}
+
+/// The IDs a picture gives its elements, which an editor reads to know
+/// what was clicked.
+fn drawn_ids(svg: &str) -> Vec<String> {
+    svg.split(r#"data-id=""#)
+        .skip(1)
+        .map(|rest| {
+            let id = &rest[..rest.find('"').expect("a closing quote")];
+            id.replace("&gt;", ">")
+                .replace("&lt;", "<")
+                .replace("&quot;", "\"")
+                .replace("&amp;", "&")
+        })
+        .collect()
+}
+
+/// Every element any view draws has a place in the source, and the places
+/// are pinned for the program with every shape, one line each: the ID, the
+/// line and column, and the start of the source there.
+#[test]
+fn every_drawn_element_has_a_source() {
+    let mut pinned = String::new();
+    for dir in [
+        "examples/hello-http",
+        "crates/inset-diagram/tests/programs/shapes",
+    ] {
+        let program = Program::load(&repo().join(dir)).expect("load program");
+        let emitted = emit_with_sources(&program).expect("drawn");
+        for svg in every_view(&emitted.diagram) {
+            for id in drawn_ids(&svg) {
+                assert!(
+                    emitted.sources.contains_key(&id),
+                    "{dir}: `{id}` has no source"
+                );
+            }
+        }
+        if dir.ends_with("shapes") {
+            let text = &program.files[emitted.file].text;
+            for (id, span) in &emitted.sources {
+                let before = &text[..span.start];
+                let line = before.matches('\n').count() + 1;
+                let column = before.len() - before.rfind('\n').map_or(0, |i| i + 1) + 1;
+                let start = text[span.start..span.end]
+                    .lines()
+                    .next()
+                    .unwrap_or_default();
+                pinned.push_str(&format!("{id}  {line}:{column}  {start}\n"));
+            }
+        }
+    }
+    insta::assert_snapshot!(pinned);
 }
 
 #[test]

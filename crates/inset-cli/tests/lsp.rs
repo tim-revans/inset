@@ -1,6 +1,7 @@
 //! Drives `inset lsp` over JSON-RPC on its standard input and output, as an
 //! editor does: diagnostics for the checker's negative cases, which must
-//! match `inset check`, then hover, go-to-definition and the outline.
+//! match `inset check`, then hover, go-to-definition, the outline and the
+//! diagram.
 
 #[path = "../../inset-check/tests/cases/mod.rs"]
 mod cases;
@@ -479,4 +480,100 @@ fn tree(symbols: &Value, depth: usize, out: &mut String) {
             tree(children, depth + 1, out);
         }
     }
+}
+
+// ---- Diagrams ----------------------------------------------------------------
+
+fn diagram(client: &mut Client, path: &Path, options: &[&str]) -> Value {
+    client.request(
+        "inset/diagram",
+        json!({ "textDocument": { "uri": uri(path) }, "options": options }),
+    )
+}
+
+/// The picture is the one `inset diagram` draws, and the ID on each element
+/// leads to its source: clicking `Greeter` opens the component.
+#[test]
+fn the_diagram_is_the_one_inset_diagram_draws_and_leads_to_the_source() {
+    let mut client = Client::start();
+    let dir = example("hello-http");
+    let main = dir.join("src/main.inset");
+    let code = std::fs::read_to_string(&main).unwrap();
+    client.open(&main, &code);
+    let expected = |name: &str| std::fs::read_to_string(dir.join("expected").join(name)).unwrap();
+
+    let picture = diagram(&mut client, &main, &[]);
+    assert_eq!(picture["app"], "HelloHttp");
+    assert_eq!(picture["svg"], expected("diagram.svg"));
+    assert_eq!(picture["problems"], json!([]));
+    assert_eq!(picture["functions"], json!(["HelloHttp/Greeter/fn:hello"]));
+    let flowchart = ["--flowchart", "HelloHttp/Greeter/fn:hello"];
+    assert_eq!(
+        diagram(&mut client, &main, &flowchart)["svg"],
+        expected("hello.svg")
+    );
+
+    let options = ["--theme", "dark", "--expand-all"];
+    let drawn = Command::new(env!("CARGO_BIN_EXE_inset"))
+        .arg("diagram")
+        .arg(&dir)
+        .args(options)
+        .output()
+        .expect("run inset diagram");
+    assert!(drawn.status.success());
+    let svg = String::from_utf8(drawn.stdout).unwrap();
+    assert_eq!(diagram(&mut client, &main, &options)["svg"], svg);
+
+    let sources = &picture["sources"];
+    let greeter = &sources["HelloHttp/Greeter"];
+    assert_eq!(greeter["uri"], uri(&main));
+    let (line, column) = find(&code, "component Greeter");
+    assert_eq!(
+        start(&greeter["range"]),
+        (line, column + "component ".len())
+    );
+    assert_eq!(
+        start(&sources["HelloHttp/Greeter/fn:hello"]["range"]),
+        find(&code, "hello(")
+    );
+    assert_eq!(
+        start(&sources["HelloHttp/grant:http/outside"]["range"]),
+        find(&code, "http: HttpServer {")
+    );
+    client.shutdown();
+}
+
+/// A program with problems gets them, each where it is, instead of a
+/// picture. Unknown view options are refused, and a file outside a program
+/// has no diagram.
+#[test]
+fn a_diagram_that_cannot_be_drawn_says_why() {
+    let mut client = Client::start();
+    let dir = example("hello-http");
+    let main = dir.join("src/main.inset");
+    let code = std::fs::read_to_string(&main).unwrap();
+    client.open(&main, &code.replace("http: move http", "http: move web"));
+    let picture = diagram(&mut client, &main, &[]);
+    assert!(picture["svg"].is_null(), "{picture}");
+    let problem = &picture["problems"][0];
+    assert!(
+        problem["message"].as_str().unwrap().contains("web"),
+        "{problem}"
+    );
+    assert_eq!(problem["location"]["uri"], uri(&main));
+    assert_eq!(
+        start(&problem["location"]["range"]).0,
+        find(&code, "start Greeter").0
+    );
+
+    let response = client.call(
+        "inset/diagram",
+        json!({ "textDocument": { "uri": uri(&main) }, "options": ["--sideways"] }),
+    );
+    assert_eq!(response["error"]["code"], -32602, "{response}");
+
+    let lone = std::env::temp_dir().join("inset-lsp-lone/drawing.inset");
+    client.open(&lone, "component Lone {}\n");
+    assert!(diagram(&mut client, &lone, &[]).is_null());
+    client.shutdown();
 }

@@ -36,6 +36,26 @@ use crate::model::{
 /// Checks the program and emits its diagram data. The reports are the
 /// checker's, or else one for each construct that cannot be drawn yet.
 pub fn emit(program: &Program) -> Result<Diagram, Vec<Report>> {
+    emit_with_sources(program).map(|emitted| emitted.diagram)
+}
+
+/// Diagram data, with where each element is in the source.
+#[derive(Debug, Clone)]
+pub struct Emitted {
+    pub diagram: Diagram,
+    /// The program's main file, by its index in the program.
+    pub file: usize,
+    /// For every element a picture can draw, by ID, the span in the main
+    /// file a reader should be taken to: a declaration's name, a step's
+    /// statement, a branch's block. An instance of a component goes to the
+    /// component's declaration, a capability edge to the field that holds
+    /// the capability, and what a grant reaches outside the app to the grant.
+    pub sources: BTreeMap<String, Span>,
+}
+
+/// As [`emit`], and records where each element is in the source, so an
+/// editor can take a reader from a picture to the code.
+pub fn emit_with_sources(program: &Program) -> Result<Emitted, Vec<Report>> {
     let reports = inset_check::check(program);
     if !reports.is_empty() {
         return Err(reports);
@@ -50,7 +70,11 @@ pub fn emit(program: &Program) -> Result<Diagram, Vec<Report>> {
     let mut emitter = Emitter::new(source, &module);
     let diagram = emitter.diagram();
     if emitter.diagnostics.is_empty() {
-        Ok(diagram)
+        Ok(Emitted {
+            diagram,
+            file: main,
+            sources: emitter.sources,
+        })
     } else {
         Err(emitter
             .diagnostics
@@ -79,6 +103,8 @@ struct Emitter<'a> {
     operations: BTreeMap<String, BTreeSet<String>>,
     /// Capability fields that are used, in the order the components are drawn.
     used_capabilities: Vec<String>,
+    /// Where each element is, as [`Emitted::sources`].
+    sources: BTreeMap<String, Span>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -101,6 +127,7 @@ impl<'a> Emitter<'a> {
             moved_from: BTreeMap::new(),
             operations: BTreeMap::new(),
             used_capabilities: Vec::new(),
+            sources: BTreeMap::new(),
             diagnostics: Vec::new(),
         }
     }
@@ -111,6 +138,11 @@ impl<'a> Emitter<'a> {
                 "`inset check` accepts this, but the diagram generator does not draw it yet",
             ),
         );
+    }
+
+    /// Records where an element is, replacing any earlier record.
+    fn locate(&mut self, id: &str, span: Span) {
+        self.sources.insert(id.to_string(), span);
     }
 
     /// The source text of a span, on one line.
@@ -129,7 +161,14 @@ impl<'a> Emitter<'a> {
             })
             .expect("a checked program has an app");
         self.app = app.name.name.clone();
+        self.locate(&app.name.name, app.name.span);
         self.app_settings = app.settings.iter().map(|s| s.name.name.as_str()).collect();
+        for s in &app.settings {
+            self.locate(
+                &format!("{}/setting:{}", self.app, s.name.name),
+                s.name.span,
+            );
+        }
         let settings = app
             .settings
             .iter()
@@ -250,8 +289,11 @@ impl<'a> Emitter<'a> {
                 }
             }
         };
+        let id = format!("{}/grant:{}", self.app, grant.name.name);
+        self.locate(&id, grant.name.span);
+        self.locate(&format!("{id}/outside"), grant.name.span);
         Grant {
-            id: format!("{}/grant:{}", self.app, grant.name.name),
+            id,
             name: grant.name.name.clone(),
             ty: self.text(grant.ty.span),
             config,
@@ -365,6 +407,7 @@ impl<'a> Emitter<'a> {
         component: &'a ast::Component,
         start_handoffs: Vec<Handoff>,
     ) -> Component {
+        self.locate(&id, component.name.span);
         let fields: Vec<Field> = component
             .fields
             .iter()
@@ -375,6 +418,7 @@ impl<'a> Emitter<'a> {
                     .iter()
                     .any(|a| matches!(a.kind, AttributeKind::HandedDown));
                 let field_id = format!("{id}/field:{}", f.name.name);
+                self.locate(&field_id, f.name.span);
                 if kind == FieldKind::Capability && !handed_down {
                     self.used_capabilities.push(field_id.clone());
                     self.operations.entry(field_id.clone()).or_default();
@@ -493,8 +537,10 @@ impl<'a> Emitter<'a> {
             ),
             FailureConditionKind::Other => (Condition::Any, "any".to_string()),
         };
+        let arm_id = format!("{id}/failure:{segment}");
+        self.locate(&arm_id, arm.condition.span);
         FailureArm {
-            id: format!("{id}/failure:{segment}"),
+            id: arm_id,
             condition,
             response: match arm.response {
                 FailureResponse::Rollback => Response::Rollback,
@@ -513,6 +559,7 @@ impl<'a> Emitter<'a> {
         scope: Option<&Scope<'_>>,
     ) -> Function {
         let id = format!("{owner}/fn:{}", function.name.name);
+        self.locate(&id, function.name.span);
         let returns = function.ret.as_ref().map(|t| self.text(t.span));
         let body = self.flowchart(&id, function, scope);
         Function {
@@ -549,8 +596,10 @@ impl<'a> Emitter<'a> {
             if !from.contains("/grant:") {
                 continue;
             }
+            let id = format!("{field}->{from}");
+            self.sources.insert(id.clone(), self.sources[field]);
             edges.push(Edge::Capability {
-                id: format!("{field}->{from}"),
+                id,
                 from: field.clone(),
                 to: from.clone(),
                 operations: self.operations[field].iter().cloned().collect(),

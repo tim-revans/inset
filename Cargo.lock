@@ -1150,9 +1150,11 @@ name = "inset-lsp"
 version = "0.0.0"
 dependencies = [
  "inset-check",
+ "inset-diagram",
  "inset-syntax",
  "lsp-server",
  "lsp-types",
+ "serde",
  "serde_json",
 ]
 

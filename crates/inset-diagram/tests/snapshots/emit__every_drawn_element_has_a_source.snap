@@ -1,0 +1,47 @@
+---
+source: crates/inset-diagram/tests/emit.rs
+expression: pinned
+---
+Shapes  2:5  Shapes
+Shapes/fn:describe  71:4  describe
+Shapes/fn:describe/0  72:5  format!("{n}")
+Shapes/front  13:11  Front
+Shapes/front/failure:message:tally  22:9  Message(tally)
+Shapes/front/failure:panic  24:9  Panic
+Shapes/front/field:counts  16:5  counts
+Shapes/front/field:web  14:5  web
+Shapes/front/field:web->Shapes/grant:http  14:5  web
+Shapes/front/fn:count  53:8  count
+Shapes/front/fn:count/0  54:9  words.len()
+Shapes/front/fn:find  29:8  find
+Shapes/front/fn:find/0  30:9  let half = n.checked_div(2)?;
+Shapes/front/fn:find/0/err  30:9  let half = n.checked_div(2)?;
+Shapes/front/fn:find/1  31:9  if half > 10 
+Shapes/front/fn:find/1/b0  31:22  {
+Shapes/front/fn:find/1/b0/0  32:13  return Some(String::from("big"))
+Shapes/front/fn:find/1/b1  33:16  if half == 0 {
+Shapes/front/fn:find/1/b1/0  33:16  if half == 0 
+Shapes/front/fn:find/1/b1/0/b0  33:29  {
+Shapes/front/fn:find/1/b1/0/b0/0  34:13  Some(String::from("zero"))
+Shapes/front/fn:find/1/b1/0/b1  35:16  {
+Shapes/front/fn:find/1/b1/0/b1/0  36:13  let text = describe(half);
+Shapes/front/fn:find/1/b1/0/b1/1  37:13  Some(text)
+Shapes/front/fn:name  42:8  name
+Shapes/front/fn:name/0  43:9  let Some(doubled) = n.checked_mul(2) else {
+Shapes/front/fn:name/0/b0  43:13  Some(doubled)
+Shapes/front/fn:name/0/b1  43:51  {
+Shapes/front/fn:name/0/b1/0  44:13  return String::from("too big")
+Shapes/front/fn:name/1  46:9  let words: Vec<String> = label
+Shapes/front/fn:name/2  50:9  format!("{label}: {doubled} {}", Self::count(&words))
+Shapes/front/tally  59:11  Tally
+Shapes/front/tally/field:counts  60:5  counts
+Shapes/front/tally/field:counts->Shapes/grant:counts  60:5  counts
+Shapes/front/tally/field:total  61:5  total
+Shapes/front/tally/fn:add  65:8  add
+Shapes/front/tally/fn:add/0  66:9  self.total += n
+Shapes/grant:counts  8:11  counts
+Shapes/grant:counts/outside  8:11  counts
+Shapes/grant:http  6:11  http
+Shapes/grant:http/outside  6:11  http
+Shapes/setting:port  4:13  port
+Shapes/setting:store  5:13  store

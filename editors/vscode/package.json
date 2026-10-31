@@ -1,7 +1,7 @@
 {
   "name": "inset",
   "displayName": "Inset",
-  "description": "The Inset language: highlighting, and live diagnostics, hover, go-to-definition and outline from its language server",
+  "description": "The Inset language: highlighting; live diagnostics, hover, go-to-definition and outline from its language server; and the program's diagram and requirements, for review",
   "version": "0.1.0",
   "publisher": "inset",
   "license": "MIT OR Apache-2.0",
@@ -13,8 +13,12 @@
     "Programming Languages"
   ],
   "main": "./extension.js",
+  "activationEvents": [
+    "workspaceContains:**/requirements/**/*.req.inset"
+  ],
   "scripts": {
     "test": "node test/grammar.test.mjs",
+    "test:integration": "node test/integration/run.mjs",
     "package": "vsce package --skip-license --allow-missing-repository"
   },
   "contributes": {
@@ -77,7 +81,7 @@
         "inset.server.path": {
           "type": "string",
           "default": "inset",
-          "markdownDescription": "The `inset` command, which runs the language server as `inset lsp`. A bare name is looked up on `PATH`."
+          "markdownDescription": "The `inset` command. The extension runs the language server as `inset lsp`, and requirements as `inset test`. A bare name is looked up on `PATH`."
         }
       }
     },
@@ -86,8 +90,56 @@
         "command": "inset.restartServer",
         "title": "Restart the language server",
         "category": "Inset"
+      },
+      {
+        "command": "inset.showDiagram",
+        "title": "Show the diagram",
+        "category": "Inset",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "inset.runRequirements",
+        "title": "Run every requirement",
+        "category": "Inset",
+        "icon": "$(run-all)"
+      },
+      {
+        "command": "inset.refreshRequirements",
+        "title": "Find requirements again",
+        "category": "Inset",
+        "icon": "$(refresh)"
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "inset.showDiagram",
+          "when": "editorLangId == inset || editorLangId == inset-req",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "inset.runRequirements",
+          "when": "view == inset.requirements",
+          "group": "navigation@1"
+        },
+        {
+          "command": "inset.refreshRequirements",
+          "when": "view == inset.requirements",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "inset.requirements",
+          "name": "Inset requirements",
+          "when": "inset.hasRequirements"
+        }
+      ]
+    },
     "configurationDefaults": {
       "[inset]": {
         "editor.tabSize": 4,
@@ -131,6 +183,7 @@
     }
   },
   "devDependencies": {
+    "@vscode/test-electron": "2.5.2",
     "@vscode/vsce": "4.0.0",
     "vscode-oniguruma": "2.0.1",
     "vscode-textmate": "9.3.2"

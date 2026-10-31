@@ -2,7 +2,10 @@
 //! its JSON Schema, and a renderer that draws it as SVG.
 //!
 //! [`emit`] produces the data from a checked program, as `inset diagram`
-//! does. `emit/mod.rs` says what it covers so far.
+//! does. `emit/mod.rs` says what it covers so far. [`emit_with_sources`]
+//! also says where in the source each element is, so an editor can take a
+//! reader from a picture to the code: each element a picture draws carries
+//! its ID in a `data-id` attribute.
 //!
 //! The data holds everything the source says, and a [`View`] chooses what a
 //! picture shows. `docs/language/diagrams.md` describes the format, the ID
@@ -32,7 +35,7 @@ mod svg;
 mod theme;
 mod validate;
 
-pub use emit::emit;
+pub use emit::{Emitted, emit, emit_with_sources};
 pub use model::Diagram;
 pub use theme::Theme;
 pub use validate::validate;

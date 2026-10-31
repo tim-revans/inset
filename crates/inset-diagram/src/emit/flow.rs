@@ -64,6 +64,10 @@ impl Emitter<'_> {
         let count = block.stmts.len();
         for (i, stmt) in block.stmts.iter().enumerate() {
             let id = format!("{prefix}/{}", steps.len());
+            let span = match stmt {
+                Stmt::Let { span, .. } => *span,
+                Stmt::Expr { expr, .. } => expr.span,
+            };
             let step = match stmt {
                 Stmt::Let {
                     pattern,
@@ -74,6 +78,8 @@ impl Emitter<'_> {
                 } => {
                     let uses = self.uses(cx, init.as_ref());
                     self.no_exit(&uses, *span, "in a `let ... else`");
+                    self.locate(&format!("{id}/b0"), pattern.span);
+                    self.locate(&format!("{id}/b1"), otherwise.span);
                     let branches = vec![
                         Branch {
                             id: format!("{id}/b0"),
@@ -119,7 +125,11 @@ impl Emitter<'_> {
                     self.statement(cx, id, expr, last, value)
                 }
             };
-            steps.extend(step);
+            if let Some(step) = step {
+                // A decision has already located itself at its head.
+                self.sources.entry(step.id().to_string()).or_insert(span);
+                steps.push(step);
+            }
         }
         steps
     }
@@ -171,6 +181,7 @@ impl Emitter<'_> {
 
     fn action(&mut self, cx: &Context<'_>, id: String, span: Span, uses: Uses) -> Step {
         let exit = (uses.tries > 0).then(|| {
+            self.locate(&format!("{id}/err"), span);
             if !cx.returns_option {
                 self.unsupported(
                     "`?` in a function that does not return an `Option`",
@@ -220,6 +231,9 @@ impl Emitter<'_> {
         self.no_exit(&uses, cond.span, "in a condition");
         let yes = format!("{id}/b0");
         let no = format!("{id}/b1");
+        self.locate(&id, head);
+        self.locate(&yes, then_block.span);
+        self.locate(&no, else_branch.as_ref().map_or(head, |e| e.span));
         let no_steps = match else_branch.as_deref() {
             None => Vec::new(),
             Some(Expr {

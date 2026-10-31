@@ -1,0 +1,56 @@
+body {
+  padding: 0 12px 12px;
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  padding: 8px 0;
+  position: sticky;
+  top: 0;
+  background: var(--vscode-editor-background);
+}
+
+select {
+  color: var(--vscode-dropdown-foreground);
+  background: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-dropdown-border);
+  padding: 2px 4px;
+}
+
+#problems {
+  color: var(--vscode-errorForeground);
+  white-space: pre-wrap;
+  padding-left: 16px;
+}
+
+#problems li {
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+#problems li:hover {
+  text-decoration: underline;
+}
+
+/* An element that leads to its source. */
+#picture [data-source] {
+  cursor: pointer;
+}
+
+#picture g[data-source]:hover text,
+#picture text[data-source]:hover {
+  text-decoration: underline;
+}
+
+#picture rect[data-source]:hover,
+#picture path[data-source]:hover,
+#picture polygon[data-source]:hover,
+#picture circle[data-source]:hover {
+  filter: brightness(1.25);
+}

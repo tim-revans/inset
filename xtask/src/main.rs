@@ -1,8 +1,10 @@
 //! Repository task runner, invoked as `cargo xtask <task>`.
 //!
 //! Plain Rust with no dependencies, so it works for any contributor or agent
-//! without extra tooling. The VS Code extension's grammar tests and packaging
-//! need Node.js, so those steps shell out to `npm` in `editors/vscode`.
+//! without extra tooling. The VS Code extension's tests and packaging need
+//! Node.js, so those steps shell out to `npm` in `editors/vscode`. Its
+//! integration tests start VS Code, which needs a display: under `xvfb-run`
+//! when that is installed, as in CI, and on the desktop otherwise.
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -13,8 +15,9 @@ use std::time::{Duration, Instant};
 const USAGE: &str = "usage: cargo xtask <task>
 
 tasks:
-  ci                format check, clippy, tests, editor grammar tests
+  ci                format check, clippy, tests, editor grammar and integration tests
   editor            package the VS Code extension as a .vsix
+  editor-test       run the VS Code extension's integration tests alone
   e2e hello         build Hello HTTP from its source, serve it and request a greeting";
 
 fn main() -> ExitCode {
@@ -22,6 +25,7 @@ fn main() -> ExitCode {
     let result = match task.as_deref() {
         Some("ci") => ci(),
         Some("editor") => editor(),
+        Some("editor-test") => npm_install().and_then(|()| editor_integration()),
         Some("e2e") => match std::env::args().nth(2).as_deref() {
             Some("hello") => hello(),
             _ => {
@@ -68,7 +72,28 @@ fn ci() -> Result<(), String> {
     cargo(&["test", "--workspace"])?;
     npm_install()?;
     npm(&["test"])?;
-    Ok(())
+    editor_integration()
+}
+
+/// Opens the VS Code extension's panels on Hello HTTP in a real VS Code,
+/// with the `inset` built from this checkout.
+fn editor_integration() -> Result<(), String> {
+    cargo(&["build", "-p", "inset-cli"])?;
+    let inset = target_dir().join("debug/inset");
+    let xvfb = Command::new("xvfb-run").arg("--help").output().is_ok();
+    let mut command = if xvfb {
+        let mut command = Command::new("xvfb-run");
+        command.args(["-a", "npm"]);
+        command
+    } else {
+        Command::new("npm")
+    };
+    command
+        .args(["run", "test:integration"])
+        .current_dir(extension_dir())
+        .env("INSET_COMMAND", &inset);
+    let display = if xvfb { "xvfb-run -a npm" } else { "npm" };
+    run(&mut command, format!("{display} run test:integration"))
 }
 
 /// Packages the VS Code extension for local install. Publishing waits for the alpha.

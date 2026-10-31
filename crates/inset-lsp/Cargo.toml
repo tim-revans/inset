@@ -1,7 +1,7 @@
 [package]
 name = "inset-lsp"
 version = "0.0.0"
-description = "The Inset language server: diagnostics, hover, go-to-definition and outline"
+description = "The Inset language server: diagnostics, hover, go-to-definition, outline and diagrams"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
@@ -9,9 +9,11 @@ license.workspace = true
 
 [dependencies]
 inset-check = { path = "../inset-check" }
+inset-diagram = { path = "../inset-diagram" }
 inset-syntax = { path = "../inset-syntax" }
 lsp-server = "0.10"
 lsp-types = "0.97"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [lints]

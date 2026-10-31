@@ -2,7 +2,9 @@
 //! standard input and output.
 //!
 //! It shows in the editor what `inset check` reports, as the author types,
-//! and adds hover, go-to-definition and a document outline. It parses and
+//! and adds hover, go-to-definition and a document outline. It also answers
+//! `inset/diagram`, a request of its own that `diagram.rs` describes, with
+//! the program's picture for an editor to show. It parses and
 //! checks with `inset-syntax` and `inset-check`, so the editor and the
 //! command line cannot disagree, and there is no second parser to keep in
 //! step with the language.
@@ -25,6 +27,7 @@
 //! `lsp-types`: requests are answered in order, and checking a program
 //! takes far less time than typing a character.
 
+mod diagram;
 mod outline;
 mod position;
 mod uri;
@@ -149,6 +152,16 @@ impl Server<'_> {
             DocumentSymbolRequest::METHOD => {
                 let params: DocumentSymbolParams = serde_json::from_value(request.params)?;
                 serde_json::to_value(self.outline(params))?
+            }
+            diagram::METHOD => {
+                let params: diagram::Params = serde_json::from_value(request.params)?;
+                match self.diagram(params) {
+                    Ok(picture) => serde_json::to_value(picture)?,
+                    Err(message) => {
+                        let code = ErrorCode::InvalidParams as i32;
+                        return self.send(Response::new_err(id, code, message));
+                    }
+                }
             }
             method => return self.unknown(id, method),
         };
@@ -418,19 +431,24 @@ fn program_path(root: &Path, path: &Path) -> Option<String> {
     (in_program && path.extension().is_some_and(|e| e == "inset")).then(|| parts.join("/"))
 }
 
-/// A diagnostic as the protocol carries it. The message is the command
-/// line's, then its label and help, one to a line.
+/// A diagnostic as the protocol carries it, with [`message`].
 fn to_lsp(diagnostic: &Diagnostic, lines: &LineIndex) -> lsp_types::Diagnostic {
+    lsp_types::Diagnostic {
+        range: lines.range(diagnostic.span),
+        severity: Some(DiagnosticSeverity::ERROR),
+        source: Some("inset".into()),
+        message: message(diagnostic),
+        ..lsp_types::Diagnostic::default()
+    }
+}
+
+/// A diagnostic's message in the editor: the command line's, then its
+/// label and help, one to a line.
+fn message(diagnostic: &Diagnostic) -> String {
     let mut message = format!("{}\n{}", diagnostic.message, diagnostic.label);
     if let Some(help) = &diagnostic.help {
         message.push_str("\nhelp: ");
         message.push_str(help);
     }
-    lsp_types::Diagnostic {
-        range: lines.range(diagnostic.span),
-        severity: Some(DiagnosticSeverity::ERROR),
-        source: Some("inset".into()),
-        message,
-        ..lsp_types::Diagnostic::default()
-    }
+    message
 }

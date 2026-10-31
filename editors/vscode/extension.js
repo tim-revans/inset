@@ -2,15 +2,32 @@
 // requirements. The server shows what `inset check` reports as you type, and
 // gives hover, go-to-definition and the outline. Highlighting comes from the
 // grammars alone, so it works without the server.
+//
+// The review panels are in modules of their own: the diagram in
+// `diagram.js`, and the requirements, in a panel and in the Test Explorer,
+// in `requirements.js`.
 
 const vscode = require("vscode");
 const { LanguageClient } = require("vscode-languageclient/node");
+const { DiagramPanel } = require("./diagram");
+const { Requirements } = require("./requirements");
 
 /** @type {LanguageClient | undefined} */
 let client;
 
+/** @type {DiagramPanel | undefined} */
+let diagram;
+
+/** @type {Requirements | undefined} */
+let requirements;
+
+/** The `inset` command, which serves the language and runs requirements. */
+function insetCommand() {
+  return vscode.workspace.getConfiguration("inset").get("server.path") || "inset";
+}
+
 async function start() {
-  const command = vscode.workspace.getConfiguration("inset").get("server.path") || "inset";
+  const command = insetCommand();
   client = new LanguageClient(
     "inset",
     "Inset",
@@ -38,7 +55,11 @@ async function start() {
         "Install the `inset` command with `cargo install --path crates/inset-cli`, " +
         "or set `inset.server.path` to it.",
     );
+    return;
   }
+  // The requirements are read through the server, and the diagram drawn by it.
+  requirements?.discover();
+  diagram?.refresh();
 }
 
 async function stop() {
@@ -49,8 +70,13 @@ async function stop() {
   }
 }
 
-/** @param {vscode.ExtensionContext} context */
+/**
+ * Returns the panels, which the extension's integration tests drive.
+ * @param {vscode.ExtensionContext} context
+ */
 async function activate(context) {
+  diagram = new DiagramPanel(context, () => client);
+  requirements = new Requirements(context, insetCommand);
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(async (event) => {
       if (event.affectsConfiguration("inset.server.path")) {
@@ -64,6 +90,7 @@ async function activate(context) {
     }),
   );
   await start();
+  return { diagram, requirements };
 }
 
 function deactivate() {
