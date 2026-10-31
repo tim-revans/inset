@@ -17,10 +17,12 @@
 //! the checks in `inset-check` must reject the program first.
 //!
 //! **What is covered.** Settings, `HttpServer` and `Table` grants, `start`
-//! statements in the app that move grants into components or hand them new
-//! values, components holding capabilities and state, route handlers,
-//! `async` handlers that await capability calls, `failure` blocks that roll
-//! back, algorithms, and the Rust inside function bodies. Also modules,
+//! statements in the app and in components, with `#[handed_down]` fields,
+//! named children and outlets connected to a message, components holding
+//! capabilities and state, route and message handlers, `send` and awaited
+//! messages, `async` handlers that await capability calls, `failure` blocks
+//! that roll back and restart, algorithms, and the Rust inside function
+//! bodies. Also modules,
 //! each emitted as a Rust module of the same name, so paths and privacy
 //! mean the same in both, and structs and enums, with an error enum's
 //! `#[status]` attributes becoming the runtime's `Status`, and every data
@@ -28,8 +30,8 @@
 //! component's state can be saved. `dec!` is emitted as the `Decimal` it
 //! stands for. Anything else that `inset check` accepts gets a diagnostic
 //! saying it cannot be compiled yet, at the construct, rather than Rust that
-//! would not build. Messages, children, outlets and `restart` follow with
-//! the Stock tracker.
+//! would not build, such as a child lent to a sibling, which no example
+//! needs yet.
 //!
 //! **Building.** The generated project depends on `inset-runtime` by path,
 //! at the copy this crate was built next to, until the runtime is published.
@@ -47,8 +49,10 @@ mod body;
 mod items;
 mod project;
 
-use inset_check::{Program, Report};
-use inset_syntax::ast::ItemKind;
+use std::collections::HashMap;
+
+use inset_check::{Program, Report, Resolved};
+use inset_syntax::ast::{Component, ItemKind};
 use inset_syntax::{Diagnostic, Span};
 use quote::quote;
 
@@ -78,7 +82,7 @@ pub fn generate(program: &Program) -> Result<Generated, Vec<Report>> {
         })
         .expect("a checked program has an app");
 
-    let mut emitter = Emitter::default();
+    let mut emitter = Emitter::new(&resolved);
     let items = emitter.module(modules, 0);
     if !emitter.diagnostics.is_empty() {
         return Err(emitter
@@ -142,12 +146,39 @@ fn spaced(source: &str) -> String {
 }
 
 /// Collects the constructs that cannot be compiled yet while emitting.
-#[derive(Default)]
-struct Emitter {
+struct Emitter<'a> {
+    /// What each name in the code refers to, as the checker resolved it.
+    refs: &'a HashMap<Span, Span>,
+    /// Every component, by the span of its name.
+    components: HashMap<Span, &'a Component>,
     diagnostics: Vec<Diagnostic>,
 }
 
-impl Emitter {
+impl<'a> Emitter<'a> {
+    fn new(resolved: &'a Resolved) -> Emitter<'a> {
+        let components = resolved
+            .modules
+            .list
+            .iter()
+            .flat_map(|module| &module.ast.items)
+            .filter_map(|item| match &item.kind {
+                ItemKind::Component(c) => Some((c.name.span, c)),
+                _ => None,
+            })
+            .collect();
+        Emitter {
+            refs: &resolved.refs,
+            components,
+            diagnostics: Vec::new(),
+        }
+    }
+
+    /// The component a `start` statement starts.
+    fn started(&self, start: &inset_syntax::ast::Start) -> Option<&'a Component> {
+        let target = self.refs.get(&start.component.span)?;
+        self.components.get(target).copied()
+    }
+
     fn unsupported(&mut self, what: &str, span: Span, label: &str) {
         self.diagnostics.push(
             Diagnostic::new(format!("{what} cannot be compiled yet"), span, label).with_help(

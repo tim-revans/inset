@@ -7,7 +7,8 @@
 //! program's own code writes, and `then` facts and checks read them back.
 //!
 //! Each requirement starts the program afresh, so no requirement depends on
-//! another having run. Its steps run in order, and the first that does not
+//! another having run. A requirement with an examples table runs once for
+//! each row, each time afresh, and reports each row's result. Its steps run in order, and the first that does not
 //! hold fails it. A fact that does not hold reports both values, written as
 //! Rust's `{:?}` writes them, as `assert_eq!` does. The report is the same
 //! every time for the same program, so it holds no timings.
@@ -15,7 +16,7 @@
 use std::path::Path;
 
 use inset_check::status::STATUSES;
-use inset_check::{Plan, Planned, PlannedFact, PlannedRequirement, Program};
+use inset_check::{Plan, Planned, PlannedFact, PlannedStep, Program};
 use inset_host::{Mode, Options, Request, Response, Running};
 use inset_syntax::Span;
 use inset_value::{Check, CheckError, Op, Shape, Types, Value, json, key};
@@ -37,6 +38,26 @@ pub struct Outcome {
     /// The path from the program's directory, as in `requirements/hello.req.inset`.
     pub file: String,
     /// The line the requirement starts on, counting from 1.
+    pub line: usize,
+    /// `pass` or `fail`. A requirement with an examples table fails if any
+    /// of its rows does.
+    pub result: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure: Option<Failure>,
+    /// The headings of the examples table, if the requirement has one.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub headings: Vec<String>,
+    /// Each row of the examples table, run as a case of its own.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub rows: Vec<RowOutcome>,
+}
+
+/// One row of an examples table.
+#[derive(Debug, Serialize)]
+pub struct RowOutcome {
+    /// Each cell as written.
+    pub cells: Vec<String>,
+    /// The line the row is on, counting from 1.
     pub line: usize,
     /// `pass` or `fail`.
     pub result: &'static str,
@@ -93,26 +114,48 @@ pub fn run(program: &Program, component: &Path) -> Result<TestReport, String> {
     for requirement in &plan.requirements {
         let file = &program.files[requirement.file];
         let line = |span: Span| file.text[..span.start].matches('\n').count() + 1;
-        let mut running = host.start(&options).map_err(|e| e.to_string())?;
-        let failure = steps(&plan, requirement, &mut running).map(|failed| {
-            let (expected, actual) = failed.values.unzip();
-            Failure {
-                line: line(failed.span),
-                step: step_text(&file.text, failed.span),
-                message: failed.message,
-                expected,
-                actual,
+        // Each case starts the program afresh.
+        let run_case = |steps: &[PlannedStep]| -> Result<Option<Failure>, String> {
+            let mut running = host.start(&options).map_err(|e| e.to_string())?;
+            Ok(run_steps(&plan, steps, &mut running).map(|failed| {
+                let (expected, actual) = failed.values.unzip();
+                Failure {
+                    line: line(failed.span),
+                    step: step_text(&file.text, failed.span),
+                    message: failed.message,
+                    expected,
+                    actual,
+                }
+            }))
+        };
+        let (failure, headings, rows) = match &requirement.examples {
+            None => (run_case(&requirement.steps)?, Vec::new(), Vec::new()),
+            Some(examples) => {
+                let mut rows = Vec::new();
+                for row in &examples.rows {
+                    let failure = run_case(&row.steps)?;
+                    rows.push(RowOutcome {
+                        cells: row.cells.clone(),
+                        line: line(row.span),
+                        result: if failure.is_some() { "fail" } else { "pass" },
+                        failure,
+                    });
+                }
+                (None, examples.headings.clone(), rows)
             }
-        });
+        };
+        let failed = failure.is_some() || rows.iter().any(|r| r.failure.is_some());
         requirements.push(Outcome {
             sentence: requirement.sentence.clone(),
             file: file.path.clone(),
             line: line(requirement.span),
-            result: if failure.is_some() { "fail" } else { "pass" },
+            result: if failed { "fail" } else { "pass" },
             failure,
+            headings,
+            rows,
         });
     }
-    let failed = requirements.iter().filter(|r| r.failure.is_some()).count();
+    let failed = requirements.iter().filter(|r| r.result == "fail").count();
     Ok(TestReport {
         app: host.manifest().app.clone(),
         passed: requirements.len() - failed,
@@ -121,16 +164,12 @@ pub fn run(program: &Program, component: &Path) -> Result<TestReport, String> {
     })
 }
 
-/// Runs a requirement's steps, and returns the first that does not hold,
-/// with what happened instead.
-fn steps(
-    plan: &Plan,
-    requirement: &PlannedRequirement,
-    running: &mut Running<'_>,
-) -> Option<Failed> {
+/// Runs a case's steps, and returns the first that does not hold, with
+/// what happened instead.
+fn run_steps(plan: &Plan, steps: &[PlannedStep], running: &mut Running<'_>) -> Option<Failed> {
     let mut last: Option<Response> = None;
     let mut reports_before = 0;
-    for step in &requirement.steps {
+    for step in steps {
         let fail = |message: String| Some(Failed::new(step.span, message));
         match &step.kind {
             Planned::Request {
@@ -342,21 +381,70 @@ fn step_text(source: &str, span: Span) -> String {
     out
 }
 
+/// Where a step failed, the step, and what happened instead, indented.
+fn failed(out: &mut String, file: &str, failure: &Failure, indent: &str) {
+    let detail = format!(
+        "{file}:{}\n{}\n{}",
+        failure.line, failure.step, failure.message
+    );
+    for line in detail.lines() {
+        out.push_str(&format!("{indent}{line}\n"));
+    }
+}
+
+/// An examples table as text, its headings first, with each column as
+/// wide as its widest cell.
+fn examples_table(headings: &[String], rows: &[RowOutcome]) -> Vec<String> {
+    if headings.is_empty() {
+        return Vec::new();
+    }
+    let lines: Vec<&[String]> = std::iter::once(headings)
+        .chain(rows.iter().map(|r| r.cells.as_slice()))
+        .collect();
+    let widths: Vec<usize> = (0..headings.len())
+        .map(|i| {
+            lines
+                .iter()
+                .map(|cells| cells.get(i).map_or(0, |c| c.chars().count()))
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
+    lines
+        .iter()
+        .map(|cells| {
+            let cells: Vec<String> = cells
+                .iter()
+                .zip(&widths)
+                .map(|(cell, width)| format!("{cell:width$}"))
+                .collect();
+            format!("| {} |", cells.join(" | "))
+        })
+        .collect()
+}
+
 /// The report as `inset test` prints it.
 pub fn render(report: &TestReport) -> String {
     let mut out = String::new();
     for outcome in &report.requirements {
-        match &outcome.failure {
-            None => out.push_str(&format!("pass  {}\n", outcome.sentence)),
-            Some(failure) => {
-                out.push_str(&format!("FAIL  {}\n", outcome.sentence));
-                let detail = format!(
-                    "{}:{}\n{}\n{}",
-                    outcome.file, failure.line, failure.step, failure.message
-                );
-                for line in detail.lines() {
-                    out.push_str(&format!("      {line}\n"));
-                }
+        let result = if outcome.result == "fail" {
+            "FAIL"
+        } else {
+            "pass"
+        };
+        out.push_str(&format!("{result}  {}\n", outcome.sentence));
+        if let Some(failure) = &outcome.failure {
+            failed(&mut out, &outcome.file, failure, "      ");
+        }
+        let table = examples_table(&outcome.headings, &outcome.rows);
+        if let Some(headings) = table.first() {
+            out.push_str(&format!("            {headings}\n"));
+        }
+        for (row, text) in outcome.rows.iter().zip(table.iter().skip(1)) {
+            let result = if row.result == "fail" { "FAIL" } else { "pass" };
+            out.push_str(&format!("      {result}  {text}\n"));
+            if let Some(failure) = &row.failure {
+                failed(&mut out, &outcome.file, failure, "            ");
             }
         }
     }

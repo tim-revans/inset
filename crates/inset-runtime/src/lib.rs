@@ -58,7 +58,10 @@ pub mod bindings {
     });
 }
 
-pub use actor::{Component, Handle, Message, Scope, send};
+pub use actor::{
+    AnyReply, Component, Emitted, Handle, LocalBoxFuture, Mailbox, Message, NoMessage, Outlet,
+    Scope, Sendable, send,
+};
 pub use failure::{Failure, Response, Stopped};
 pub use http::{HttpServer, IntoResponse, Method, PathParams, Reply, Request, Route, Status};
 pub use program::{App, Grant, GrantValue, Grants, Setting, SettingType};
@@ -74,8 +77,8 @@ pub use program::glue;
 pub mod prelude {
     pub use crate::{
         App, Component, Failure, Grant, GrantValue, Grants, Handle, HttpServer, IntoResponse,
-        Message, Method, Reply, Request, Response, Route, Scope, Setting, SettingType, Status,
-        Stopped, Stored, Table, send,
+        Mailbox, Message, Method, NoMessage, Outlet, Reply, Request, Response, Route, Scope,
+        Setting, SettingType, Status, Stopped, Stored, Table, send,
     };
 }
 

@@ -1,0 +1,123 @@
+// Restarting a child, and a failure nothing responds to. `tests/restart.rs`
+// runs it.
+
+app Counters {
+    grant http: HttpServer { port: 8080 };
+    grant marks: Table<String, u32> { file: "counters.db", name: "marks" };
+    grant ledger: Table<String, u32> { file: "counters.db", name: "ledger" };
+    start Front { http: move http, ledger: move ledger, marks: move marks, notes: Vec::new() };
+}
+
+/// Serves the tally's counts, and starts the tally again when it fails.
+component Front {
+    http: HttpServer,
+    ledger: Table<String, u32>,
+    #[handed_down]
+    marks: Table<String, u32>,
+    /// What the tally announced, oldest first.
+    notes: Vec<String>,
+
+    start tally: Tally { count: 0, marks: move marks, done: send self.noted };
+
+    failure {
+        /// A tally that fails starts again from nothing, with its part.
+        Child(tally) => restart,
+        /// The request that made the tally fail fails with it.
+        Message(tally) => rollback,
+        /// Only the request that hit the bug fails.
+        Panic => rollback,
+    }
+
+    /// Adds `n` to the tally, and replies with its count and how many times it was added to.
+    #[post("/add/{n}", via = http)]
+    async fn add(&self, n: u32) -> String {
+        let (count, times) = self.tally.add(n).await;
+        format!("{count} {times}")
+    }
+
+    /// The tally's count, and how many times it was added to.
+    #[get("/counts", via = http)]
+    async fn counts(&self) -> String {
+        let (count, times) = self.tally.counts().await;
+        format!("{count} {times}")
+    }
+
+    /// What the tally announced, separated by commas.
+    #[get("/notes", via = http)]
+    fn read_notes(&self) -> String {
+        self.notes.join(",")
+    }
+
+    /// Has the tally announce something, then panics with the announcement
+    /// waiting in this component's mailbox.
+    #[post("/announce", via = http)]
+    async fn announce(&self) -> String {
+        self.tally.announce().await;
+        panic!("after the announcement")
+    }
+
+    /// Records `n` in the ledger. Nothing responds to the ledger failing.
+    #[post("/record/{n}", via = http)]
+    async fn record(&mut self, n: u32) -> String {
+        self.ledger.insert(n.to_string(), n).await;
+        "recorded".to_string()
+    }
+
+    /// Keeps what the tally announced.
+    #[message]
+    fn noted(&mut self, note: String) {
+        self.notes.push(note);
+    }
+}
+
+/// Counts what it is given, in its table too, and announces each addition.
+component Tally {
+    count: u32,
+    marks: Table<String, u32>,
+    done: Outlet<String>,
+
+    start part: Part { times: 0 };
+
+    /// Adds `n`, and returns the count and how many times it was added to.
+    /// Panics on 13.
+    #[message]
+    async fn add(&mut self, n: u32) -> (u32, u32) {
+        self.count += n;
+        let times = self.part.tick().await;
+        self.marks.insert(n.to_string(), self.count).await;
+        if n == 13 {
+            panic!("unlucky");
+        }
+        send self.done.emit(format!("added {n}"));
+        (self.count, times)
+    }
+
+    /// The count, and how many times it was added to.
+    #[message]
+    async fn counts(&self) -> (u32, u32) {
+        let times = self.part.times().await;
+        (self.count, times)
+    }
+
+    /// Announces that it was asked to.
+    #[message]
+    fn announce(&self) {
+        send self.done.emit("announced".to_string());
+    }
+}
+
+/// Counts how many times the tally was added to.
+component Part {
+    times: u32,
+
+    #[message]
+    fn tick(&mut self) -> u32 {
+        self.times += 1;
+        self.times
+    }
+
+    #[message]
+    fn times(&self) -> u32 {
+        self.times
+    }
+}

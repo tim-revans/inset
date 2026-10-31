@@ -192,14 +192,14 @@
                     "branches": [
                       {
                         "id": "StockTracker/Warehouse/reorders/fn:raise/0/b0",
-                        "label": "Some(pending)",
+                        "label": "yes",
                         "steps": [
                           { "kind": "action", "id": "StockTracker/Warehouse/reorders/fn:raise/0/b0/0", "text": "pending.quantity = order.quantity" }
                         ]
                       },
                       {
                         "id": "StockTracker/Warehouse/reorders/fn:raise/0/b1",
-                        "label": "else",
+                        "label": "no",
                         "steps": [
                           { "kind": "action", "id": "StockTracker/Warehouse/reorders/fn:raise/0/b1/0", "text": "self.orders.push(order)" }
                         ]

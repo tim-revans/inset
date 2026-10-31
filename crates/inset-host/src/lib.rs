@@ -436,10 +436,11 @@ impl Running<'_> {
             component: trapping.component.clone(),
             failure: trapping.failure.clone(),
             message: trapping.message.clone(),
+            restarted: recovery.restarted,
         });
         match self
             .program
-            .instantiate(&self.tables, reports, Some(&recovery))
+            .instantiate(&self.tables, reports, Some(&recovery.state))
         {
             Ok((store, instance)) => {
                 self.store = store;
@@ -465,21 +466,38 @@ impl Running<'_> {
     }
 }
 
-/// A handler the program rolled back and carried on after.
+/// A failed handler the program rolled back and carried on after.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Report {
+    /// The component the failure happened in.
     pub component: String,
     pub failure: String,
     pub message: String,
+    /// The component a `restart` reset, with its children: the one the
+    /// failure happened in, or the ancestor whose parent restarted it.
+    /// `None` for a `rollback`.
+    pub restarted: Option<String>,
 }
 
 impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} rolled back after {}: {}",
-            self.component, self.failure, self.message
-        )
+        match &self.restarted {
+            None => write!(
+                f,
+                "{} rolled back after {}: {}",
+                self.component, self.failure, self.message
+            ),
+            Some(restarted) if *restarted == self.component => write!(
+                f,
+                "{} restarted after {}: {}",
+                self.component, self.failure, self.message
+            ),
+            Some(restarted) => write!(
+                f,
+                "{restarted} restarted after {} in {}: {}",
+                self.failure, self.component, self.message
+            ),
+        }
     }
 }
 
@@ -503,7 +521,7 @@ struct Trapping {
     component: String,
     failure: String,
     message: String,
-    recovery: Option<Vec<u8>>,
+    recovery: Option<report::Recovery>,
 }
 
 /// One instance's state in the store.
@@ -646,6 +664,23 @@ impl report::Host for State {
             component,
             failure,
             message,
+            restarted: None,
+        });
+        Ok(())
+    }
+
+    fn restarted(
+        &mut self,
+        component: String,
+        failure: String,
+        message: String,
+        restarted: String,
+    ) -> wasmtime::Result<()> {
+        self.reports.push(Report {
+            component,
+            failure,
+            message,
+            restarted: Some(restarted),
         });
         Ok(())
     }
@@ -655,7 +690,7 @@ impl report::Host for State {
         component: String,
         failure: String,
         message: String,
-        recovery: Option<Vec<u8>>,
+        recovery: Option<report::Recovery>,
     ) -> wasmtime::Result<()> {
         self.trapping = Some(Trapping {
             component,

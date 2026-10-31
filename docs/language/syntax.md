@@ -1,6 +1,6 @@
 # Inset syntax
 
-The living reference for Inset's syntax. It is a draft: the parser in [`crates/inset-syntax/`](../../crates/inset-syntax/) and the checker in [`crates/inset-check/`](../../crates/inset-check/) cover what Hello HTTP uses, with closures, `failure` blocks, outlets and messages around it, the code of the Stock tracker (modules, structs and enums, error enums, `match` and loops), and requirements that set up and check what a table holds. They report the rest as not supported yet. The syntax changes as each example program is compiled.
+The living reference for Inset's syntax. It is a draft: the parser in [`crates/inset-syntax/`](../../crates/inset-syntax/) and the checker in [`crates/inset-check/`](../../crates/inset-check/) cover everything Hello HTTP and the Stock tracker use: components that start children and send them messages, outlets, `failure` blocks that roll back and restart, modules, structs and enums, error enums, `match` and loops, and requirements that set up and check what a table holds, with `examples` tables. They report the rest as not supported yet. The syntax changes as each example program is compiled.
 
 Each construct is marked with its status:
 
@@ -169,7 +169,7 @@ pub component Warehouse {
 
   *Why `#[handed_down]`:* in Rust, every declared field of a struct exists for as long as the struct does. A field that is moved away at start would break that rule silently, so the attribute says, where the field is declared, that it is only passed through.
 - A handoff connects a child's outlet to a message with `send`: `low_stock: send reorders.raise` (see [Outlets](#outlets)).
-- *(Draft: no example needs it yet.)* A handoff can lend a child started earlier in the same body to a later one: `reorders: &reorders`. The later child declares the field as a borrowed handle, `reorders: &Handle<Reorders>`, and can send it messages and await their replies. Like all borrows across a boundary, it is written without a lifetime: the compiler knows the parent outlives both children. The parent still owns the lent child.
+- *(Draft: no example needs it yet, so the checker accepts it and the compiler reports it as not compiled yet.)* A handoff can lend a child started earlier in the same body to a later one: `reorders: &reorders`. The later child declares the field as a borrowed handle, `reorders: &Handle<Reorders>`, and can send it messages and await their replies. Like all borrows across a boundary, it is written without a lifetime: the compiler knows the parent outlives both children. The parent still owns the lent child.
 - A child can only be lent to siblings started after it, never to itself or to its parent.
 - A component handle cannot be moved, copied, stored in data or sent in a message. The only handles a component holds are its own children and the siblings lent to it at `start`. A component that only needs to tell another something is given an outlet instead.
 - A component's children start before it handles anything, and stop after it stops.
@@ -380,6 +380,7 @@ The responses:
 - Each arm must have a doc comment giving the reason. The diagram shows it.
 - Every rollback is reported by the host, even when the program carries on, so a person running the tool can see it happened. A handler that was delivered a message by `send` has no caller to fail, so the report is all that shows it.
 - A failure the component does not respond to passes to its parent as `Child(name)`. A failure the app reaches stops the program, and the host reports where it happened.
+- `restart` resets the component's state fields, and each child's, to what they were given at `start`, before each takes its next message. A component busy with a handler when its parent restarts it finishes that handler first. Messages already waiting in a mailbox are still delivered, because the handlers that sent them completed. A component awaiting the restarted child gets `Message(name)`, as for any failed message, so a parent that restarts a child it also calls usually responds to both: `Child(tally) => restart` and `Message(tally) => rollback`.
 - A failure is never turned into a success. A response can only contain a failure: fail one request instead of the whole program, or start a component again.
 - A capability whose effects cannot be undone allows only `restart` for its own failures. *(Draft: no such capability exists yet.)*
 - An external component cannot be rolled back, because its state is Rust the compiler cannot see, so only `restart` is allowed for it.
@@ -679,7 +680,9 @@ requirement "Stock that falls to its reorder level or below is reordered up to i
 - Only `<name>` where `name` is a heading counts as a placeholder, so `<` and `>` keep their Rust meaning elsewhere in a step.
 - A placeholder is replaced by its cell's text before the step is read, so it may stand for a whole value, as `<reorders>` does, or for part of a path, a string or a text block, as `"<left>"` does.
 - Headings are free text, without `|`, `<` or `>`, so they can read as English.
-- The compiler checks every row's steps, so a cell of the wrong type is a compile error.
+- The compiler checks every row's steps, so a cell of the wrong type is a compile error. The error points at the placeholder, and names the row's line.
+- A requirement has at most one table, after its steps. A cell cannot hold `|`.
+- Each row runs as a requirement of its own, against a freshly started program. `inset test` reports each row's result on a line of its own under the requirement, and the requirement passes when every row passes.
 
 ### Properties
 

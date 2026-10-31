@@ -66,7 +66,9 @@ pub use index::{Index, Reference, Symbol, SymbolKind};
 pub use modules::{Module, Modules};
 use names::Names;
 pub use program::{MAIN, Program, SourceFile};
-pub use requirements::{Plan, Planned, PlannedFact, PlannedRequirement, PlannedStep};
+pub use requirements::{
+    Plan, Planned, PlannedExamples, PlannedFact, PlannedRequirement, PlannedRow, PlannedStep,
+};
 use types::Ty;
 
 /// A diagnostic in one file of a program.

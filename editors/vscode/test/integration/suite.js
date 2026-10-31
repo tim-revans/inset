@@ -98,12 +98,20 @@ async function testExplorer(api) {
       assert.equal(results.get(program.id).result, "error");
       program.children.forEach((child) => assert.match(results.get(child.id).detail, /could not be built/));
     } else {
-      program.children.forEach((child) => assert.equal(results.get(child.id).result, "pass", child.label));
+      program.children.forEach((child) => {
+        assert.equal(results.get(child.id).result, "pass", child.label);
+        child.children.forEach((row) => assert.equal(results.get(row.id).result, "pass", row.label));
+      });
     }
   }
+  // Hello HTTP and the Stock tracker build; CSV import needs `fork` first.
+  assert.equal(results.get(programs.find((p) => p.label === "examples/stock-tracker").id), undefined);
 }
 
-/** The requirements panel lists the sentence as passed. */
+/**
+ * The requirements panel lists the sentence as passed, and every Stock
+ * tracker requirement too, with each row of its examples table under it.
+ */
 async function requirementsPanel(api) {
   await vscode.commands.executeCommand("inset.requirements.focus");
   const tree = api.requirements.tree;
@@ -113,6 +121,23 @@ async function requirementsPanel(api) {
   assert.equal(shown.label, SENTENCE);
   assert.equal(shown.description, "passed");
   assert.equal(shown.iconPath.id, "pass");
+
+  const stock = tree.getChildren().find((p) => p.label === "examples/stock-tracker");
+  assert.equal(tree.getTreeItem(stock).description, "");
+  const stockRequirements = tree.getChildren(stock);
+  assert.equal(stockRequirements.length, 8);
+  for (const requirement of stockRequirements) {
+    assert.equal(tree.getTreeItem(requirement).description, "passed", requirement.label);
+  }
+  const outline = stockRequirements.find((r) => r.label.startsWith("Stock that falls"));
+  const rows = tree.getChildren(outline);
+  assert.deepEqual(
+    rows.map((row) => row.label),
+    ['| 12 | 50 | 11 | "" |', '| 11 | 50 | 10 | "bolt-m6 40\\n" |', '| 1 | 50 | 0 | "bolt-m6 50\\n" |', '| 11 | 5 | 10 | "" |'],
+  );
+  for (const row of rows) {
+    assert.equal(tree.getTreeItem(row).description, "passed", row.label);
+  }
 }
 
 exports.run = async function () {

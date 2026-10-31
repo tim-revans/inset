@@ -674,13 +674,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fixture-spike"
-version = "0.0.0"
-dependencies = [
- "inset-runtime",
-]
-
-[[package]]
 name = "fixture-web-client"
 version = "0.0.0"
 dependencies = [

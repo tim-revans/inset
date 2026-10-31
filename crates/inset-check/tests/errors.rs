@@ -269,3 +269,8 @@ fn compared_without_debug() {
 fn table_key_not_orderable() {
     errors("table_key_not_orderable");
 }
+
+#[test]
+fn examples_cell_of_wrong_type() {
+    errors("examples_cell_of_wrong_type");
+}

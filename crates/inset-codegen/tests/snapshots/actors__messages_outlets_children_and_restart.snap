@@ -1,0 +1,566 @@
+---
+source: crates/inset-codegen/tests/actors.rs
+expression: generated.source
+---
+//! The Rust that `inset build` generated for the app `Counting`.
+//! It is written again on every build, so a change to it would be lost.
+
+struct Counting;
+
+impl ::inset_runtime::App for Counting {
+    const NAME: &'static str = "Counting";
+
+    const SETTINGS: &'static [::inset_runtime::Setting] = &[
+        ::inset_runtime::Setting {
+            name: "port",
+            ty: ::inset_runtime::SettingType::U16,
+            default: "8080",
+        },
+    ];
+
+    const GRANTS: &'static [::inset_runtime::Grant] = &[
+        ::inset_runtime::Grant {
+            name: "http",
+            capability: "HttpServer",
+            fields: &[("port", ::inset_runtime::GrantValue::Setting("port"))],
+        },
+    ];
+
+    fn start(
+        scope: &::inset_runtime::Scope,
+        grants: &mut ::inset_runtime::Grants,
+    ) -> Result<(), ::inset_runtime::Stopped> {
+        let http = grants.http_server("http");
+        let front = scope.child::<Front>("Front");
+        scope.start(&front, |child| Front::start(child, http, 0));
+        Ok(())
+    }
+}
+
+::inset_runtime::export!(Counting);
+
+struct Front {
+    http: ::inset_runtime::HttpServer,
+    seen: u32,
+    tally: ::inset_runtime::Handle<Tally>,
+    log: ::inset_runtime::Handle<Log>,
+}
+
+impl Front {
+    /// Starts the component's children, and builds it from its fields.
+    fn start(
+        scope: &::inset_runtime::Scope,
+        http: ::inset_runtime::HttpServer,
+        seen: u32,
+    ) -> Self {
+        let tally = scope.child::<Tally>("tally");
+        let log = scope.child::<Log>("log");
+        scope.start(&tally, |child| Tally::start(child, 0));
+        scope
+            .start(
+                &log,
+                |child| Log::start(
+                    child,
+                    Vec::new(),
+                    ::inset_runtime::Outlet::to(
+                        &tally,
+                        |messages, value| messages.add(value),
+                    ),
+                    ::inset_runtime::Outlet::to(
+                        &scope.this::<Self>(),
+                        |messages, value| messages.logged(value),
+                    ),
+                ),
+            );
+        Front { http, seen, tally, log }
+    }
+
+    async fn count(&self, n: u32) -> String {
+        ::inset_runtime::send(self.log.record(n));
+        let total = self.tally.total().await;
+        format!("{total}")
+    }
+
+    async fn name(&self, name: String) -> String {
+        self.log.note(&name).await
+    }
+
+    fn logged(&mut self, n: u32) {
+        self.seen += n;
+    }
+}
+
+/// The messages of a component, each holding its arguments.
+#[doc(hidden)]
+#[allow(non_camel_case_types)]
+enum __FrontMessage {
+    logged(u32),
+}
+
+impl ::inset_runtime::Stored for __FrontMessage {
+    fn to_json(&self) -> ::inset_runtime::Json {
+        match self {
+            __FrontMessage::logged(field0) => {
+                ::inset_runtime::data::variant(
+                    "logged",
+                    Vec::from([::inset_runtime::Stored::to_json(field0)]),
+                )
+            }
+        }
+    }
+
+    fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+        let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
+        match variant {
+            "logged" => {
+                ::inset_runtime::data::arity("logged", fields, 1usize)?;
+                Ok(
+                    __FrontMessage::logged(
+                        ::inset_runtime::Stored::from_json(&fields[0])?,
+                    ),
+                )
+            }
+            other => ::inset_runtime::data::unknown_variant("__FrontMessage", other),
+        }
+    }
+}
+
+/// What a handle to the component offers: a method for each message.
+#[doc(hidden)]
+struct __FrontMessages(::inset_runtime::Mailbox<Front>);
+
+impl From<::inset_runtime::Mailbox<Front>> for __FrontMessages {
+    fn from(mailbox: ::inset_runtime::Mailbox<Front>) -> Self {
+        __FrontMessages(mailbox)
+    }
+}
+
+impl __FrontMessages {
+    fn logged(&self, n: u32) -> ::inset_runtime::Message<Front, ()> {
+        self.0.message(__FrontMessage::logged(n))
+    }
+}
+
+impl ::inset_runtime::Component for Front {
+    const NAME: &'static str = "Front";
+
+    const ROLLS_BACK: bool = true;
+
+    type Saved = ::inset_runtime::Saved;
+
+    fn save(&self) -> ::inset_runtime::Saved {
+        ::inset_runtime::Saved::new(
+            Vec::from([::inset_runtime::Stored::to_json(&self.seen)]),
+        )
+    }
+
+    fn restore(&mut self, saved: ::inset_runtime::Saved) {
+        let mut saved = saved.fields();
+        saved.restore(&mut self.seen);
+    }
+
+    type Message = __FrontMessage;
+
+    type Messages = __FrontMessages;
+
+    fn receive(
+        &mut self,
+        message: __FrontMessage,
+    ) -> ::inset_runtime::LocalBoxFuture<'_, ::inset_runtime::AnyReply> {
+        Box::pin(async move {
+            match message {
+                __FrontMessage::logged(n) => {
+                    Front::logged(self, n);
+                    Box::new(()) as ::inset_runtime::AnyReply
+                }
+            }
+        })
+    }
+
+    fn respond(failure: &::inset_runtime::Failure) -> Option<::inset_runtime::Response> {
+        match failure {
+            ::inset_runtime::Failure::Child("tally") => {
+                Some(::inset_runtime::Response::Restart)
+            }
+            ::inset_runtime::Failure::Message("tally") => {
+                Some(::inset_runtime::Response::Rollback)
+            }
+            _ => None,
+        }
+    }
+
+    fn servers(&self) -> Vec<(&'static str, &::inset_runtime::HttpServer)> {
+        Vec::from([("http", &self.http)])
+    }
+
+    fn route(
+        field: &str,
+        request: &::inset_runtime::Request,
+    ) -> ::inset_runtime::Route<Self> {
+        if field == "http" {
+            if let Some(path) = request.route(::inset_runtime::Method::Get, "/count/{n}")
+            {
+                let Some(n) = path.get("n") else {
+                    return ::inset_runtime::Route::NotFound;
+                };
+                return ::inset_runtime::Route::to(move |component: &mut Self| {
+                    Box::pin(async move { Self::count(component, n).await })
+                });
+            }
+            if let Some(path) = request
+                .route(::inset_runtime::Method::Get, "/name/{name}")
+            {
+                let Some(name) = path.get("name") else {
+                    return ::inset_runtime::Route::NotFound;
+                };
+                return ::inset_runtime::Route::to(move |component: &mut Self| {
+                    Box::pin(async move { Self::name(component, name).await })
+                });
+            }
+        }
+        ::inset_runtime::Route::NotFound
+    }
+}
+
+struct Tally {
+    total: u32,
+}
+
+impl Tally {
+    /// Builds the component from its fields.
+    fn start(_: &::inset_runtime::Scope, total: u32) -> Self {
+        Tally { total }
+    }
+
+    fn add(&mut self, n: u32) {
+        self.total += n;
+    }
+
+    fn total(&self) -> u32 {
+        self.total
+    }
+}
+
+/// The messages of a component, each holding its arguments.
+#[doc(hidden)]
+#[allow(non_camel_case_types)]
+enum __TallyMessage {
+    add(u32),
+    total,
+}
+
+impl ::inset_runtime::Stored for __TallyMessage {
+    fn to_json(&self) -> ::inset_runtime::Json {
+        match self {
+            __TallyMessage::add(field0) => {
+                ::inset_runtime::data::variant(
+                    "add",
+                    Vec::from([::inset_runtime::Stored::to_json(field0)]),
+                )
+            }
+            __TallyMessage::total => ::inset_runtime::data::variant("total", Vec::new()),
+        }
+    }
+
+    fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+        let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
+        match variant {
+            "add" => {
+                ::inset_runtime::data::arity("add", fields, 1usize)?;
+                Ok(__TallyMessage::add(::inset_runtime::Stored::from_json(&fields[0])?))
+            }
+            "total" => {
+                ::inset_runtime::data::arity("total", fields, 0)?;
+                Ok(__TallyMessage::total)
+            }
+            other => ::inset_runtime::data::unknown_variant("__TallyMessage", other),
+        }
+    }
+}
+
+/// What a handle to the component offers: a method for each message.
+#[doc(hidden)]
+struct __TallyMessages(::inset_runtime::Mailbox<Tally>);
+
+impl From<::inset_runtime::Mailbox<Tally>> for __TallyMessages {
+    fn from(mailbox: ::inset_runtime::Mailbox<Tally>) -> Self {
+        __TallyMessages(mailbox)
+    }
+}
+
+impl __TallyMessages {
+    fn add(&self, n: u32) -> ::inset_runtime::Message<Tally, ()> {
+        self.0.message(__TallyMessage::add(n))
+    }
+
+    fn total(&self) -> ::inset_runtime::Message<Tally, u32> {
+        self.0.message(__TallyMessage::total)
+    }
+}
+
+impl ::inset_runtime::Component for Tally {
+    const NAME: &'static str = "Tally";
+
+    type Saved = ::inset_runtime::Saved;
+
+    fn save(&self) -> ::inset_runtime::Saved {
+        ::inset_runtime::Saved::new(
+            Vec::from([::inset_runtime::Stored::to_json(&self.total)]),
+        )
+    }
+
+    fn restore(&mut self, saved: ::inset_runtime::Saved) {
+        let mut saved = saved.fields();
+        saved.restore(&mut self.total);
+    }
+
+    type Message = __TallyMessage;
+
+    type Messages = __TallyMessages;
+
+    fn receive(
+        &mut self,
+        message: __TallyMessage,
+    ) -> ::inset_runtime::LocalBoxFuture<'_, ::inset_runtime::AnyReply> {
+        Box::pin(async move {
+            match message {
+                __TallyMessage::add(n) => {
+                    Tally::add(self, n);
+                    Box::new(()) as ::inset_runtime::AnyReply
+                }
+                __TallyMessage::total => {
+                    Box::new(Tally::total(self)) as ::inset_runtime::AnyReply
+                }
+            }
+        })
+    }
+}
+
+struct Log {
+    entries: Vec<u32>,
+    counted: ::inset_runtime::Outlet<u32>,
+    logged: ::inset_runtime::Outlet<u32>,
+    clock: ::inset_runtime::Handle<Clock>,
+}
+
+impl Log {
+    /// Starts the component's children, and builds it from its fields.
+    fn start(
+        scope: &::inset_runtime::Scope,
+        entries: Vec<u32>,
+        counted: ::inset_runtime::Outlet<u32>,
+        logged: ::inset_runtime::Outlet<u32>,
+    ) -> Self {
+        let clock = scope.child::<Clock>("clock");
+        scope.start(&clock, |child| Clock::start(child, 0));
+        Log {
+            entries,
+            counted,
+            logged,
+            clock,
+        }
+    }
+
+    async fn record(&mut self, n: u32) {
+        self.entries.push(n);
+        self.clock.tick().await;
+        ::inset_runtime::send(self.counted.emit(n));
+        ::inset_runtime::send(self.logged.emit(n));
+    }
+
+    fn note(&self, name: &str) -> String {
+        format!("noted {name}")
+    }
+}
+
+/// The messages of a component, each holding its arguments.
+#[doc(hidden)]
+#[allow(non_camel_case_types)]
+enum __LogMessage {
+    record(u32),
+    note(String),
+}
+
+impl ::inset_runtime::Stored for __LogMessage {
+    fn to_json(&self) -> ::inset_runtime::Json {
+        match self {
+            __LogMessage::record(field0) => {
+                ::inset_runtime::data::variant(
+                    "record",
+                    Vec::from([::inset_runtime::Stored::to_json(field0)]),
+                )
+            }
+            __LogMessage::note(field0) => {
+                ::inset_runtime::data::variant(
+                    "note",
+                    Vec::from([::inset_runtime::Stored::to_json(field0)]),
+                )
+            }
+        }
+    }
+
+    fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+        let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
+        match variant {
+            "record" => {
+                ::inset_runtime::data::arity("record", fields, 1usize)?;
+                Ok(__LogMessage::record(::inset_runtime::Stored::from_json(&fields[0])?))
+            }
+            "note" => {
+                ::inset_runtime::data::arity("note", fields, 1usize)?;
+                Ok(__LogMessage::note(::inset_runtime::Stored::from_json(&fields[0])?))
+            }
+            other => ::inset_runtime::data::unknown_variant("__LogMessage", other),
+        }
+    }
+}
+
+/// What a handle to the component offers: a method for each message.
+#[doc(hidden)]
+struct __LogMessages(::inset_runtime::Mailbox<Log>);
+
+impl From<::inset_runtime::Mailbox<Log>> for __LogMessages {
+    fn from(mailbox: ::inset_runtime::Mailbox<Log>) -> Self {
+        __LogMessages(mailbox)
+    }
+}
+
+impl __LogMessages {
+    fn record(&self, n: u32) -> ::inset_runtime::Message<Log, ()> {
+        self.0.message(__LogMessage::record(n))
+    }
+
+    fn note(&self, name: &str) -> ::inset_runtime::Message<Log, String> {
+        self.0.message(__LogMessage::note(::std::borrow::ToOwned::to_owned(name)))
+    }
+}
+
+impl ::inset_runtime::Component for Log {
+    const NAME: &'static str = "Log";
+
+    type Saved = ::inset_runtime::Saved;
+
+    fn save(&self) -> ::inset_runtime::Saved {
+        ::inset_runtime::Saved::new(
+            Vec::from([::inset_runtime::Stored::to_json(&self.entries)]),
+        )
+    }
+
+    fn restore(&mut self, saved: ::inset_runtime::Saved) {
+        let mut saved = saved.fields();
+        saved.restore(&mut self.entries);
+    }
+
+    type Message = __LogMessage;
+
+    type Messages = __LogMessages;
+
+    fn receive(
+        &mut self,
+        message: __LogMessage,
+    ) -> ::inset_runtime::LocalBoxFuture<'_, ::inset_runtime::AnyReply> {
+        Box::pin(async move {
+            match message {
+                __LogMessage::record(n) => {
+                    Log::record(self, n).await;
+                    Box::new(()) as ::inset_runtime::AnyReply
+                }
+                __LogMessage::note(name) => {
+                    Box::new(Log::note(self, &name)) as ::inset_runtime::AnyReply
+                }
+            }
+        })
+    }
+}
+
+struct Clock {
+    ticks: u64,
+}
+
+impl Clock {
+    /// Builds the component from its fields.
+    fn start(_: &::inset_runtime::Scope, ticks: u64) -> Self {
+        Clock { ticks }
+    }
+
+    fn tick(&mut self) {
+        self.ticks += 1;
+    }
+}
+
+/// The messages of a component, each holding its arguments.
+#[doc(hidden)]
+#[allow(non_camel_case_types)]
+enum __ClockMessage {
+    tick,
+}
+
+impl ::inset_runtime::Stored for __ClockMessage {
+    fn to_json(&self) -> ::inset_runtime::Json {
+        match self {
+            __ClockMessage::tick => ::inset_runtime::data::variant("tick", Vec::new()),
+        }
+    }
+
+    fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+        let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
+        match variant {
+            "tick" => {
+                ::inset_runtime::data::arity("tick", fields, 0)?;
+                Ok(__ClockMessage::tick)
+            }
+            other => ::inset_runtime::data::unknown_variant("__ClockMessage", other),
+        }
+    }
+}
+
+/// What a handle to the component offers: a method for each message.
+#[doc(hidden)]
+struct __ClockMessages(::inset_runtime::Mailbox<Clock>);
+
+impl From<::inset_runtime::Mailbox<Clock>> for __ClockMessages {
+    fn from(mailbox: ::inset_runtime::Mailbox<Clock>) -> Self {
+        __ClockMessages(mailbox)
+    }
+}
+
+impl __ClockMessages {
+    fn tick(&self) -> ::inset_runtime::Message<Clock, ()> {
+        self.0.message(__ClockMessage::tick)
+    }
+}
+
+impl ::inset_runtime::Component for Clock {
+    const NAME: &'static str = "Clock";
+
+    type Saved = ::inset_runtime::Saved;
+
+    fn save(&self) -> ::inset_runtime::Saved {
+        ::inset_runtime::Saved::new(
+            Vec::from([::inset_runtime::Stored::to_json(&self.ticks)]),
+        )
+    }
+
+    fn restore(&mut self, saved: ::inset_runtime::Saved) {
+        let mut saved = saved.fields();
+        saved.restore(&mut self.ticks);
+    }
+
+    type Message = __ClockMessage;
+
+    type Messages = __ClockMessages;
+
+    fn receive(
+        &mut self,
+        message: __ClockMessage,
+    ) -> ::inset_runtime::LocalBoxFuture<'_, ::inset_runtime::AnyReply> {
+        Box::pin(async move {
+            match message {
+                __ClockMessage::tick => {
+                    Clock::tick(self);
+                    Box::new(()) as ::inset_runtime::AnyReply
+                }
+            }
+        })
+    }
+}

@@ -37,7 +37,7 @@ fn remaining(name: &str) -> String {
 
 #[test]
 fn stock_tracker() {
-    insta::assert_snapshot!(remaining("stock-tracker"));
+    assert_eq!(remaining("stock-tracker"), "");
 }
 
 #[test]

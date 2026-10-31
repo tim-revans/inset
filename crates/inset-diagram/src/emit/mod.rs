@@ -12,12 +12,14 @@
 //! operations called on each capability, and a flowchart for every function
 //! whose body uses statements, `let ... else`, `if`, `if let`, `match`,
 //! `for`, `while`, `return`, `?` in a function that returns an `Option`
-//! or a `Result`, and awaited capability calls, each a step linked to the
-//! capability's edge. Algorithms in every module are drawn, each owned by
+//! or a `Result`, awaited capability calls, each a step linked to the
+//! capability's edge, and messages, awaited or sent, and values emitted
+//! through an outlet, each a step linked to its message or emit edge. Algorithms in every module are drawn, each owned by
 //! the app and its module's path. Anything else that `inset check` accepts
 //! gets a diagnostic saying it cannot be drawn yet, at the construct,
-//! rather than a diagram that leaves it out. Message and emit edges, which
-//! need `send` and an awaited message, follow with the Stock tracker.
+//! rather than a diagram that leaves it out. Edges are grouped by kind,
+//! capabilities first, then messages and emits, each kind in the order its
+//! elements are drawn.
 
 mod flow;
 
@@ -107,6 +109,9 @@ struct Emitter<'a> {
     operations: BTreeMap<String, BTreeSet<String>>,
     /// Capability fields that are used, in the order the components are drawn.
     used_capabilities: Vec<String>,
+    /// Message and emit edges, in the order their calls are drawn.
+    message_edges: Vec<Edge>,
+    emit_edges: Vec<Edge>,
     /// Where each element is, by program-wide span.
     sources: BTreeMap<String, Span>,
     diagnostics: Vec<Diagnostic>,
@@ -132,6 +137,8 @@ impl<'a> Emitter<'a> {
             moved_from: BTreeMap::new(),
             operations: BTreeMap::new(),
             used_capabilities: Vec::new(),
+            message_edges: Vec::new(),
+            emit_edges: Vec::new(),
             sources: BTreeMap::new(),
             diagnostics: Vec::new(),
         }
@@ -209,7 +216,10 @@ impl<'a> Emitter<'a> {
             .into_iter()
             .map(|(owner, item, f)| self.function(&owner, f, &item.docs, None))
             .collect();
-        let edges = self.capability_edges();
+        // Grouped by kind: capabilities, then messages, then emits.
+        let mut edges = self.capability_edges();
+        edges.append(&mut self.message_edges);
+        edges.append(&mut self.emit_edges);
         Diagram {
             version: 1,
             app: App {
@@ -383,10 +393,19 @@ impl<'a> Emitter<'a> {
                 field,
                 from: format!("{parent}/{}", sibling.name),
             }),
-            HandoffValue::Connect { target, message } => Some(Handoff::Connect {
-                field,
-                to: format!("{parent}/{}/fn:{}", target.name, message.name),
-            }),
+            HandoffValue::Connect {
+                target: to,
+                message,
+            } => {
+                let to = if to.name == "self" {
+                    format!("{parent}/fn:{}", message.name)
+                } else {
+                    format!("{parent}/{}/fn:{}", to.name, message.name)
+                };
+                // The picture draws the connection from the outlet.
+                self.locate(&format!("{target}->{to}"), handoff.span);
+                Some(Handoff::Connect { field, to })
+            }
             HandoffValue::Expr(expr) => {
                 // A name alone is a field of the parent, or a setting of the
                 // app, whose value is copied. Anything else is a new value.
@@ -463,9 +482,28 @@ impl<'a> Emitter<'a> {
         let mut routes = Vec::new();
         let mut messages = Vec::new();
         let mut algorithms = Vec::new();
+        // Whom the component's functions can send messages to: its named
+        // children, and the siblings lent to it.
+        let mut handles: Vec<(String, String, &ast::Component)> = Vec::new();
+        for start in &component.starts {
+            let (Some(binding), Some(child)) = (
+                &start.binding,
+                self.refs
+                    .get(&start.component.span)
+                    .and_then(|target| self.components.get(target)),
+            ) else {
+                continue;
+            };
+            handles.push((
+                binding.name.clone(),
+                format!("{id}/{}", binding.name),
+                child.1,
+            ));
+        }
         let scope = Scope {
             component: &id,
             definition: component,
+            handles,
         };
         for function in &component.functions {
             let route = function.attrs.iter().find_map(|a| match &a.kind {
@@ -618,6 +656,7 @@ impl<'a> Emitter<'a> {
             }
             let id = format!("{field}->{from}");
             self.sources.insert(id.clone(), self.sources[field]);
+            // The edge's steps link to it by this ID.
             edges.push(Edge::Capability {
                 id,
                 from: field.clone(),
@@ -633,6 +672,9 @@ impl<'a> Emitter<'a> {
 struct Scope<'a> {
     component: &'a str,
     definition: &'a ast::Component,
+    /// For each field that holds a handle, by its name, the ID of the
+    /// component behind it, and that component's declaration.
+    handles: Vec<(String, String, &'a ast::Component)>,
 }
 
 fn doc(docs: &[ast::Doc]) -> Option<String> {

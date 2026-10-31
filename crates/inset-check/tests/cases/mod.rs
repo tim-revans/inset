@@ -521,6 +521,24 @@ pub fn all() -> Vec<Case> {
         add("table_key_not_orderable", main, STORE_REQ.to_string());
     }
     {
+        // The second row's cell is text where a number goes, and the
+        // third's reply is not one the route can give.
+        let req = format!(
+            "{STORE_REQ}\n{}",
+            r#"requirement "Received stock is added, whatever is on hand"
+    given items["bolt-m6"] is Item { on_hand: <on hand>, price: 0.10 }
+    when Store receives POST /items/bolt-m6/receipts with "20"
+    then Store replies <status> with "<after>"
+    examples
+    | on hand | status | after |
+    | 3       | OK     | 23    |
+    | three   | OK     | 23    |
+    | 3       | Teapot | 23    |
+"#
+        );
+        add("examples_cell_of_wrong_type", STORE.to_string(), req);
+    }
+    {
         let case = Case {
             name: "file_not_a_module",
             main: SHELF.to_string(),

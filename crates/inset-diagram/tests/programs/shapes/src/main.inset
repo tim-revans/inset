@@ -19,7 +19,7 @@ component Front {
     #[handed_down]
     counts: Table<String, u32>,
 
-    start tally: Tally { counts: move counts, total: 0 };
+    start tally: Tally { counts: move counts, total: 0, noted: send self.heard };
 
     failure {
         /// A broken store leaves nothing half written.
@@ -65,6 +65,23 @@ component Front {
         format!("{label} {}", sizes::total(&[size]))
     }
 
+    /// Adds twice, and replies with the total and a key passed there and back.
+    #[post("/add/{n}", via = web)]
+    async fn add(&self, n: u32) -> String {
+        send self.tally.add(n);
+        send self.tally.add(n + 1);
+        let key = format!("added {n}");
+        let total = self.tally.record(&key).await;
+        let echoed = self.tally.echo(move key).await;
+        format!("{total} {echoed}")
+    }
+
+    /// Hears what the tally noted.
+    #[message]
+    fn heard(&self, note: String) {
+        let _ = note;
+    }
+
     fn count(words: &[String]) -> usize {
         words.len()
     }
@@ -75,10 +92,26 @@ component Tally {
     counts: Table<String, u32>,
     total: u32,
 
+    /// Each key recorded.
+    noted: Outlet<String>,
+
     /// Adds to the total.
     #[message]
     fn add(&mut self, n: u32) {
         self.total += n;
+    }
+
+    /// Notes a key, and returns the total.
+    #[message]
+    fn record(&self, key: &str) -> u32 {
+        send self.noted.emit(key.to_string());
+        self.total
+    }
+
+    /// Returns the key it is given.
+    #[message]
+    fn echo(&self, key: String) -> String {
+        key
     }
 }
 

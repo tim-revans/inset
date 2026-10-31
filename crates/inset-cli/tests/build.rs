@@ -56,18 +56,14 @@ fn builds_hello_http() {
 fn refuses_a_program_with_errors() {
     let dir = hello_copy("refuse");
     let source = std::fs::read_to_string(dir.join("src/main.inset")).unwrap();
-    let restart = "http: HttpServer,\n\n    failure {\n        /// Try again.\n        Panic => restart,\n    }\n";
-    std::fs::write(
-        dir.join("src/main.inset"),
-        source.replace("http: HttpServer,\n", restart),
-    )
-    .unwrap();
+    let serialized = "\n#[derive(Serialize)]\nstruct Greeting {\n    text: String,\n}\n";
+    std::fs::write(dir.join("src/main.inset"), source + serialized).unwrap();
     let out = inset(&["build"], &dir).output().expect("run inset");
     std::fs::remove_dir_all(&dir).unwrap();
     assert!(!out.status.success());
     assert!(out.stdout.is_empty());
     assert!(
-        stderr(&out).contains("`restart` cannot be compiled yet"),
+        stderr(&out).contains("deriving `Serialize` cannot be compiled yet"),
         "{}",
         stderr(&out)
     );

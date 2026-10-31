@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "requirement \"Visitors are greeted by the name in the web address\"\n    when HelloHttp receives GET /hello/Ada\n    then HelloHttp replies <status> with \"Hello, <name>!\"\n    examples\n    | name |\n    | Ada  |\n"
+---
+Error: `<status>` is not a heading of the examples table
+   ╭─[ hello.req.inset:3:28 ]
+   │
+ 3 │     then HelloHttp replies <status> with "Hello, <name>!"
+   │                            ────┬───  
+   │                                ╰───── no column gives this placeholder a value
+   │ 
+   │ Help: name the placeholder after one of the table's headings, or add a column for it
+───╯

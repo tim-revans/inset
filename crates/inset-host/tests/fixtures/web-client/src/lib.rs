@@ -17,7 +17,8 @@ impl App for WebClient {
 
     fn start(scope: &Scope, grants: &mut Grants) -> Result<(), Stopped> {
         let http = grants.http_server("http");
-        scope.start(|_| Fetcher { http });
+        let fetcher = scope.child::<Fetcher>("Fetcher");
+        scope.start(&fetcher, |_| Fetcher { http });
         Ok(())
     }
 }
@@ -28,6 +29,8 @@ struct Fetcher {
 
 impl Component for Fetcher {
     const NAME: &'static str = "Fetcher";
+    type Message = NoMessage;
+    type Messages = Mailbox<Self>;
     type Saved = ();
 
     fn save(&self) {}

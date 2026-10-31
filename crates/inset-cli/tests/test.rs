@@ -173,3 +173,48 @@ fn a_fact_that_fails_shows_both_values() {
     insta::assert_snapshot!("broken_room_text", stdout(&text));
     insta::assert_snapshot!("broken_room_json", stdout(&json));
 }
+
+/// Each row of the Stock tracker's examples table is reported on a line of
+/// its own, under its requirement, and in the JSON report.
+#[test]
+fn the_stock_tracker_meets_its_requirements_row_by_row() {
+    let dir = copy("examples/stock-tracker", "stock-tracker");
+    let text = run(&mut inset(&["test"], &dir));
+    let json = run(&mut inset(&["test", "--json"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(text.status.success(), "{}{}", stdout(&text), stderr(&text));
+    insta::assert_snapshot!("stock_tracker_text", stdout(&text));
+    insta::assert_snapshot!("stock_tracker_json", stdout(&json));
+}
+
+/// A copy of the Stock tracker that reorders only below the reorder level,
+/// not at it, which one row of the examples table finds out.
+#[test]
+fn a_failing_row_is_reported_on_its_own() {
+    let dir = copy("examples/stock-tracker", "broken-stock-tracker");
+    let path = dir.join("src/warehouse.inset");
+    let source = std::fs::read_to_string(&path).unwrap();
+    let broken = source.replace("if on_hand > reorder_level", "if on_hand >= reorder_level");
+    assert_ne!(source, broken);
+    std::fs::write(&path, broken).unwrap();
+    let text = run(&mut inset(&["test"], &dir));
+    let json = run(&mut inset(&["test", "--json"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(text.status.code(), Some(1), "{}", stderr(&text));
+    insta::assert_snapshot!("broken_stock_tracker_text", stdout(&text));
+    insta::assert_snapshot!("broken_stock_tracker_json", stdout(&json));
+}
+
+/// A child that fails is restarted with its own children, and the
+/// requirement sees it start again from nothing.
+#[test]
+fn a_restarted_child_starts_again_from_nothing() {
+    let dir = copy("crates/inset-host/tests/programs/restart", "restart");
+    let out = run(&mut inset(&["test"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(out.status.success(), "{}{}", stdout(&out), stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "pass  A tally that fails starts again from nothing, with its part\n\n1 requirement passed\n"
+    );
+}

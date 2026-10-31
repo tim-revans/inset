@@ -1,0 +1,151 @@
+// The runtime spike's program: rollback after each kind of failure, and the
+// routes that measure lending. `tests/rollback.rs` and `tests/measure.rs`
+// run it.
+
+app Spike {
+    grant http: HttpServer { port: 8080 };
+    grant counts: Table<String, u32> { file: "counts.db", name: "counts" };
+    start Front { http: move http, counts: move counts, hits: 0 };
+}
+
+/// Counts visits, and fails on the keys that ask it to.
+component Front {
+    http: HttpServer,
+    counts: Table<String, u32>,
+    hits: u32,
+
+    start log: Log { entries: Vec::new() };
+    start audit: Audit { checked: Vec::new() };
+
+    failure {
+        /// The next request may succeed.
+        Capability(counts) => rollback,
+        /// Only the request that hit the bug fails.
+        Panic => rollback,
+        /// Only the request that overflowed fails.
+        Overflow => rollback,
+        /// Only the request that failed the audit fails.
+        Message(audit) => rollback,
+    }
+
+    /// Counts a visit to `key`, changing every kind of state before it
+    /// fails on the keys that ask it to.
+    #[post("/count/{key}", via = http)]
+    async fn count(&mut self, key: String) -> String {
+        self.hits += 1;
+        let n = self.counts.get(&key).await.unwrap_or(0) + 1;
+        self.counts.insert(key.clone(), n).await;
+        send self.log.push(format!("{key} {n}"));
+        match key.as_str() {
+            "panic" => panic!("asked to panic"),
+            "overflow" => self.hits += u32::MAX,
+            "audit" | "log" => {
+                self.audit.check(&key).await;
+                self.log.check(&key).await;
+            }
+            _ => {}
+        }
+        format!("{key} {n}")
+    }
+
+    /// The count stored for `key`.
+    #[get("/count/{key}", via = http)]
+    async fn stored(&self, key: String) -> Option<String> {
+        let n = self.counts.get(&key).await?;
+        Some(n.to_string())
+    }
+
+    /// How many visits were counted.
+    #[get("/hits", via = http)]
+    fn hits(&self) -> String {
+        self.hits.to_string()
+    }
+
+    /// Every count the log recorded.
+    #[get("/log", via = http)]
+    async fn log(&self) -> String {
+        let entries = self.log.entries().await;
+        entries.join(",")
+    }
+
+    /// Every key the audit checked.
+    #[get("/audit", via = http)]
+    async fn audited(&self) -> String {
+        let checked = self.audit.checked().await;
+        checked.join(",")
+    }
+
+    /// Lends `bytes` bytes to `Log` `times` times. Each crossing copies.
+    #[post("/lend/{bytes}/{times}", via = http)]
+    async fn lend(&self, bytes: usize, times: u32) -> String {
+        let text = "x".repeat(bytes);
+        let mut total = 0;
+        for _ in 0..times {
+            total += self.log.measure(&text).await;
+        }
+        total.to_string()
+    }
+
+    /// Moves `bytes` bytes to `Log` and back `times` times. Nothing is copied.
+    #[post("/move/{bytes}/{times}", via = http)]
+    async fn moved(&self, bytes: usize, times: u32) -> String {
+        let mut text = "x".repeat(bytes);
+        let mut total = 0;
+        for _ in 0..times {
+            text = self.log.echo(move text).await;
+            total += text.len();
+        }
+        total.to_string()
+    }
+}
+
+/// Records every count, and panics checking "log". It responds to nothing.
+component Log {
+    entries: Vec<String>,
+
+    #[message]
+    fn push(&mut self, entry: String) {
+        self.entries.push(entry);
+    }
+
+    #[message]
+    fn entries(&self) -> Vec<String> {
+        self.entries.clone()
+    }
+
+    #[message]
+    fn check(&mut self, key: &str) {
+        assert!(key != "log", "the log refuses to check itself");
+    }
+
+    #[message]
+    fn measure(&self, text: &str) -> usize {
+        text.len()
+    }
+
+    #[message]
+    fn echo(&self, text: String) -> String {
+        text
+    }
+}
+
+/// Records every audited key, and panics checking "audit".
+component Audit {
+    checked: Vec<String>,
+
+    failure {
+        /// An audit that panics fails only its own request.
+        Panic => rollback,
+    }
+
+    #[message]
+    fn check(&mut self, key: &str) {
+        self.checked.push(key.to_string());
+        assert!(key != "audit", "the audit refuses to check itself");
+    }
+
+    #[message]
+    fn checked(&self) -> Vec<String> {
+        self.checked.clone()
+    }
+}

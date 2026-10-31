@@ -43,7 +43,7 @@ fn every_checked_example_is_drawn_as_its_expected_diagram() {
     }
     // The examples the compiler covers so far. Another example joins this
     // list when it checks clean.
-    assert_eq!(drawn_examples, ["hello-http"]);
+    assert_eq!(drawn_examples, ["hello-http", "stock-tracker"]);
 }
 
 /// Every view of a diagram draws, which also checks each flowchart's ID.
@@ -214,8 +214,7 @@ fn table_calls_are_steps_on_the_capability_edge() {
     insta::assert_snapshot!(serde_json::to_string_pretty(&receive["body"]).unwrap());
 }
 
-/// Messages, an outlet, `send`, `.await`, and the shapes of body that
-/// would hide a branch inside a step.
+/// The shapes of body that would hide a branch inside a step.
 const UNDRAWN: &str = r#"app Counting {
     setting port: u16 = 8080;
     grant http: HttpServer { port };
@@ -225,15 +224,6 @@ const UNDRAWN: &str = r#"app Counting {
 component Front {
     http: HttpServer,
 
-    start tally: Tally { total: 0 };
-
-    #[get("/count/{n}", via = http)]
-    async fn count(&self, n: u32) -> String {
-        send self.tally.add(n);
-        let total = self.tally.total().await;
-        format!("{total}")
-    }
-
     #[get("/shapes/{n}", via = http)]
     fn shapes(n: u32) -> String {
         let small = double(if n > 10 { 10 } else { n });
@@ -241,20 +231,6 @@ component Front {
             let unused = small;
         }
         format!("{small}")
-    }
-}
-
-component Tally {
-    total: u32,
-
-    #[message]
-    fn add(&mut self, n: u32) {
-        self.total += n;
-    }
-
-    #[message]
-    fn total(&self) -> u32 {
-        self.total
     }
 }
 

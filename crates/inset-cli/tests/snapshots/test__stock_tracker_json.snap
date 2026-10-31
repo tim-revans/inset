@@ -1,0 +1,107 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&json)
+---
+{
+  "app": "StockTracker",
+  "passed": 8,
+  "failed": 0,
+  "requirements": [
+    {
+      "sentence": "The stock level of an item is its quantity on hand",
+      "file": "requirements/stock.req.inset",
+      "line": 1,
+      "result": "pass"
+    },
+    {
+      "sentence": "An item that is not stocked is not found",
+      "file": "requirements/stock.req.inset",
+      "line": 6,
+      "result": "pass"
+    },
+    {
+      "sentence": "Received stock is added to the quantity on hand",
+      "file": "requirements/stock.req.inset",
+      "line": 16,
+      "result": "pass"
+    },
+    {
+      "sentence": "Shipping takes the shipped quantity off the quantity on hand",
+      "file": "requirements/stock.req.inset",
+      "line": 22,
+      "result": "pass"
+    },
+    {
+      "sentence": "Shipping more than the quantity on hand is refused and changes nothing",
+      "file": "requirements/stock.req.inset",
+      "line": 28,
+      "result": "pass"
+    },
+    {
+      "sentence": "Stock that falls to its reorder level or below is reordered up to its target level",
+      "file": "requirements/stock.req.inset",
+      "line": 34,
+      "result": "pass",
+      "headings": [
+        "on hand",
+        "target level",
+        "left",
+        "reorders"
+      ],
+      "rows": [
+        {
+          "cells": [
+            "12",
+            "50",
+            "11",
+            "\"\""
+          ],
+          "line": 42,
+          "result": "pass"
+        },
+        {
+          "cells": [
+            "11",
+            "50",
+            "10",
+            "\"bolt-m6 40\\n\""
+          ],
+          "line": 43,
+          "result": "pass"
+        },
+        {
+          "cells": [
+            "1",
+            "50",
+            "0",
+            "\"bolt-m6 50\\n\""
+          ],
+          "line": 44,
+          "result": "pass"
+        },
+        {
+          "cells": [
+            "11",
+            "5",
+            "10",
+            "\"\""
+          ],
+          "line": 45,
+          "result": "pass"
+        }
+      ]
+    },
+    {
+      "sentence": "A new reorder for an item replaces its earlier one",
+      "file": "requirements/stock.req.inset",
+      "line": 47,
+      "result": "pass"
+    },
+    {
+      "sentence": "A database failure fails the request and changes nothing",
+      "file": "requirements/stock.req.inset",
+      "line": 56,
+      "result": "pass"
+    }
+  ]
+}

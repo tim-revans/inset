@@ -1,0 +1,22 @@
+---
+source: crates/inset-codegen/tests/unsupported.rs
+expression: errors(LENDING)
+---
+Error: lending a child to a sibling cannot be compiled yet
+    ╭─[ src/main.inset:10:28 ]
+    │
+ 10 │     start reader: Reader { tally: &tally };
+    │                            ──────┬──────  
+    │                                  ╰──────── lent here
+    │ 
+    │ Help: `inset check` accepts this, but the compiler does not emit Rust for it yet
+────╯
+Error: a lent sibling cannot be compiled yet
+    ╭─[ src/main.inset:29:12 ]
+    │
+ 29 │     tally: &Handle<Tally>,
+    │            ───────┬──────  
+    │                   ╰──────── this field's type
+    │ 
+    │ Help: `inset check` accepts this, but the compiler does not emit Rust for it yet
+────╯

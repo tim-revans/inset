@@ -125,7 +125,7 @@ Every branch is an element with its own ID: each branch of a decision, a loop's 
 - `version` is 1.
 - `app` holds the settings, the grants with what is outside each one, and the tree of `components`. Each component lists its `start` handoffs, `fields`, `failure` arms, `routes`, `messages`, `algorithms` and child `components`, all in source order.
 - `algorithms` holds the functions declared at the top level of a module.
-- `edges` holds what connects elements across the tree: `capability` (a field to its grant, with the operations used), `message` (a function to a message handler, with each argument's boundary notation, and whether it is a `send`) and `emit` (a function to its own component's outlet). An outlet's connection is a `connect` handoff in the `start` of the component that owns the outlet.
+- `edges` holds what connects elements across the tree: `capability` (a field to its grant, with the operations used), `message` (a function to a message handler, with each argument's boundary notation, and whether it is a `send`) and `emit` (a function to its own component's outlet). An outlet's connection is a `connect` handoff in the `start` of the component that owns the outlet. The compiler lists the capability edges first, then the message edges, then the emit edges.
 - Each function's `body` is its flowchart, as nested `action`, `decision`, `loop`, `fork` and `return` steps.
 - `coverage`, when present, maps each element ID reached to the requirements that reached it. *(Draft: filled in by the coverage overlay.)*
 

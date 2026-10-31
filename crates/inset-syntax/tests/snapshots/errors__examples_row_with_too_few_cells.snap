@@ -1,0 +1,11 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "requirement \"Visitors are greeted by the name in the web address\"\n    when HelloHttp receives GET /hello/<name>\n    then HelloHttp replies OK with \"Hello, <name>!\"\n    examples\n    | name | greeting |\n    | Ada  |\n"
+---
+Error: this row has 1 cell, but the table has 2 headings
+   ╭─[ hello.req.inset:6:5 ]
+   │
+ 6 │     | Ada  |
+   │     ────┬───  
+   │         ╰───── each row has one cell under each heading
+───╯

@@ -647,8 +647,50 @@ pub struct RequirementsFile {
 pub struct Requirement {
     /// The requirement as a sentence, which test reports show.
     pub sentence: StrLit,
+    /// The steps, when there is no `examples` table. With one, the steps
+    /// have placeholders, and each row has them read with its cells.
     pub steps: Vec<Step>,
+    pub examples: Option<Examples>,
     pub span: Span,
+}
+
+impl Requirement {
+    /// Each case the requirement tests: its steps, with the examples row
+    /// they were read with, if any.
+    pub fn cases(&self) -> Vec<(Option<&ExampleRow>, &[Step])> {
+        match &self.examples {
+            None => vec![(None, &self.steps)],
+            Some(examples) => examples
+                .rows
+                .iter()
+                .map(|row| (Some(row), row.steps.as_slice()))
+                .collect(),
+        }
+    }
+}
+
+/// An `examples` table: each heading names a placeholder, and each row is
+/// one case of the requirement.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Examples {
+    /// The `examples` keyword.
+    pub span: Span,
+    pub headings: Vec<Text>,
+    pub rows: Vec<ExampleRow>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExampleRow {
+    /// Each cell's text, trimmed, in the order of the headings.
+    pub cells: Vec<Text>,
+    /// The row, from its first `|` to its last.
+    pub span: Span,
+    /// The requirement's steps, read with this row's cells in place of the
+    /// placeholders. A span in them that came from a cell is the span of
+    /// its placeholder in the step.
+    pub steps: Vec<Step>,
+    /// Where the placeholders are in the steps.
+    pub placeholders: Vec<Span>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

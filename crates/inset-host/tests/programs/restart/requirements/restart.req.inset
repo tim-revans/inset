@@ -1,0 +1,8 @@
+requirement "A tally that fails starts again from nothing, with its part"
+    when Counters receives POST /add/2
+    then Counters replies OK with "2 1"
+    when Counters receives POST /add/13
+    then Counters replies InternalServerError
+    when Counters receives GET /counts
+    then Counters replies OK with "0 0"
+    and marks["2"] is 2

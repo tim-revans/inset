@@ -46,6 +46,10 @@ The program is split into two modules to show that Inset's modules are Rust's: `
 
 It covers the brief's Stock tracker row: several actors, a database capability, an algorithm flowchart, and table tests (written as an examples table against the app).
 
+## Running it
+
+`inset test examples/stock-tracker` runs the requirements, with each row of the examples table on a line of its own. `inset run examples/stock-tracker` serves the program, and keeps `stock.db` in the directory it is run from. The tracker has no route that adds an item, so `cargo xtask e2e stock-tracker` stores one in a fresh `stock.db` before it serves the program.
+
 No requirement names a component or an algorithm, yet every branch of the code is reached by some requirement, so the coverage overlay should leave nothing uncovered.
 
 ## Expected diagrams

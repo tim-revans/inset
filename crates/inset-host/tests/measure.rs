@@ -9,7 +9,7 @@ mod common;
 
 use std::time::{Duration, Instant};
 
-use common::{compiled, fake, load, text};
+use common::{compile, compiled, fake, text};
 use inset_host::Program;
 
 fn timed<T>(f: impl FnOnce() -> T) -> (T, Duration) {
@@ -44,7 +44,7 @@ fn starting_a_built_program() {
 #[test]
 #[ignore]
 fn lending_a_value_across_a_boundary() {
-    let program = load("fixture-spike");
+    let program = compile("crates/inset-host/tests/programs/spike");
     let mut running = program.start(&fake()).unwrap();
     let mut each = |route: &str, bytes: usize, times: u32| {
         let path = format!("/{route}/{bytes}/{times}");

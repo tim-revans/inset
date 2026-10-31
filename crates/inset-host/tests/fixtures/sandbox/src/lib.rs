@@ -19,7 +19,8 @@ impl App for Sandbox {
 
     fn start(scope: &Scope, grants: &mut Grants) -> Result<(), Stopped> {
         let http = grants.http_server("http");
-        scope.start(|_| Prober { http });
+        let prober = scope.child::<Prober>("Prober");
+        scope.start(&prober, |_| Prober { http });
         Ok(())
     }
 }
@@ -37,6 +38,8 @@ fn outcome<T, E: std::fmt::Display>(result: Result<T, E>) -> String {
 
 impl Component for Prober {
     const NAME: &'static str = "Prober";
+    type Message = NoMessage;
+    type Messages = Mailbox<Self>;
     type Saved = ();
 
     fn save(&self) {}

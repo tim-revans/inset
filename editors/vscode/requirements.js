@@ -15,13 +15,20 @@ const vscode = require("vscode");
 const { programRoot } = require("./program");
 
 /**
- * What `inset test --json` prints for one requirement.
+ * A step that did not hold, as `inset test --json` prints it.
+ * @typedef {{ line: number, step: string, message: string, expected?: string, actual?: string }} Failure
+ */
+
+/**
+ * What `inset test --json` prints for one requirement. A requirement with
+ * an examples table has a result for each row, and fails if any row does.
  * @typedef {{
  *   sentence: string,
  *   file: string,
  *   line: number,
  *   result: "pass" | "fail",
- *   failure?: { line: number, step: string, message: string, expected?: string, actual?: string },
+ *   failure?: Failure,
+ *   rows?: { cells: string[], line: number, result: "pass" | "fail", failure?: Failure }[],
  * }} Outcome
  */
 
@@ -147,6 +154,14 @@ class Requirements {
       }
       const item = this.controller.createTestItem(requirementId(root, symbol.name), symbol.name, uri);
       item.range = symbol.range;
+      // Each row of an examples table is a case of its own.
+      (symbol.children ?? [])
+        .filter((child) => child.detail === "examples row")
+        .forEach((child, index) => {
+          const row = this.controller.createTestItem(rowId(item.id, index), child.name, uri);
+          row.range = child.range;
+          item.children.add(row);
+        });
       program.children.add(item);
     }
     this.changed.fire();
@@ -183,7 +198,11 @@ class Requirements {
       this.controller.items.forEach((program) => roots.add(program.id));
     }
     for (const item of requested) {
-      roots.add(item.parent ? item.parent.id : item.id);
+      let program = item;
+      while (program.parent) {
+        program = program.parent;
+      }
+      roots.add(program.id);
     }
     try {
       for (const root of roots) {
@@ -213,6 +232,10 @@ class Requirements {
     program.children.forEach((item) => {
       items.push(item);
       run.started(item);
+      item.children.forEach((row) => {
+        items.push(row);
+        run.started(row);
+      });
     });
     const label = program.label;
     const print = (text) => {
@@ -251,31 +274,67 @@ class Requirements {
       if (!item) {
         continue;
       }
-      const failure = outcome.failure;
-      print(`${failure ? "FAIL" : "pass"}  ${outcome.sentence}\n`);
-      if (!failure) {
-        run.passed(item);
-        this.results.set(item.id, { result: "pass" });
+      print(`${outcome.result === "fail" ? "FAIL" : "pass"}  ${outcome.sentence}\n`);
+      const uri = vscode.Uri.file(path.join(root, outcome.file));
+      const rows = outcome.rows ?? [];
+      rows.forEach((row, index) => {
+        const rowItem = item.children.get(rowId(item.id, index));
+        print(`      ${row.result === "fail" ? "FAIL" : "pass"}  | ${row.cells.join(" | ")} |\n`);
+        if (rowItem) {
+          this.report(run, rowItem, uri, row.failure);
+        }
+      });
+      if (rows.length > 0) {
+        const failed = rows.filter((row) => row.result === "fail").length;
+        if (failed === 0) {
+          run.passed(item);
+          this.results.set(item.id, { result: "pass" });
+        } else {
+          const detail = `${failed} of ${rows.length} rows of the examples table failed`;
+          run.failed(item, new vscode.TestMessage(detail));
+          this.results.set(item.id, { result: "fail", detail });
+        }
         continue;
       }
-      const uri = vscode.Uri.file(path.join(root, outcome.file));
-      const location = new vscode.Location(uri, new vscode.Position(failure.line - 1, 0));
-      const detail = `${failure.step.trim()}\n${failure.message}`;
-      // A fact that compared two values shows them side by side.
-      const message =
-        failure.expected !== undefined && failure.actual !== undefined
-          ? vscode.TestMessage.diff(detail, failure.expected, failure.actual)
-          : new vscode.TestMessage(detail);
-      message.location = location;
-      run.failed(item, message);
-      this.results.set(item.id, { result: "fail", detail, location });
+      this.report(run, item, uri, outcome.failure);
     }
+  }
+
+  /**
+   * Reports whether a requirement or an examples row passed, and for a
+   * failure the step that did not hold.
+   * @param {vscode.TestRun} run
+   * @param {vscode.TestItem} item
+   * @param {vscode.Uri} uri The requirements file.
+   * @param {Failure | undefined} failure
+   */
+  report(run, item, uri, failure) {
+    if (!failure) {
+      run.passed(item);
+      this.results.set(item.id, { result: "pass" });
+      return;
+    }
+    const location = new vscode.Location(uri, new vscode.Position(failure.line - 1, 0));
+    const detail = `${failure.step.trim()}\n${failure.message}`;
+    // A fact that compared two values shows them side by side.
+    const message =
+      failure.expected !== undefined && failure.actual !== undefined
+        ? vscode.TestMessage.diff(detail, failure.expected, failure.actual)
+        : new vscode.TestMessage(detail);
+    message.location = location;
+    run.failed(item, message);
+    this.results.set(item.id, { result: "fail", detail, location });
   }
 }
 
 /** A requirement's item ID: its program and sentence, which is unique in the program. */
 function requirementId(root, sentence) {
   return `${root}\n${sentence}`;
+}
+
+/** An examples row's item ID: its requirement's, and its place in the table. */
+function rowId(requirement, index) {
+  return `${requirement}\n${index}`;
 }
 
 /**
@@ -303,7 +362,9 @@ function execute(command, args, cwd, token) {
 
 /**
  * The requirements panel: each program, with each requirement's sentence
- * and its last result, and for a failure the step that did not hold.
+ * and its last result, and for a failure the step that did not hold. A
+ * requirement with an examples table has its rows under it, each with its
+ * own result.
  * @implements {vscode.TreeDataProvider<vscode.TestItem | Result>}
  */
 class RequirementsTree {
@@ -322,6 +383,10 @@ class RequirementsTree {
       node.children.forEach((item) => children.push(item));
       const result = this.requirements.results.get(node.id);
       const problem = result && result.result !== "pass" ? [result] : [];
+      if (node.parent && children.length > 0) {
+        // A requirement with an examples table: its rows, each with its result.
+        return children.sort(byPosition);
+      }
       if (node.parent) {
         return problem;
       }
@@ -352,8 +417,10 @@ class RequirementsTree {
       return tree;
     }
     const result = this.requirements.results.get(node.id);
-    const state = result ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None;
-    const tree = new vscode.TreeItem(node.label, result?.result === "pass" ? undefined : state);
+    const hasRows = node.children.size > 0;
+    const state =
+      result || hasRows ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None;
+    const tree = new vscode.TreeItem(node.label, result?.result === "pass" && !hasRows ? undefined : state);
     tree.id = node.id;
     tree.iconPath = icon(result?.result);
     tree.description = { pass: "passed", fail: "failed", error: "could not run" }[result?.result] ?? "";

@@ -35,5 +35,5 @@ fn every_checked_example_builds_without_rust_errors_or_warnings() {
     }
     // The examples the compiler covers so far. Another example joins this
     // list when it checks clean.
-    assert_eq!(built, ["hello-http"]);
+    assert_eq!(built, ["hello-http", "stock-tracker"]);
 }

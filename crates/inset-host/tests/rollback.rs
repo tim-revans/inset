@@ -4,7 +4,7 @@
 
 mod common;
 
-use common::{fake, load, request, text};
+use common::{compile, fake, request, text};
 use inset_host::{Report, Running};
 
 fn state(running: &mut Running<'_>) -> (String, String, String) {
@@ -20,12 +20,13 @@ fn report(component: &str, failure: &str, message: &str) -> Report {
         component: component.into(),
         failure: failure.into(),
         message: message.into(),
+        restarted: None,
     }
 }
 
 #[test]
 fn a_handler_that_completes_changes_everything() {
-    let program = load("fixture-spike");
+    let program = compile("crates/inset-host/tests/programs/spike");
     let mut running = program.start(&fake()).unwrap();
     assert_eq!(text(&mut running, "POST", "/count/a"), (200, "a 1".into()));
     assert_eq!(text(&mut running, "POST", "/count/a"), (200, "a 2".into()));
@@ -42,7 +43,7 @@ fn a_handler_that_completes_changes_everything() {
 
 #[test]
 fn a_failed_capability_call_rolls_back_without_a_trap() {
-    let program = load("fixture-spike");
+    let program = compile("crates/inset-host/tests/programs/spike");
     let mut running = program.start(&fake()).unwrap();
     text(&mut running, "POST", "/count/a");
     running.table("counts").unwrap().fails = true;
@@ -64,7 +65,7 @@ fn a_failed_capability_call_rolls_back_without_a_trap() {
 
 #[test]
 fn a_panic_rolls_back_and_the_program_carries_on() {
-    let program = load("fixture-spike");
+    let program = compile("crates/inset-host/tests/programs/spike");
     let mut running = program.start(&fake()).unwrap();
     text(&mut running, "POST", "/count/a");
     assert_eq!(
@@ -93,7 +94,7 @@ fn a_panic_rolls_back_and_the_program_carries_on() {
 
 #[test]
 fn an_overflow_is_a_failure_of_its_own() {
-    let program = load("fixture-spike");
+    let program = compile("crates/inset-host/tests/programs/spike");
     let mut running = program.start(&fake()).unwrap();
     assert_eq!(
         text(&mut running, "POST", "/count/overflow"),
@@ -116,7 +117,7 @@ fn an_overflow_is_a_failure_of_its_own() {
 
 #[test]
 fn a_panic_in_a_child_rolls_back_the_handlers_awaiting_it() {
-    let program = load("fixture-spike");
+    let program = compile("crates/inset-host/tests/programs/spike");
     let mut running = program.start(&fake()).unwrap();
     text(&mut running, "POST", "/count/a");
     assert_eq!(
@@ -138,7 +139,7 @@ fn a_panic_in_a_child_rolls_back_the_handlers_awaiting_it() {
 
 #[test]
 fn a_panic_nothing_responds_to_stops_the_program() {
-    let program = load("fixture-spike");
+    let program = compile("crates/inset-host/tests/programs/spike");
     let mut running = program.start(&fake()).unwrap();
     let Err(stopped) = request(&mut running, "POST", "/count/log") else {
         panic!("the program stops")

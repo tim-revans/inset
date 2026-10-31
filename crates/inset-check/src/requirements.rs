@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 
-use inset_syntax::ast::{FactKind, RequirementsFile, StepKind, TypeKind};
+use inset_syntax::ast::{FactKind, RequirementsFile, Step, StepKind, TypeKind};
 use inset_syntax::{Diagnostic, Ident, Span};
 use inset_value::{Check, Shape, Types, Value};
 
@@ -35,6 +35,24 @@ pub struct PlannedRequirement {
     pub file: usize,
     pub sentence: String,
     pub span: Span,
+    /// The steps, when there is no examples table.
+    pub steps: Vec<PlannedStep>,
+    pub examples: Option<PlannedExamples>,
+}
+
+/// An examples table, whose rows each run as a case of their own.
+#[derive(Clone, Debug)]
+pub struct PlannedExamples {
+    pub headings: Vec<String>,
+    pub rows: Vec<PlannedRow>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PlannedRow {
+    /// Each cell as written.
+    pub cells: Vec<String>,
+    pub span: Span,
+    /// The steps, read with the row's cells.
     pub steps: Vec<PlannedStep>,
 }
 
@@ -121,122 +139,193 @@ pub(crate) fn check(
             } else {
                 sentences.insert(&sentence.value, (*file, sentence.span));
             }
-            // The route the most recent `when` step reached, if it resolved.
-            let mut last: Option<Option<&RouteInfo>> = None;
-            let mut planned = Vec::new();
-            for step in &requirement.steps {
-                let mut plan = |kind| {
-                    planned.push(PlannedStep {
-                        span: step.span,
-                        kind,
-                    })
-                };
-                match &step.kind {
-                    StepKind::Request {
-                        app,
-                        method,
-                        path,
-                        via,
-                        body,
-                    } => {
-                        app_name(cx, app, &mut report, &mut |span, target| {
-                            refs.push((*file, span, target))
+            let mut cases = Vec::new();
+            let mut found: Vec<Diagnostic> = Vec::new();
+            for (row, steps) in requirement.cases() {
+                let mut diagnostics = Vec::new();
+                let planned = plan_steps(cx, *file, steps, refs, |d| diagnostics.push(d));
+                for mut diagnostic in diagnostics {
+                    // A diagnostic about a placeholder is the row's own.
+                    if let Some(row) = row
+                        && row
+                            .placeholders
+                            .iter()
+                            .any(|p| overlaps(*p, diagnostic.span))
+                    {
+                        let text = &program.files[*file].text;
+                        let line = text[..row.span.start].matches('\n').count() + 1;
+                        let note = format!("in the examples row on line {line}");
+                        diagnostic.help = Some(match diagnostic.help {
+                            Some(help) => format!("{help}; {note}"),
+                            None => note,
                         });
-                        let route = resolve_request(
-                            cx,
-                            *method,
-                            &path.value,
-                            path.span,
-                            via.as_ref(),
-                            &mut report,
-                        );
-                        if let Some(route) = route {
-                            refs.push((*file, step.span, route.decl.function));
-                            plan(Planned::Request {
-                                server: via.as_ref().map_or_else(
-                                    || route.grant.clone().unwrap_or_default(),
-                                    |v| v.name.clone(),
-                                ),
-                                method: method.as_str().to_string(),
-                                path: path.value.clone(),
-                                body: body
-                                    .as_ref()
-                                    .map_or_else(Vec::new, |b| b.value.clone().into_bytes()),
-                            });
-                        }
-                        last = Some(route);
                     }
-                    StepKind::Reply { app, status, body } => {
-                        app_name(cx, app, &mut report, &mut |span, target| {
-                            refs.push((*file, span, target))
-                        });
-                        let Some(route) = last else {
-                            report(
-                                Diagnostic::new(
-                                    "a reply is checked after a request",
-                                    step.span,
-                                    "no `when` step comes before this",
-                                )
-                                .with_help("add a `when` step above, which this reply answers"),
-                            );
-                            continue;
-                        };
-                        if let Some(route) = route {
-                            refs.push((*file, step.span, route.decl.function));
-                        }
-                        check_status(status, route, &mut report);
-                        if let Some(code) = status::code(&status.name) {
-                            plan(Planned::Reply {
-                                status: code,
-                                body: body.as_ref().map_or_else(String::new, |b| b.value.clone()),
-                            });
-                        }
-                    }
-                    StepKind::Fact { given, fact } => {
-                        let mut values = Values {
-                            cx,
-                            diagnostics: Vec::new(),
-                            refs: Vec::new(),
-                        };
-                        if let Some(grant) = cx
-                            .app
-                            .and_then(|a| a.grants.iter().find(|g| g.name.name == fact.grant.name))
-                        {
-                            refs.push((*file, fact.grant.span, grant.name.span));
-                        }
-                        if let Some(fact) = plan_fact(&mut values, *given, fact) {
-                            plan(if *given {
-                                Planned::Given(fact)
-                            } else {
-                                Planned::Then(fact)
-                            });
-                        }
-                        refs.extend(values.refs.into_iter().map(|(s, t)| (*file, s, t)));
-                        values.diagnostics.into_iter().for_each(&mut report);
-                    }
-                    StepKind::Check(expr) => {
-                        let mut values = Values {
-                            cx,
-                            diagnostics: Vec::new(),
-                            refs: Vec::new(),
-                        };
-                        if let Some(check) = values.check(expr) {
-                            plan(Planned::Check(check));
-                        }
-                        refs.extend(values.refs.into_iter().map(|(s, t)| (*file, s, t)));
-                        values.diagnostics.into_iter().for_each(&mut report);
+                    // Every row reads the steps, so one mistake outside the
+                    // placeholders would be found in each.
+                    if !found.contains(&diagnostic) {
+                        found.push(diagnostic.clone());
+                        report(diagnostic);
                     }
                 }
+                cases.push((row, planned));
             }
+            let (steps, examples) = match &requirement.examples {
+                None => (
+                    cases.pop().map(|(_, steps)| steps).unwrap_or_default(),
+                    None,
+                ),
+                Some(examples) => (
+                    Vec::new(),
+                    Some(PlannedExamples {
+                        headings: examples.headings.iter().map(|h| h.value.clone()).collect(),
+                        rows: cases
+                            .into_iter()
+                            .filter_map(|(row, steps)| {
+                                let row = row?;
+                                Some(PlannedRow {
+                                    cells: row.cells.iter().map(|c| c.value.clone()).collect(),
+                                    span: row.span,
+                                    steps,
+                                })
+                            })
+                            .collect(),
+                    }),
+                ),
+            };
             plans.push(PlannedRequirement {
                 file: *file,
                 sentence: sentence.value.clone(),
                 span: requirement.span,
-                steps: planned,
+                steps,
+                examples,
             });
         }
     }
     reports
+}
+
+/// Checks a case's steps, and plans them.
+fn plan_steps(
+    cx: &Checker,
+    file: usize,
+    steps: &[Step],
+    refs: &mut Vec<(usize, Span, Span)>,
+    mut report: impl FnMut(Diagnostic),
+) -> Vec<PlannedStep> {
+    let file = &file;
+    // The route the most recent `when` step reached, if it resolved.
+    let mut last: Option<Option<&RouteInfo>> = None;
+    let mut planned = Vec::new();
+    for step in steps {
+        let mut plan = |kind| {
+            planned.push(PlannedStep {
+                span: step.span,
+                kind,
+            })
+        };
+        match &step.kind {
+            StepKind::Request {
+                app,
+                method,
+                path,
+                via,
+                body,
+            } => {
+                app_name(cx, app, &mut report, &mut |span, target| {
+                    refs.push((*file, span, target))
+                });
+                let route = resolve_request(
+                    cx,
+                    *method,
+                    &path.value,
+                    path.span,
+                    via.as_ref(),
+                    &mut report,
+                );
+                if let Some(route) = route {
+                    refs.push((*file, step.span, route.decl.function));
+                    plan(Planned::Request {
+                        server: via.as_ref().map_or_else(
+                            || route.grant.clone().unwrap_or_default(),
+                            |v| v.name.clone(),
+                        ),
+                        method: method.as_str().to_string(),
+                        path: path.value.clone(),
+                        body: body
+                            .as_ref()
+                            .map_or_else(Vec::new, |b| b.value.clone().into_bytes()),
+                    });
+                }
+                last = Some(route);
+            }
+            StepKind::Reply { app, status, body } => {
+                app_name(cx, app, &mut report, &mut |span, target| {
+                    refs.push((*file, span, target))
+                });
+                let Some(route) = last else {
+                    report(
+                        Diagnostic::new(
+                            "a reply is checked after a request",
+                            step.span,
+                            "no `when` step comes before this",
+                        )
+                        .with_help("add a `when` step above, which this reply answers"),
+                    );
+                    continue;
+                };
+                if let Some(route) = route {
+                    refs.push((*file, step.span, route.decl.function));
+                }
+                check_status(status, route, &mut report);
+                if let Some(code) = status::code(&status.name) {
+                    plan(Planned::Reply {
+                        status: code,
+                        body: body.as_ref().map_or_else(String::new, |b| b.value.clone()),
+                    });
+                }
+            }
+            StepKind::Fact { given, fact } => {
+                let mut values = Values {
+                    cx,
+                    diagnostics: Vec::new(),
+                    refs: Vec::new(),
+                };
+                if let Some(grant) = cx
+                    .app
+                    .and_then(|a| a.grants.iter().find(|g| g.name.name == fact.grant.name))
+                {
+                    refs.push((*file, fact.grant.span, grant.name.span));
+                }
+                if let Some(fact) = plan_fact(&mut values, *given, fact) {
+                    plan(if *given {
+                        Planned::Given(fact)
+                    } else {
+                        Planned::Then(fact)
+                    });
+                }
+                refs.extend(values.refs.into_iter().map(|(s, t)| (*file, s, t)));
+                values.diagnostics.into_iter().for_each(&mut report);
+            }
+            StepKind::Check(expr) => {
+                let mut values = Values {
+                    cx,
+                    diagnostics: Vec::new(),
+                    refs: Vec::new(),
+                };
+                if let Some(check) = values.check(expr) {
+                    plan(Planned::Check(check));
+                }
+                refs.extend(values.refs.into_iter().map(|(s, t)| (*file, s, t)));
+                values.diagnostics.into_iter().for_each(&mut report);
+            }
+        }
+    }
+    planned
+}
+
+/// Whether two spans share a byte, or an empty one touches the other.
+fn overlaps(a: Span, b: Span) -> bool {
+    a.start < b.end.max(b.start + 1) && b.start < a.end
 }
 
 /// Checks a fact against the grant it names, and types its values.

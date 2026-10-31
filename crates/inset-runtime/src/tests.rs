@@ -68,7 +68,7 @@
 use crate::actor::fail;
 use crate::prelude::*;
 use crate::program::{self, report::REPORTS};
-use crate::{Reply, Stopped};
+use crate::{AnyReply, Json, LocalBoxFuture, Reply, Stopped};
 
 struct Shop;
 
@@ -83,7 +83,8 @@ impl App for Shop {
 
     fn start(scope: &Scope, grants: &mut Grants) -> Result<(), Stopped> {
         let http = grants.http_server("http");
-        scope.start(|scope| Front::new(scope, http, 0));
+        let front = scope.child::<Front>("Front");
+        scope.start(&front, |scope| Front::new(scope, http, 0));
         Ok(())
     }
 }
@@ -96,7 +97,8 @@ struct Front {
 
 impl Front {
     fn new(scope: &Scope, http: HttpServer, total: u32) -> Front {
-        let log = scope.start_as("log", |_| Log {
+        let log = scope.child::<Log>("log");
+        scope.start(&log, |_| Log {
             entries: Vec::new(),
         });
         Front { http, total, log }
@@ -140,6 +142,8 @@ impl Component for Front {
     const NAME: &'static str = "Front";
     const ROLLS_BACK: bool = true;
     type Saved = u32;
+    type Message = NoMessage;
+    type Messages = Mailbox<Self>;
 
     fn save(&self) -> u32 {
         self.total
@@ -220,6 +224,24 @@ impl Component for Log {
     const NAME: &'static str = "Log";
     const ROLLS_BACK: bool = true;
     type Saved = Vec<String>;
+    type Message = LogMessage;
+    type Messages = LogMessages;
+
+    fn receive(&mut self, message: LogMessage) -> LocalBoxFuture<'_, AnyReply> {
+        Box::pin(async move {
+            match message {
+                LogMessage::Push(entry) => {
+                    self.push(entry);
+                    Box::new(()) as AnyReply
+                }
+                LogMessage::Entries => Box::new(self.entries()),
+                LogMessage::Note(text) => {
+                    self.note(&text).await;
+                    Box::new(())
+                }
+            }
+        })
+    }
 
     fn save(&self) -> Vec<String> {
         self.entries.clone()
@@ -237,26 +259,54 @@ impl Component for Log {
     }
 }
 
-/// The messages of `Log`, as the compiler emits them for its handle.
-trait LogMessages {
-    fn push(&self, entry: String) -> Message<Log, ()>;
-    fn entries(&self) -> Message<Log, Vec<String>>;
-    fn note(&self, text: &str) -> Message<Log, ()>;
+/// The messages of `Log`, as the compiler emits them.
+enum LogMessage {
+    Push(String),
+    Entries,
+    Note(String),
 }
 
-impl LogMessages for Handle<Log> {
+impl Stored for LogMessage {
+    fn to_json(&self) -> Json {
+        match self {
+            LogMessage::Push(entry) => crate::data::variant("Push", vec![entry.to_json()]),
+            LogMessage::Entries => crate::data::variant("Entries", Vec::new()),
+            LogMessage::Note(text) => crate::data::variant("Note", vec![text.to_json()]),
+        }
+    }
+
+    fn from_json(json: &Json) -> Result<Self, String> {
+        let (variant, fields) = crate::data::to_variant(json)?;
+        match variant {
+            "Push" => Ok(LogMessage::Push(Stored::from_json(&fields[0])?)),
+            "Entries" => Ok(LogMessage::Entries),
+            "Note" => Ok(LogMessage::Note(Stored::from_json(&fields[0])?)),
+            other => crate::data::unknown_variant("LogMessage", other),
+        }
+    }
+}
+
+/// A handle to `Log`, as the compiler emits it.
+struct LogMessages(Mailbox<Log>);
+
+impl From<Mailbox<Log>> for LogMessages {
+    fn from(mailbox: Mailbox<Log>) -> Self {
+        LogMessages(mailbox)
+    }
+}
+
+impl LogMessages {
     fn push(&self, entry: String) -> Message<Log, ()> {
-        self.message(move |c| Box::pin(async move { c.push(entry) }))
+        self.0.message(LogMessage::Push(entry))
     }
 
     fn entries(&self) -> Message<Log, Vec<String>> {
-        self.message(|c| Box::pin(async move { c.entries() }))
+        self.0.message(LogMessage::Entries)
     }
 
     /// `text` is lent, so the receiver gets a copy.
     fn note(&self, text: &str) -> Message<Log, ()> {
-        let text = text.to_string();
-        self.message(move |c| Box::pin(async move { c.note(&text).await }))
+        self.0.message(LogMessage::Note(text.to_owned()))
     }
 }
 
@@ -349,7 +399,7 @@ fn a_panic_hands_over_the_state_from_before_the_handler() {
     text("POST", "/add/2");
     panics("POST", "/panic");
     let report = REPORTS.with_borrow(|r| r.last().cloned().unwrap());
-    let recovery = r#"{"Shop/Front":2,"Shop/Front/log":["add 2"]}"#;
+    let recovery = r#"{"fields":{"Shop/Front":2,"Shop/Front/log":["add 2"]}}"#;
     assert!(
         report.starts_with("Shop/Front trapping Panic: boom at "),
         "{report}"
@@ -374,7 +424,7 @@ fn a_panic_hands_over_nothing_unless_every_interrupted_handler_rolls_back() {
 
 #[test]
 fn a_program_restores_the_state_handed_over() {
-    let state = br#"{"Shop/Front":7,"Shop/Front/log":["add 7"]}"#;
+    let state = br#"{"fields":{"Shop/Front":7,"Shop/Front/log":["add 7"]}}"#;
     program::start::<Shop>(Some(state.to_vec())).unwrap();
     assert_eq!(text("GET", "/total"), (200, "7".into()));
     assert_eq!(text("GET", "/log"), (200, "add 7".into()));

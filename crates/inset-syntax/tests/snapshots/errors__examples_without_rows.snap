@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "requirement \"Visitors are greeted by the name in the web address\"\n    when HelloHttp receives GET /hello/<name>\n    then HelloHttp replies OK with \"Hello, <name>!\"\n    examples\n    | name |\n"
+---
+Error: the examples table has no rows
+   ╭─[ hello.req.inset:5:5 ]
+   │
+ 5 │     | name |
+   │     ────┬───  
+   │         ╰───── only the headings are here
+   │ 
+   │ Help: add a row for each case, below the headings
+───╯

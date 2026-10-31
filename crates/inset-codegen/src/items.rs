@@ -2,11 +2,10 @@
 //! implement the runtime's `App` and `Component` traits.
 
 use inset_check::Modules;
-use inset_syntax::Span;
 use inset_syntax::ast::{
     App, AttributeKind, Component, Enum, Expr, ExprKind, FailureConditionKind, FailureResponse,
-    Function, HandoffValue, HttpMethod, Item, ItemKind, LitKind, PatternKind, Route, Struct, Type,
-    TypeKind, UnaryOp, UseTree, Visibility,
+    Function, Handoff, HandoffValue, HttpMethod, Item, ItemKind, LitKind, PatternKind, Route,
+    Start, Struct, Type, TypeKind, UnaryOp, UseTree, Visibility,
 };
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -18,11 +17,11 @@ use crate::body::{docs, ident, pattern};
 /// parameter with one of these names is renamed where it is read.
 const ROUTE_LOCALS: [&str; 4] = ["field", "request", "path", "component"];
 
-impl Emitter {
+impl<'a> Emitter<'a> {
     /// A module's items, with each module it declares inside it, as a Rust
     /// module of the same name. Rust's paths and privacy then work in the
     /// emitted code exactly as in the Inset source.
-    pub(crate) fn module(&mut self, modules: &Modules, index: usize) -> TokenStream {
+    pub(crate) fn module(&mut self, modules: &'a Modules, index: usize) -> TokenStream {
         let module = &modules.list[index];
         let items: Vec<_> = module
             .ast
@@ -52,7 +51,7 @@ impl Emitter {
         quote!(#(#items)*)
     }
 
-    fn item(&mut self, item: &Item) -> TokenStream {
+    fn item(&mut self, item: &'a Item) -> TokenStream {
         let item_docs = docs(&item.docs);
         match &item.kind {
             ItemKind::App(app) => self.app(item_docs, app),
@@ -226,41 +225,27 @@ impl Emitter {
 
         // Each grant a `start` moves, taken from the host's grants first.
         let mut taken = Vec::new();
-        let mut starts = Vec::new();
         for start in &app.starts {
-            if let Some(binding) = &start.binding {
-                self.unsupported("a named child", binding.span, "named here");
+            for handoff in &start.handoffs {
+                if let HandoffValue::Move(place) = &handoff.value
+                    && let [grant] = place.parts.as_slice()
+                {
+                    taken.push(grant.name.clone());
+                }
             }
-            let component = ident(&start.component.name);
-            let fields: Vec<_> = start
-                .handoffs
-                .iter()
-                .map(|handoff| {
-                    let field = ident(&handoff.field.name);
-                    match &handoff.value {
-                        HandoffValue::Move(place) if place.parts.len() == 1 => {
-                            let grant = &place.parts[0].name;
-                            taken.push(grant.clone());
-                            let grant = ident(grant);
-                            if field == grant {
-                                quote!(#field)
-                            } else {
-                                quote!(#field: #grant)
-                            }
-                        }
-                        HandoffValue::Expr(expr) => {
-                            let value = self.expr(expr);
-                            quote!(#field: #value)
-                        }
-                        _ => {
-                            self.unsupported("this handoff", handoff.span, "handed off here");
-                            quote!(#field: todo!())
-                        }
-                    }
-                })
-                .collect();
-            starts.push(quote!(scope.start(|_| #component { #(#fields),* });));
         }
+        let names: Vec<&str> = app
+            .grants
+            .iter()
+            .map(|g| g.name.name.as_str())
+            .chain(
+                app.starts
+                    .iter()
+                    .filter_map(|s| s.binding.as_ref().map(|b| b.name.as_str())),
+            )
+            .collect();
+        let scope_var = ident(&free_name("scope", &names));
+        let starts = self.starts(&app.starts, &scope_var, None, &names);
         let takes = app
             .grants
             .iter()
@@ -274,10 +259,10 @@ impl Emitter {
                     quote!(let #var = grants.table(#name)?;)
                 }
             });
-        let scope = if starts.is_empty() {
+        let scope = if app.starts.is_empty() {
             quote!(_)
         } else {
-            quote!(scope)
+            quote!(#scope_var)
         };
         let grants_param = if taken.is_empty() {
             quote!(_)
@@ -301,7 +286,7 @@ impl Emitter {
                     #grants_param: &mut ::inset_runtime::Grants,
                 ) -> Result<(), ::inset_runtime::Stopped> {
                     #(#takes)*
-                    #(#starts)*
+                    #starts
                     Ok(())
                 }
             }
@@ -314,50 +299,80 @@ impl Emitter {
         &mut self,
         item_docs: TokenStream,
         vis: TokenStream,
-        c: &Component,
+        c: &'a Component,
     ) -> TokenStream {
         let name = ident(&c.name.name);
         let component_name = &c.name.name;
         let mut servers = Vec::new();
         let mut tables = Vec::new();
         let mut state = Vec::new();
-        let fields: Vec<_> = c
+        // The struct's fields: every field that is kept, then a handle for
+        // each named child.
+        let mut kept = Vec::new();
+        let mut params = Vec::new();
+        for field in &c.fields {
+            let handed_down = field
+                .attrs
+                .iter()
+                .any(|a| a.kind == AttributeKind::HandedDown);
+            let var = ident(&field.name.name);
+            let ty = self.ty(&field.ty);
+            params.push(quote!(#var: #ty));
+            if handed_down {
+                continue;
+            }
+            if is_http_server(&field.ty.kind) {
+                servers.push(&field.name.name);
+            } else if is_named(&field.ty.kind, "Table") {
+                tables.push(&field.name.name);
+            } else if is_named(&field.ty.kind, "Outlet") {
+            } else if is_handle(&field.ty.kind) {
+                self.unsupported("a lent sibling", field.ty.span, "this field's type");
+            } else {
+                state.push(&field.name.name);
+            }
+            let docs = docs(&field.docs);
+            kept.push((quote!(#docs #var: #ty), var));
+        }
+        for start in &c.starts {
+            if let Some(binding) = &start.binding {
+                let var = ident(&binding.name);
+                let ty = start_type(start);
+                kept.push((quote!(#var: ::inset_runtime::Handle<#ty>), var));
+            }
+        }
+        let fields = kept.iter().map(|(decl, _)| decl);
+        let vars = kept.iter().map(|(_, var)| var);
+        let taken: Vec<&str> = c
             .fields
             .iter()
-            .map(|field| {
-                let handed_down = field
-                    .attrs
+            .map(|f| f.name.name.as_str())
+            .chain(
+                c.starts
                     .iter()
-                    .any(|a| a.kind == AttributeKind::HandedDown);
-                if handed_down {
-                    self.unsupported("a `#[handed_down]` field", field.name.span, "this field");
-                } else if is_http_server(&field.ty.kind) {
-                    servers.push(&field.name.name);
-                } else if is_named(&field.ty.kind, "Table") {
-                    tables.push(&field.name.name);
-                } else if let Some(kind) = ["Handle", "Outlet"]
-                    .into_iter()
-                    .find(|kind| is_named(&field.ty.kind, kind))
-                {
-                    self.unsupported(
-                        &format!("a `{kind}` field"),
-                        field.ty.span,
-                        "this field's type",
-                    );
-                } else {
-                    state.push(&field.name.name);
-                }
-                let docs = docs(&field.docs);
-                let name = ident(&field.name.name);
-                let ty = self.ty(&field.ty);
-                // Whoever can name the component can start it, and so must
-                // be able to supply its fields.
-                quote!(#docs #vis #name: #ty)
-            })
+                    .filter_map(|s| s.binding.as_ref().map(|b| b.name.as_str())),
+            )
             .collect();
-        for start in &c.starts {
-            self.unsupported("`start` in a component", start.span, "starts a child");
-        }
+        let scope_var = ident(&free_name("scope", &taken));
+        let starts = self.starts(&c.starts, &scope_var, Some(c), &taken);
+        let scope_param = if c.starts.is_empty() {
+            quote!(_: &::inset_runtime::Scope)
+        } else {
+            quote!(#scope_var: &::inset_runtime::Scope)
+        };
+        let what = if c.starts.is_empty() {
+            " Builds the component from its fields."
+        } else {
+            " Starts the component's children, and builds it from its fields."
+        };
+        let start_fn = quote! {
+            #[doc = #what]
+            #vis fn start(#scope_param, #(#params),*) -> Self {
+                #starts
+                #name { #(#vars),* }
+            }
+        };
+
         let respond = self.respond_fn(c);
         let rolls_back = c.failure.as_ref().is_some_and(|f| {
             f.arms
@@ -371,7 +386,7 @@ impl Emitter {
         });
 
         let functions: Vec<_> = c.functions.iter().map(|f| self.function(f)).collect();
-        let methods = (!functions.is_empty()).then(|| quote!(impl #name { #(#functions)* }));
+        let (messages, message_types) = self.messages(c, &vis);
 
         let servers_fn = (!servers.is_empty()).then(|| {
             let entries = servers.iter().map(|field| {
@@ -428,7 +443,13 @@ impl Emitter {
                 #(#fields),*
             }
 
-            #methods
+            impl #name {
+                #start_fn
+
+                #(#functions)*
+            }
+
+            #message_types
 
             impl ::inset_runtime::Component for #name {
                 const NAME: &'static str = #component_name;
@@ -436,6 +457,8 @@ impl Emitter {
                 #rolls_back
 
                 #saved
+
+                #messages
 
                 #respond
 
@@ -448,6 +471,287 @@ impl Emitter {
         }
     }
 
+    /// The `start` statements of the app, or of the component `owner`:
+    /// a handle for each child, made before any child starts so that an
+    /// outlet can be connected to a sibling started after it, and then each
+    /// child built from its handoffs, in order.
+    fn starts(
+        &mut self,
+        starts: &[Start],
+        scope: &proc_macro2::Ident,
+        owner: Option<&Component>,
+        taken: &[&str],
+    ) -> TokenStream {
+        let mut handles = Vec::new();
+        let mut started = Vec::new();
+        let mut taken_here: Vec<String> = taken.iter().map(|s| s.to_string()).collect();
+        for start in starts {
+            let Some(child) = self.started(start) else {
+                continue;
+            };
+            let ty = start_type(start);
+            let (var, name) = match &start.binding {
+                Some(binding) => (ident(&binding.name), binding.name.clone()),
+                None => {
+                    let var = free_name(&snake_case(&child.name.name), &taken_here);
+                    taken_here.push(var.clone());
+                    (ident(&var), child.name.name.clone())
+                }
+            };
+            handles.push(quote!(let #var = #scope.child::<#ty>(#name);));
+            // The child's fields, in the order it declares them.
+            let args: Vec<_> = child
+                .fields
+                .iter()
+                .map(|field| {
+                    let handoff = start
+                        .handoffs
+                        .iter()
+                        .find(|h| h.field.name == field.name.name);
+                    match handoff {
+                        Some(handoff) => self.handoff(handoff, scope, owner),
+                        None => quote!(todo!()),
+                    }
+                })
+                .collect();
+            // The child's own scope, for its children. The handoffs are
+            // read in the parent's, where `send self.message` finds the parent.
+            let taken: Vec<&str> = taken_here.iter().map(String::as_str).collect();
+            let child_scope = ident(&free_name("child", &taken));
+            started.push(quote! {
+                #scope.start(&#var, |#child_scope| #ty::start(#child_scope, #(#args),*));
+            });
+        }
+        quote! {
+            #(#handles)*
+            #(#started)*
+        }
+    }
+
+    /// The value a handoff gives a child's field.
+    fn handoff(
+        &mut self,
+        handoff: &Handoff,
+        scope: &proc_macro2::Ident,
+        owner: Option<&Component>,
+    ) -> TokenStream {
+        match &handoff.value {
+            HandoffValue::Move(place) if place.parts.len() == 1 => {
+                let var = ident(&place.parts[0].name);
+                quote!(#var)
+            }
+            HandoffValue::Expr(expr) => self.expr(expr),
+            HandoffValue::Connect { target, message } => {
+                let message = ident(&message.name);
+                let target = if target.name == "self" && owner.is_some() {
+                    quote!(&#scope.this::<Self>())
+                } else {
+                    let var = ident(&target.name);
+                    quote!(&#var)
+                };
+                quote!(::inset_runtime::Outlet::to(#target, |messages, value| messages.#message(value)))
+            }
+            HandoffValue::Lend(_) => {
+                self.unsupported("lending a child to a sibling", handoff.span, "lent here");
+                quote!(todo!())
+            }
+            HandoffValue::Move(place) => {
+                self.unsupported("moving part of a field", place.span, "moved here");
+                quote!(todo!())
+            }
+        }
+    }
+
+    /// The component's messages: the `Message` enum, with a variant for each
+    /// `#[message]` function holding its arguments, and the type a handle
+    /// derefs to, with a method for each that sends it. A lent argument is
+    /// copied, so its variant holds an owned value. The first part goes in
+    /// the `Component` impl, the second beside it.
+    fn messages(&mut self, c: &Component, vis: &TokenStream) -> (TokenStream, TokenStream) {
+        let name = ident(&c.name.name);
+        let handlers: Vec<&Function> = c
+            .functions
+            .iter()
+            .filter(|f| f.attrs.iter().any(|a| a.kind == AttributeKind::Message))
+            .collect();
+        if handlers.is_empty() {
+            let types = quote! {
+                type Message = ::inset_runtime::NoMessage;
+
+                type Messages = ::inset_runtime::Mailbox<Self>;
+            };
+            return (types, quote!());
+        }
+        let message = ident(&format!("__{}Message", c.name.name));
+        let messages = ident(&format!("__{}Messages", c.name.name));
+        let mut variants = Vec::new();
+        let mut methods = Vec::new();
+        let mut arms = Vec::new();
+        let mut writes = Vec::new();
+        let mut reads = Vec::new();
+        for f in handlers {
+            let fname = ident(&f.name.name);
+            let fname_text = &f.name.name;
+            let fvis = self.vis(&f.vis);
+            let docs = docs(&f.docs);
+            let mut owned = Vec::new();
+            let mut params = Vec::new();
+            let mut converted = Vec::new();
+            let mut passed = Vec::new();
+            let mut vars = Vec::new();
+            for (i, p) in f.params.iter().enumerate() {
+                let var = match &p.pattern.kind {
+                    PatternKind::Binding { name, .. } if !name.name.starts_with('_') => {
+                        ident(&name.name)
+                    }
+                    _ => ident(&format!("arg{i}")),
+                };
+                let ty = self.ty(&p.ty);
+                params.push(quote!(#var: #ty));
+                match &p.ty.kind {
+                    TypeKind::Ref { inner, .. } => {
+                        owned.push(owned_type(inner));
+                        converted.push(quote!(::std::borrow::ToOwned::to_owned(#var)));
+                        passed.push(quote!(&#var));
+                    }
+                    _ => {
+                        owned.push(ty);
+                        converted.push(quote!(#var));
+                        passed.push(quote!(#var));
+                    }
+                }
+                vars.push(var);
+            }
+            let ret = match &f.ret {
+                Some(t) => self.ty(t),
+                None => quote!(()),
+            };
+            let (variant, built, pattern) = if owned.is_empty() {
+                (
+                    quote!(#fname),
+                    quote!(#message::#fname),
+                    quote!(#message::#fname),
+                )
+            } else {
+                (
+                    quote!(#fname(#(#owned),*)),
+                    quote!(#message::#fname(#(#converted),*)),
+                    quote!(#message::#fname(#(#vars),*)),
+                )
+            };
+            variants.push(variant);
+            methods.push(quote! {
+                #docs
+                #fvis fn #fname(&self, #(#params),*) -> ::inset_runtime::Message<#name, #ret> {
+                    self.0.message(#built)
+                }
+            });
+            let call = match f.receiver {
+                Some(_) => quote!(#name::#fname(self, #(#passed),*)),
+                None => quote!(#name::#fname(#(#passed),*)),
+            };
+            let call = if f.is_async {
+                quote!(#call.await)
+            } else {
+                call
+            };
+            // A message that returns nothing replies `()`.
+            if f.ret.is_some() {
+                arms.push(quote!(#pattern => Box::new(#call) as ::inset_runtime::AnyReply,));
+            } else {
+                arms.push(quote!(#pattern => {
+                    #call;
+                    Box::new(()) as ::inset_runtime::AnyReply
+                }));
+            }
+            let fields: Vec<_> = (0..vars.len())
+                .map(|i| ident(&format!("field{i}")))
+                .collect();
+            let count = fields.len();
+            let indices = (0..count).map(proc_macro2::Literal::usize_unsuffixed);
+            if count == 0 {
+                writes.push(quote! {
+                    #message::#fname => ::inset_runtime::data::variant(#fname_text, Vec::new()),
+                });
+                reads.push(quote! {
+                    #fname_text => {
+                        ::inset_runtime::data::arity(#fname_text, fields, 0)?;
+                        Ok(#message::#fname)
+                    }
+                });
+            } else {
+                writes.push(quote! {
+                    #message::#fname(#(#fields),*) => ::inset_runtime::data::variant(
+                        #fname_text,
+                        Vec::from([#(::inset_runtime::Stored::to_json(#fields)),*]),
+                    ),
+                });
+                reads.push(quote! {
+                    #fname_text => {
+                        ::inset_runtime::data::arity(#fname_text, fields, #count)?;
+                        Ok(#message::#fname(#(::inset_runtime::Stored::from_json(&fields[#indices])?),*))
+                    }
+                });
+            }
+        }
+        let message_text = message.to_string();
+        let in_impl = quote! {
+            type Message = #message;
+
+            type Messages = #messages;
+
+            fn receive(
+                &mut self,
+                message: #message,
+            ) -> ::inset_runtime::LocalBoxFuture<'_, ::inset_runtime::AnyReply> {
+                Box::pin(async move {
+                    match message {
+                        #(#arms)*
+                    }
+                })
+            }
+        };
+        let beside = quote! {
+            /// The messages of a component, each holding its arguments.
+            #[doc(hidden)]
+            #[allow(non_camel_case_types)]
+            #vis enum #message {
+                #(#variants),*
+            }
+
+            impl ::inset_runtime::Stored for #message {
+                fn to_json(&self) -> ::inset_runtime::Json {
+                    match self {
+                        #(#writes)*
+                    }
+                }
+
+                fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+                    let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
+                    match variant {
+                        #(#reads)*
+                        other => ::inset_runtime::data::unknown_variant(#message_text, other),
+                    }
+                }
+            }
+
+            /// What a handle to the component offers: a method for each message.
+            #[doc(hidden)]
+            #vis struct #messages(::inset_runtime::Mailbox<#name>);
+
+            impl From<::inset_runtime::Mailbox<#name>> for #messages {
+                fn from(mailbox: ::inset_runtime::Mailbox<#name>) -> Self {
+                    #messages(mailbox)
+                }
+            }
+
+            impl #messages {
+                #(#methods)*
+            }
+        };
+        (in_impl, beside)
+    }
+
     /// `respond`: the `failure` block, one arm for each of its arms.
     fn respond_fn(&mut self, c: &Component) -> Option<TokenStream> {
         let failure = c.failure.as_ref()?;
@@ -455,12 +759,7 @@ impl Emitter {
         let arms: Vec<_> = failure
             .arms
             .iter()
-            .filter_map(|arm| {
-                if arm.response == FailureResponse::Restart {
-                    let span = Span::new(arm.condition.span.start, arm.span.end);
-                    self.unsupported("`restart`", span, "this response");
-                    return None;
-                }
+            .map(|arm| {
                 let pattern = match &arm.condition.kind {
                     FailureConditionKind::Panic => quote!(::inset_runtime::Failure::Panic),
                     FailureConditionKind::Overflow => quote!(::inset_runtime::Failure::Overflow),
@@ -472,16 +771,20 @@ impl Emitter {
                         let field = &field.name;
                         quote!(::inset_runtime::Failure::Message(#field))
                     }
-                    FailureConditionKind::Child(_) => {
-                        self.unsupported("`Child(...)`", arm.condition.span, "this condition");
-                        return None;
+                    FailureConditionKind::Child(name) => {
+                        let name = &name.name;
+                        quote!(::inset_runtime::Failure::Child(#name))
                     }
                     FailureConditionKind::Other => {
                         catch_all = true;
                         quote!(_)
                     }
                 };
-                Some(quote!(#pattern => Some(::inset_runtime::Response::Rollback),))
+                let response = match arm.response {
+                    FailureResponse::Rollback => quote!(Rollback),
+                    FailureResponse::Restart => quote!(Restart),
+                };
+                quote!(#pattern => Some(::inset_runtime::Response::#response),)
             })
             .collect();
         let rest = (!catch_all).then(|| quote!(_ => None,));
@@ -533,11 +836,6 @@ impl Emitter {
     }
 
     fn function(&mut self, f: &Function) -> TokenStream {
-        for attr in &f.attrs {
-            if attr.kind == AttributeKind::Message {
-                self.unsupported("a message handler", attr.span, "this attribute");
-            }
-        }
         let docs = docs(&f.docs);
         let asyncness = f.is_async.then(|| quote!(async));
         let vis = self.vis(&f.vis);
@@ -619,7 +917,12 @@ fn route_arm(route: &Route, f: &Function) -> TokenStream {
     });
     let name = ident(&f.name.name);
     let (component, call) = match f.receiver {
-        Some(_) => (quote!(component), quote!(component.#name(#(#locals),*))),
+        // A path, which finds the handler before any method of the
+        // `Component` trait, such as `receive`, that has the same name.
+        Some(_) => (
+            quote!(component),
+            quote!(Self::#name(component, #(#locals),*)),
+        ),
         None => (quote!(_), quote!(Self::#name(#(#locals),*))),
     };
     let call = if f.is_async {
@@ -673,6 +976,60 @@ fn locals(names: &[String]) -> Vec<proc_macro2::Ident> {
 
 fn is_http_server(ty: &TypeKind) -> bool {
     matches!(ty, TypeKind::Path(p) if matches!(p.segments.as_slice(), [only] if only.ident.name == "HttpServer" && only.generics.is_empty()))
+}
+
+/// Whether a field holds a handle, `Handle<C>` or `&Handle<C>`.
+fn is_handle(ty: &TypeKind) -> bool {
+    match ty {
+        TypeKind::Ref { inner, .. } => is_named(&inner.kind, "Handle"),
+        _ => is_named(ty, "Handle"),
+    }
+}
+
+/// The component a `start` statement names, as written.
+fn start_type(start: &Start) -> proc_macro2::Ident {
+    ident(&start.component.name)
+}
+
+/// What a lent `&T` is copied into: a `String` for a `str`, a `Vec<T>`
+/// for a `[T]`, and otherwise `T` itself, as `ToOwned` gives.
+fn owned_type(inner: &Type) -> TokenStream {
+    match &inner.kind {
+        TypeKind::Path(p) if matches!(p.segments.as_slice(), [only] if only.ident.name == "str" && only.generics.is_empty()) =>
+        {
+            quote!(String)
+        }
+        TypeKind::Slice(elem) => {
+            let elem = crate::body::ty(elem);
+            quote!(Vec<#elem>)
+        }
+        _ => crate::body::ty(inner),
+    }
+}
+
+/// `UpperCamelCase` as `upper_camel_case`.
+fn snake_case(name: &str) -> String {
+    let mut out = String::new();
+    for (i, c) in name.chars().enumerate() {
+        if c.is_ascii_uppercase() {
+            if i > 0 {
+                out.push('_');
+            }
+            out.push(c.to_ascii_lowercase());
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// `name`, or with `_` added until it is none of `taken`.
+fn free_name<S: AsRef<str>>(name: &str, taken: &[S]) -> String {
+    let mut name = name.to_string();
+    while taken.iter().any(|t| t.as_ref() == name) {
+        name.push('_');
+    }
+    name
 }
 
 /// Whether a type is the standard type `name`, with any arguments.

@@ -13,6 +13,8 @@ pub enum Failure {
     Capability(&'static str),
     /// An awaited message to the child or lent sibling in this field failed.
     Message(&'static str),
+    /// The child with this name failed, and did not respond.
+    Child(&'static str),
 }
 
 impl Failure {
@@ -34,6 +36,7 @@ impl fmt::Display for Failure {
             Failure::Overflow => f.write_str("Overflow"),
             Failure::Capability(field) => write!(f, "Capability({field})"),
             Failure::Message(field) => write!(f, "Message({field})"),
+            Failure::Child(name) => write!(f, "Child({name})"),
         }
     }
 }
@@ -44,6 +47,9 @@ pub enum Response {
     /// Undo the handler: restore the fields, roll back capability writes and
     /// drop the messages it sent.
     Rollback,
+    /// As `Rollback`, and then reset the component, with its children, to
+    /// how it started. After `Child(name)`, the child is reset.
+    Restart,
 }
 
 /// A failure that no component responded to. It stops the program.

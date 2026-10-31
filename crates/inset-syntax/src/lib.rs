@@ -26,8 +26,12 @@
 //! `when` step, which the checks in `inset-check` need. In requirements it
 //! reads `given`, `when` and `then` steps, with the facts and checks about
 //! capabilities, whose values and conditions are Rust expressions read by
-//! the code dialect's parser. Other constructs in the spec, such as `fork`,
-//! `extern component`, `examples` tables and placeholders, are reported as
+//! the code dialect's parser, and `examples` tables. A requirement with a
+//! table has its steps read once for each row, from the steps' text with
+//! the row's cells in place of the placeholders, and every span mapped back
+//! to the file: a span from a cell becomes its placeholder's. Other
+//! constructs in the spec, such as `fork`, `extern component` and
+//! `for all`, are reported as
 //! "not supported yet" where they are written, so an author learns it is
 //! the compiler's limit and not their mistake. They are added as the
 //! examples that use them are compiled.
@@ -93,22 +97,33 @@ pub fn parse_code_at(source: &str, base: usize) -> Parsed<ast::Module> {
 
 /// Parses the fact or check in a requirement step, which spans `span` of
 /// a requirements file's `source`, with the code dialect's parser.
+///
+/// In an examples row, `source` is the row's text and `row` maps its spans
+/// back to the file, so the tokens, and so the syntax tree and the
+/// diagnostics, have the file's spans.
 fn parse_step_fact(
     source: &str,
     span: Span,
     allow_check: bool,
+    row: Option<&requirements::RowMap>,
 ) -> (Option<parser::StepFact>, Vec<Diagnostic>) {
     let text = &source[span.start..span.end];
+    let map = |s: Span| row.map_or(s, |row| row.span(s));
     let mut lexed = lexer::lex(text);
     for token in &mut lexed.tokens {
-        token.span = token.span.shifted(span.start);
+        token.span = map(token.span.shifted(span.start));
     }
     let mut diagnostics: Vec<Diagnostic> = lexed
         .diagnostics
         .into_iter()
-        .map(|d| d.shifted(span.start))
+        .map(|d| {
+            let mut d = d.shifted(span.start);
+            d.span = map(d.span);
+            d
+        })
         .collect();
-    let mut parser = parser::Parser::new(text, span.start, lexed.tokens);
+    let base = map(span).start;
+    let mut parser = parser::Parser::new(text, base, lexed.tokens);
     let parsed = parser.parse_step_fact(allow_check).ok();
     diagnostics.extend(parser.diagnostics.into_iter().map(|(_, d)| d));
     (parsed, diagnostics)

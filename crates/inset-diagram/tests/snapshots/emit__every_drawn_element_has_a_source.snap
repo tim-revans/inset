@@ -3,16 +3,27 @@ source: crates/inset-diagram/tests/emit.rs
 expression: pinned
 ---
 Shapes  src/main.inset:6:5  Shapes
-Shapes/fn:describe  src/main.inset:86:4  describe
-Shapes/fn:describe/0  src/main.inset:87:5  format!("{n}")
+Shapes/fn:describe  src/main.inset:119:4  describe
+Shapes/fn:describe/0  src/main.inset:120:5  format!("{n}")
 Shapes/front  src/main.inset:17:11  Front
 Shapes/front/failure:message:tally  src/main.inset:26:9  Message(tally)
 Shapes/front/failure:panic  src/main.inset:28:9  Panic
 Shapes/front/field:counts  src/main.inset:20:5  counts
 Shapes/front/field:web  src/main.inset:18:5  web
 Shapes/front/field:web->Shapes/grant:http  src/main.inset:18:5  web
-Shapes/front/fn:count  src/main.inset:68:8  count
-Shapes/front/fn:count/0  src/main.inset:69:9  words.len()
+Shapes/front/fn:add  src/main.inset:70:14  add
+Shapes/front/fn:add->Shapes/front/tally/fn:add  src/main.inset:71:14  self.tally.add(n)
+Shapes/front/fn:add->Shapes/front/tally/fn:add#2  src/main.inset:72:14  self.tally.add(n + 1)
+Shapes/front/fn:add->Shapes/front/tally/fn:echo  src/main.inset:75:22  self.tally.echo(move key)
+Shapes/front/fn:add->Shapes/front/tally/fn:record  src/main.inset:74:21  self.tally.record(&key)
+Shapes/front/fn:add/0  src/main.inset:71:9  send self.tally.add(n)
+Shapes/front/fn:add/1  src/main.inset:72:9  send self.tally.add(n + 1)
+Shapes/front/fn:add/2  src/main.inset:73:9  let key = format!("added {n}");
+Shapes/front/fn:add/3  src/main.inset:74:9  let total = self.tally.record(&key).await;
+Shapes/front/fn:add/4  src/main.inset:75:9  let echoed = self.tally.echo(move key).await;
+Shapes/front/fn:add/5  src/main.inset:76:9  format!("{total} {echoed}")
+Shapes/front/fn:count  src/main.inset:85:8  count
+Shapes/front/fn:count/0  src/main.inset:86:9  words.len()
 Shapes/front/fn:find  src/main.inset:33:8  find
 Shapes/front/fn:find/0  src/main.inset:34:9  let half = n.checked_div(2)?;
 Shapes/front/fn:find/0/err  src/main.inset:34:9  let half = n.checked_div(2)?;
@@ -26,6 +37,8 @@ Shapes/front/fn:find/1/b1/0/b0/0  src/main.inset:38:13  Some(String::from("zero"
 Shapes/front/fn:find/1/b1/0/b1  src/main.inset:39:16  {
 Shapes/front/fn:find/1/b1/0/b1/0  src/main.inset:40:13  let text = describe(half);
 Shapes/front/fn:find/1/b1/0/b1/1  src/main.inset:41:13  Some(text)
+Shapes/front/fn:heard  src/main.inset:81:8  heard
+Shapes/front/fn:heard/0  src/main.inset:82:9  let _ = note;
 Shapes/front/fn:measure  src/main.inset:59:8  measure
 Shapes/front/fn:measure/0  src/main.inset:60:9  let size = sizes::classify(n);
 Shapes/front/fn:measure/1  src/main.inset:61:9  let label = match size
@@ -39,12 +52,20 @@ Shapes/front/fn:name/0/b1  src/main.inset:47:51  {
 Shapes/front/fn:name/0/b1/0  src/main.inset:48:13  return String::from("too big")
 Shapes/front/fn:name/1  src/main.inset:50:9  let words: Vec<String> = label
 Shapes/front/fn:name/2  src/main.inset:54:9  format!("{label}: {doubled} {}", Self::count(&words))
-Shapes/front/tally  src/main.inset:74:11  Tally
-Shapes/front/tally/field:counts  src/main.inset:75:5  counts
-Shapes/front/tally/field:counts->Shapes/grant:counts  src/main.inset:75:5  counts
-Shapes/front/tally/field:total  src/main.inset:76:5  total
-Shapes/front/tally/fn:add  src/main.inset:80:8  add
-Shapes/front/tally/fn:add/0  src/main.inset:81:9  self.total += n
+Shapes/front/tally  src/main.inset:91:11  Tally
+Shapes/front/tally/field:counts  src/main.inset:92:5  counts
+Shapes/front/tally/field:counts->Shapes/grant:counts  src/main.inset:92:5  counts
+Shapes/front/tally/field:noted  src/main.inset:96:5  noted
+Shapes/front/tally/field:noted->Shapes/front/fn:heard  src/main.inset:22:57  noted: send self.heard
+Shapes/front/tally/field:total  src/main.inset:93:5  total
+Shapes/front/tally/fn:add  src/main.inset:100:8  add
+Shapes/front/tally/fn:add/0  src/main.inset:101:9  self.total += n
+Shapes/front/tally/fn:echo  src/main.inset:113:8  echo
+Shapes/front/tally/fn:echo/0  src/main.inset:114:9  key
+Shapes/front/tally/fn:record  src/main.inset:106:8  record
+Shapes/front/tally/fn:record->Shapes/front/tally/field:noted  src/main.inset:107:14  self.noted.emit(key.to_string())
+Shapes/front/tally/fn:record/0  src/main.inset:107:9  send self.noted.emit(key.to_string())
+Shapes/front/tally/fn:record/1  src/main.inset:108:9  self.total
 Shapes/grant:counts  src/main.inset:12:11  counts
 Shapes/grant:counts/outside  src/main.inset:12:11  counts
 Shapes/grant:http  src/main.inset:10:11  http

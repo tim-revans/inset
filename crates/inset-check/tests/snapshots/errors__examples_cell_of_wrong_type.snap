@@ -1,0 +1,21 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: the field `on_hand` is a `u32`, and this is `three`
+    ╭─[ requirements/main.req.inset:16:47 ]
+    │
+ 16 │     given items["bolt-m6"] is Item { on_hand: <on hand>, price: 0.10 }
+    │                                               ────┬────  
+    │                                                   ╰────── expected a `u32`
+    │ 
+    │ Help: write an integer, such as `40`; in the examples row on line 22
+────╯
+Error: unknown status `Teapot`
+    ╭─[ requirements/main.req.inset:18:24 ]
+    │
+ 18 │     then Store replies <status> with "<after>"
+    │                        ────┬───  
+    │                            ╰───── not an HTTP status
+    │ 
+    │ Help: write a status by its standard name, such as `OK`, `NotFound` or `Conflict`; in the examples row on line 23
+────╯

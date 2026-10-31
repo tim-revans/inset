@@ -32,7 +32,8 @@ impl ::inset_runtime::App for HelloHttp {
         grants: &mut ::inset_runtime::Grants,
     ) -> Result<(), ::inset_runtime::Stopped> {
         let http = grants.http_server("http");
-        scope.start(|_| Greeter { http });
+        let greeter = scope.child::<Greeter>("Greeter");
+        scope.start(&greeter, |child| Greeter::start(child, http));
         Ok(())
     }
 }
@@ -45,6 +46,11 @@ struct Greeter {
 }
 
 impl Greeter {
+    /// Builds the component from its fields.
+    fn start(_: &::inset_runtime::Scope, http: ::inset_runtime::HttpServer) -> Self {
+        Greeter { http }
+    }
+
     /// Replies with a greeting for the name in the path.
     fn hello(name: String) -> String {
         format!("Hello, {name}!")
@@ -59,6 +65,10 @@ impl ::inset_runtime::Component for Greeter {
     fn save(&self) {}
 
     fn restore(&mut self, (): ()) {}
+
+    type Message = ::inset_runtime::NoMessage;
+
+    type Messages = ::inset_runtime::Mailbox<Self>;
 
     fn servers(&self) -> Vec<(&'static str, &::inset_runtime::HttpServer)> {
         Vec::from([("http", &self.http)])

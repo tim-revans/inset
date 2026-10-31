@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "requirement \"Visitors are greeted by the name in the web address\"\n    when HelloHttp receives GET /hello/Ada\n    then HelloHttp replies OK with <greeting>\n"
+---
+Error: a placeholder without an `examples` table
+   ╭─[ hello.req.inset:3:36 ]
+   │
+ 3 │     then HelloHttp replies OK with <greeting>
+   │                                    ─────┬────  
+   │                                         ╰────── nothing gives this placeholder a value
+   │ 
+   │ Help: list the cases in an `examples` table after the steps, with a heading for each placeholder
+───╯

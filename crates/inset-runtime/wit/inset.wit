@@ -133,8 +133,23 @@ interface report {
     /// and the program carries on.
     rolled-back: func(component: string, failure: string, message: string);
 
-    /// A panic is about to trap the instance. `recovery` is the state to start
-    /// a fresh instance from, present when every handler the panic interrupts
-    /// responds with `rollback`. Without it, the program stops.
-    trapping: func(component: string, failure: string, message: string, recovery: option<list<u8>>);
+    /// A handler in `component` failed, and the `failure` block of
+    /// `restarted`, or of its parent, restarted it: the handler was rolled
+    /// back, and `restarted` and its children reset to how they started.
+    /// The program carries on.
+    restarted: func(component: string, failure: string, message: string, restarted: string);
+
+    /// How a fresh instance carries on after a panic.
+    record recovery {
+        /// The state to start it from.
+        state: list<u8>,
+        /// The component a `restart` reset, with its children, if the
+        /// panic was answered with `restart` rather than `rollback`.
+        restarted: option<string>,
+    }
+
+    /// A panic is about to trap the instance. `recovery` is present when
+    /// every handler the panic interrupts responds with `rollback` or
+    /// `restart`. Without it, the program stops.
+    trapping: func(component: string, failure: string, message: string, recovery: option<recovery>);
 }

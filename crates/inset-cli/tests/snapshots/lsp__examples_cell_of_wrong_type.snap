@@ -1,0 +1,12 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:16:47-16:56
+the field `on_hand` is a `u32`, and this is `three`
+expected a `u32`
+help: write an integer, such as `40`; in the examples row on line 22
+
+requirements/main.req.inset:18:24-18:32
+unknown status `Teapot`
+not an HTTP status
+help: write a status by its standard name, such as `OK`, `NotFound` or `Conflict`; in the examples row on line 23

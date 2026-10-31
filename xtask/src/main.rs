@@ -18,7 +18,8 @@ tasks:
   ci                format check, clippy, tests, editor grammar and integration tests
   editor            package the VS Code extension as a .vsix
   editor-test       run the VS Code extension's integration tests alone
-  e2e hello         build Hello HTTP from its source, serve it and request a greeting";
+  e2e hello         build Hello HTTP from its source, serve it and request a greeting
+  e2e stock-tracker build the Stock tracker, serve it with a stocked item, and ship it";
 
 fn main() -> ExitCode {
     let task = std::env::args().nth(1);
@@ -28,6 +29,7 @@ fn main() -> ExitCode {
         Some("editor-test") => npm_install().and_then(|()| editor_integration()),
         Some("e2e") => match std::env::args().nth(2).as_deref() {
             Some("hello") => hello(),
+            Some("stock-tracker") => stock_tracker(),
             _ => {
                 eprintln!("{USAGE}");
                 return ExitCode::FAILURE;
@@ -143,8 +145,102 @@ fn hello() -> Result<(), String> {
     }
 }
 
+/// Builds the Stock tracker from its Inset source, stocks one item in a
+/// fresh `stock.db`, serves it with `inset run`, and checks the replies to
+/// requests that receive, ship and reorder over a real socket. A second run
+/// finds what the first one stored.
+fn stock_tracker() -> Result<(), String> {
+    cargo(&["build", "-p", "inset-cli"])?;
+    let inset = target_dir().join("debug/inset");
+    let example = repo_dir().join("examples/stock-tracker");
+    run(
+        Command::new(&inset).arg("build").arg(&example),
+        "inset build examples/stock-tracker".into(),
+    )?;
+    let component = example.join("target/inset/stock-tracker.wasm");
+    // `stock.db` is fixed in the source, so it lands where `inset run` runs.
+    let dir = target_dir().join("e2e-stock-tracker");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create {} ({e})", dir.display()))?;
+    let item = r#"{"on_hand":12,"reorder_level":10,"target_level":50}"#;
+    let component = component.to_string_lossy();
+    let dir_text = dir.to_string_lossy();
+    cargo(&[
+        "run",
+        "--quiet",
+        "-p",
+        "inset-host",
+        "--example",
+        "seed",
+        "--",
+        &component,
+        &dir_text,
+        "items",
+        "bolt-m6",
+        item,
+    ])?;
+    let exchanges: [&[(&str, &str, &str, &str)]; 2] = [
+        &[
+            ("GET", "/items/bolt-m6", "", "200 OK|12"),
+            ("POST", "/items/bolt-m6/shipments", "2", "200 OK|10"),
+            ("GET", "/reorders", "", "200 OK|bolt-m6 40\n"),
+            ("POST", "/items/bolt-m6/receipts", "5", "200 OK|15"),
+            ("POST", "/items/bolt-m6/shipments", "100", "409 Conflict|"),
+            ("GET", "/items/nut-m6", "", "404 Not Found|"),
+        ],
+        // Reorders are kept in memory, and the stock in `stock.db`.
+        &[
+            ("GET", "/items/bolt-m6", "", "200 OK|15"),
+            ("GET", "/reorders", "", "200 OK|"),
+        ],
+    ];
+    for exchanges in exchanges {
+        let port = TcpListener::bind("127.0.0.1:0")
+            .and_then(|l| l.local_addr())
+            .map_err(|e| format!("find a free port ({e})"))?
+            .port();
+        eprintln!("xtask: inset run examples/stock-tracker --set port={port}, in {dir_text}");
+        let mut server = Command::new(&inset)
+            .arg("run")
+            .arg(&example)
+            .args(["--set", &format!("port={port}")])
+            .current_dir(&dir)
+            .spawn()
+            .map_err(|e| format!("start inset run ({e})"))?;
+        let outcome = exchanges
+            .iter()
+            .try_for_each(|(method, path, body, expected)| {
+                let reply = request(port, method, path, body)?;
+                let (status, text) = expected.split_once('|').unwrap_or((expected, ""));
+                let text = text.replace("\\n", "\n");
+                eprintln!(
+                    "xtask: {method} {path} {body:?} replied {:?}",
+                    reply.lines().next()
+                );
+                if reply.starts_with(&format!("HTTP/1.1 {status}\r\n"))
+                    && reply.ends_with(&format!("\r\n\r\n{text}"))
+                {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "e2e stock-tracker: {method} {path} expected {expected:?}, got:\n{reply}"
+                    ))
+                }
+            });
+        let _ = server.kill();
+        let _ = server.wait();
+        outcome?;
+    }
+    std::fs::remove_dir_all(&dir).map_err(|e| format!("remove {} ({e})", dir.display()))
+}
+
 /// Sends a GET request once the server is listening, and returns the raw reply.
 fn get(port: u16, path: &str) -> Result<String, String> {
+    request(port, "GET", path, "")
+}
+
+/// Sends a request once the server is listening, and returns the raw reply.
+fn request(port: u16, method: &str, path: &str, body: &str) -> Result<String, String> {
     let deadline = Instant::now() + Duration::from_secs(30);
     let mut stream = loop {
         match TcpStream::connect(("127.0.0.1", port)) {
@@ -153,12 +249,15 @@ fn get(port: u16, path: &str) -> Result<String, String> {
             Err(e) => return Err(format!("connect to port {port} ({e})")),
         }
     };
-    let request = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+    let request = format!(
+        "{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    );
     let mut reply = String::new();
     stream
         .write_all(request.as_bytes())
         .and_then(|()| stream.read_to_string(&mut reply))
-        .map_err(|e| format!("GET {path} ({e})"))?;
+        .map_err(|e| format!("{method} {path} ({e})"))?;
     Ok(reply)
 }
 

@@ -19,6 +19,9 @@ pub(crate) fn parse(source: &str) -> (RequirementsFile, Vec<Diagnostic>) {
         lines: lines(source),
         next: 0,
         diagnostics: Vec::new(),
+        row: None,
+        mapped: Vec::new(),
+        for_all: false,
     };
     let mut requirements = Vec::new();
     while let Some(line) = parser.next_line() {
@@ -101,6 +104,14 @@ struct ReqParser<'a> {
     lines: Vec<Line<'a>>,
     next: usize,
     diagnostics: Vec<Diagnostic>,
+    /// While reading an examples row, how the row's text maps to the file.
+    row: Option<&'a RowMap>,
+    /// Diagnostics that already have the file's spans, from facts read
+    /// in an examples row.
+    mapped: Vec<Diagnostic>,
+    /// Whether the requirement being read starts with `for all`, whose
+    /// placeholders are not supported yet.
+    for_all: bool,
 }
 
 impl<'a> ReqParser<'a> {
@@ -174,23 +185,72 @@ impl<'a> ReqParser<'a> {
             self.expect_end(&mut cursor);
         }
         self.diagnostics.append(&mut cursor.diagnostics);
+        self.for_all = self.lines[self.next..]
+            .iter()
+            .find(|l| !l.is_blank())
+            .is_some_and(|l| l.indent > 0 && l.text.starts_with("for "));
+        let examples_at = self.find_examples();
+        let first_step = self.next;
+        let (steps, any_step_lines) = if examples_at.is_some() {
+            // The steps have placeholders, so they are read once for each row.
+            self.next = examples_at.unwrap_or(self.next);
+            (Vec::new(), true)
+        } else {
+            self.parse_steps()
+        };
+        let examples = examples_at.and_then(|at| {
+            let steps_end = self.lines[at].start;
+            let steps_start = self.lines[first_step..at]
+                .iter()
+                .find(|l| !l.is_blank())
+                .map_or(steps_end, |l| l.start);
+            self.next = at + 1;
+            self.examples(self.lines[at], Span::new(steps_start, steps_end))
+        });
+        let sentence = sentence?;
+        if !any_step_lines {
+            self.error(Diagnostic::new(
+                "requirement has no steps",
+                sentence.span,
+                "this requirement says nothing to test",
+            ));
+        }
+        let end = match &examples {
+            Some(examples) => examples.rows.last().map_or(examples.span, |r| r.span),
+            None => steps.last().map_or(sentence.span, |s| s.span),
+        };
+        Some(Requirement {
+            span: Span::new(header.text_start(), end.end),
+            sentence,
+            steps,
+            examples,
+        })
+    }
+
+    /// The index of the requirement's `examples` line, if it has one.
+    fn find_examples(&self) -> Option<usize> {
+        for (i, line) in self.lines.iter().enumerate().skip(self.next) {
+            if line.is_blank() {
+                continue;
+            }
+            if line.indent == 0 {
+                return None;
+            }
+            if line.indent == STEP_INDENT && line.text.split_whitespace().next() == Some("examples")
+            {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    /// The steps up to the end of the requirement, and whether it had any
+    /// lines.
+    fn parse_steps(&mut self) -> (Vec<Step>, bool) {
         let mut steps: Vec<Step> = Vec::new();
         let mut any_step_lines = false;
-        let mut in_examples = false;
         while let Some(line) = self.next_deeper(0) {
             any_step_lines = true;
-            if line.text.split_whitespace().next() == Some("examples") {
-                self.unsupported(
-                    "`examples`",
-                    Span::new(line.text_start(), line.text_start() + 8),
-                );
-                in_examples = true;
-                continue;
-            }
-            if in_examples && line.text.starts_with('|') {
-                // A row of the examples table, reported with `examples`.
-                continue;
-            }
             if line.indent != STEP_INDENT {
                 self.error(
                     Diagnostic::new(
@@ -210,20 +270,244 @@ impl<'a> ReqParser<'a> {
                 None => self.placeholders(line, reported),
             }
         }
-        let sentence = sentence?;
-        if !any_step_lines {
-            self.error(Diagnostic::new(
-                "requirement has no steps",
-                sentence.span,
-                "this requirement says nothing to test",
-            ));
+        (steps, any_step_lines)
+    }
+
+    /// The `examples` table on the line `keyword` and the lines after it,
+    /// with each row's reading of the steps in `steps`.
+    fn examples(&mut self, keyword: Line<'a>, steps: Span) -> Option<Examples> {
+        let span = Span::new(
+            keyword.text_start(),
+            keyword.text_start() + "examples".len(),
+        );
+        let rest = Span::new(span.end, keyword.end());
+        if !self.source[rest.start..rest.end].trim().is_empty() {
+            self.error(
+                Diagnostic::new(
+                    "unexpected text after `examples`",
+                    rest,
+                    "the table starts on the next line",
+                )
+                .with_help("write the headings on the line below, as `| on hand | left |`"),
+            );
         }
-        let end = steps.last().map_or(sentence.span, |s| s.span);
-        Some(Requirement {
-            span: Span::new(header.text_start(), end.end),
-            sentence,
-            steps,
+        let Some(heading_line) = self.next_deeper(0) else {
+            self.error(
+                Diagnostic::new("`examples` without a table", span, "no table follows this")
+                    .with_help(
+                        "write the headings and then one row per case, as `| on hand | left |`",
+                    ),
+            );
+            return None;
+        };
+        let headings = self.cells(heading_line)?;
+        let mut ok = true;
+        for (i, heading) in headings.iter().enumerate() {
+            let reason = if heading.value.is_empty() {
+                Some("a heading names a placeholder, so it cannot be empty")
+            } else if heading.value.contains(['<', '>']) {
+                Some("a heading is written without `<` and `>`, which only its placeholders have")
+            } else if headings[..i].iter().any(|h| h.value == heading.value) {
+                Some("each heading names one placeholder, so it appears once")
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
+                self.error(Diagnostic::new(
+                    format!(
+                        "this heading cannot name a placeholder: `{}`",
+                        heading.value
+                    ),
+                    heading.span,
+                    reason,
+                ));
+                ok = false;
+            }
+        }
+        let mut rows = Vec::new();
+        while let Some(line) = self.next_deeper(0) {
+            let Some(cells) = self.cells(line) else {
+                self.continuation(line.indent);
+                continue;
+            };
+            let span = line.text_span();
+            if cells.len() != headings.len() {
+                self.error(Diagnostic::new(
+                    format!(
+                        "this row has {}, but the table has {}",
+                        count(cells.len(), "cell"),
+                        count(headings.len(), "heading")
+                    ),
+                    span,
+                    "each row has one cell under each heading",
+                ));
+                ok = false;
+                continue;
+            }
+            rows.push((cells, span));
+        }
+        if rows.is_empty() && ok {
+            self.error(
+                Diagnostic::new(
+                    "the examples table has no rows",
+                    heading_line.text_span(),
+                    "only the headings are here",
+                )
+                .with_help("add a row for each case, below the headings"),
+            );
+            return None;
+        }
+        if !ok {
+            return None;
+        }
+        let mut seen: Vec<Diagnostic> = Vec::new();
+        let rows = rows
+            .into_iter()
+            .map(|(cells, span)| {
+                let (steps, placeholders, diagnostics) = self.row(steps, &headings, &cells);
+                let line = self.source[..span.start].matches('\n').count() + 1;
+                for mut diagnostic in diagnostics {
+                    // A diagnostic about a placeholder is the row's own.
+                    if placeholders.iter().any(|p| {
+                        p.start < diagnostic.span.end.max(diagnostic.span.start + 1)
+                            && diagnostic.span.start < p.end
+                    }) {
+                        let note = format!("in the examples row on line {line}");
+                        diagnostic.help = Some(match diagnostic.help {
+                            Some(help) => format!("{help}; {note}"),
+                            None => note,
+                        });
+                    }
+                    if !seen.contains(&diagnostic) {
+                        seen.push(diagnostic.clone());
+                        self.error(diagnostic);
+                    }
+                }
+                ExampleRow {
+                    cells,
+                    span,
+                    steps,
+                    placeholders,
+                }
+            })
+            .collect();
+        Some(Examples {
+            span,
+            headings,
+            rows,
         })
+    }
+
+    /// The cells of a table line, `| a | b |`, each trimmed.
+    fn cells(&mut self, line: Line<'a>) -> Option<Vec<Text>> {
+        let text = line.text.trim_end();
+        let inner = text.strip_prefix('|').and_then(|t| t.strip_suffix('|'));
+        let Some(inner) = inner.filter(|_| text.len() > 1) else {
+            self.error(
+                Diagnostic::new(
+                    "expected a row of the examples table",
+                    line.text_span(),
+                    "a row starts and ends with `|`",
+                )
+                .with_help("write the cells between `|`, as `| 12 | 50 |`"),
+            );
+            return None;
+        };
+        let mut cells = Vec::new();
+        let mut start = line.text_start() + 1;
+        for raw in inner.split('|') {
+            let leading = raw.len() - raw.trim_start().len();
+            let value = raw.trim();
+            let at = start + leading;
+            cells.push(Text {
+                value: value.to_string(),
+                span: Span::new(at, at + value.len()),
+            });
+            start += raw.len() + 1;
+        }
+        Some(cells)
+    }
+
+    /// The steps in `steps`, read with `cells` in place of the placeholders
+    /// that `headings` name, with the file's spans. Also where the
+    /// placeholders are, and what was wrong.
+    fn row(
+        &self,
+        steps: Span,
+        headings: &[Text],
+        cells: &[Text],
+    ) -> (Vec<Step>, Vec<Span>, Vec<Diagnostic>) {
+        let template = &self.source[steps.start..steps.end];
+        let mut text = self.source[..steps.start].to_string();
+        let mut map = RowMap {
+            from: steps.start,
+            segments: Vec::new(),
+        };
+        let mut placeholders = Vec::new();
+        let mut copied = 0;
+        let mut from = 0;
+        while let Some((start, end)) =
+            placeholder(&template[from..]).map(|(s, e)| (from + s, from + e))
+        {
+            let name = &template[start + 1..end - 1];
+            from = end;
+            let Some(column) = headings.iter().position(|h| h.value == name) else {
+                continue;
+            };
+            let at = text.len();
+            text.push_str(&template[copied..start]);
+            map.segments.push(Segment {
+                text: (at, text.len()),
+                file: steps.start + copied,
+                placeholder: None,
+            });
+            let placeholder = Span::new(steps.start + start, steps.start + end);
+            let at = text.len();
+            text.push_str(&cells[column].value);
+            map.segments.push(Segment {
+                text: (at, text.len()),
+                file: placeholder.start,
+                placeholder: Some(placeholder),
+            });
+            placeholders.push(placeholder);
+            copied = end;
+        }
+        let at = text.len();
+        text.push_str(&template[copied..]);
+        map.segments.push(Segment {
+            text: (at, text.len()),
+            file: steps.start + copied,
+            placeholder: None,
+        });
+        let mut parser = ReqParser {
+            source: &text,
+            lines: lines(&text),
+            next: 0,
+            diagnostics: Vec::new(),
+            row: Some(&map),
+            mapped: Vec::new(),
+            for_all: false,
+        };
+        parser.next = parser
+            .lines
+            .iter()
+            .position(|l| l.start >= steps.start)
+            .unwrap_or(parser.lines.len());
+        let (mut steps, _) = parser.parse_steps();
+        for step in &mut steps {
+            map.step(step);
+        }
+        let mut diagnostics: Vec<Diagnostic> = parser
+            .diagnostics
+            .into_iter()
+            .map(|mut d| {
+                d.span = map.span(d.span);
+                d
+            })
+            .collect();
+        diagnostics.append(&mut parser.mapped);
+        diagnostics.sort_by_key(|d| d.span.start);
+        (steps, placeholders, diagnostics)
     }
 
     /// Reports a step that failed to parse because it has a placeholder,
@@ -234,15 +518,35 @@ impl<'a> ReqParser<'a> {
             return;
         };
         self.diagnostics.truncate(reported);
-        let start = line.text_start() + start;
-        self.error(
+        self.mapped.retain(|_| false);
+        let span = Span::new(line.text_start() + start, line.text_start() + end);
+        let diagnostic = if self.for_all {
             Diagnostic::new(
-                "placeholders are not supported yet",
-                Span::new(start, line.text_start() + end),
+                "a placeholder from `for all` is not supported yet",
+                span,
                 "the parser does not handle this yet",
             )
-            .with_help("a placeholder takes its value from an `examples` table or a `for all`"),
-        );
+        } else if self.row.is_some() {
+            Diagnostic::new(
+                format!(
+                    "`{}` is not a heading of the examples table",
+                    &line.text[start..end]
+                ),
+                span,
+                "no column gives this placeholder a value",
+            )
+            .with_help(
+                "name the placeholder after one of the table's headings, or add a column for it",
+            )
+        } else {
+            Diagnostic::new(
+                "a placeholder without an `examples` table",
+                span,
+                "nothing gives this placeholder a value",
+            )
+            .with_help("list the cases in an `examples` table after the steps, with a heading for each placeholder")
+        };
+        self.error(diagnostic);
     }
 
     /// Parses the step starting on `line`, with its continuation lines and
@@ -324,6 +628,14 @@ impl<'a> ReqParser<'a> {
             },
             "for" => {
                 self.unsupported("`for all`", word_span);
+                return None;
+            }
+            "examples" => {
+                self.error(Diagnostic::new(
+                    "`examples` after the steps' table",
+                    word_span,
+                    "a requirement has one examples table",
+                ));
                 return None;
             }
             _ => {
@@ -413,8 +725,13 @@ impl<'a> ReqParser<'a> {
             return None;
         }
         cursor.pos = span.end;
-        let (parsed, mut diagnostics) = crate::parse_step_fact(self.source, span, allow_check);
-        self.diagnostics.append(&mut diagnostics);
+        let (parsed, mut diagnostics) =
+            crate::parse_step_fact(self.source, span, allow_check, self.row);
+        if self.row.is_some() {
+            self.mapped.append(&mut diagnostics);
+        } else {
+            self.diagnostics.append(&mut diagnostics);
+        }
         match parsed? {
             StepFact::Fact(fact) => Some(StepKind::Fact {
                 given: !allow_check,
@@ -802,6 +1119,98 @@ impl<'a> Cursor<'a> {
     }
 }
 
+/// How the spans of an examples row's text, which has the row's cells in
+/// place of its placeholders, map back to the file.
+pub(crate) struct RowMap {
+    /// Where the row's text first differs from the file. Before it, the two
+    /// are the same.
+    from: usize,
+    /// The row's text from `from` on, in order: text copied from the file,
+    /// and cells.
+    segments: Vec<Segment>,
+}
+
+struct Segment {
+    /// Where it is in the row's text.
+    text: (usize, usize),
+    /// Where it starts in the file.
+    file: usize,
+    /// For a cell, the placeholder it replaced.
+    placeholder: Option<Span>,
+}
+
+impl RowMap {
+    /// A span of the row's text as a span of the file. A part of a span in
+    /// a cell maps to the cell's placeholder.
+    pub(crate) fn span(&self, span: Span) -> Span {
+        if span.end <= self.from {
+            return span;
+        }
+        let start = self.point(span.start, false);
+        let end = if span.end == span.start {
+            start
+        } else {
+            self.point(span.end, true)
+        };
+        Span::new(start, end.max(start))
+    }
+
+    fn point(&self, pos: usize, end: bool) -> usize {
+        if pos < self.from || (pos == self.from && !end) {
+            return pos;
+        }
+        let segment = self.segments.iter().find(|s| {
+            if end {
+                s.text.0 < pos && pos <= s.text.1
+            } else {
+                s.text.0 <= pos && pos < s.text.1
+            }
+        });
+        let Some(segment) = segment.or(self.segments.last()) else {
+            return pos;
+        };
+        match segment.placeholder {
+            Some(p) if end => p.end,
+            Some(p) => p.start,
+            None => segment.file + pos.min(segment.text.1).saturating_sub(segment.text.0),
+        }
+    }
+
+    /// Maps the spans of a step read from the row's text, but not those of
+    /// a fact or check, which were read with the file's spans already.
+    fn step(&self, step: &mut Step) {
+        step.span = self.span(step.span);
+        let ident = |i: &mut Ident| i.span = self.span(i.span);
+        let text = |t: &mut Text| t.span = self.span(t.span);
+        match &mut step.kind {
+            StepKind::Request {
+                app,
+                path,
+                via,
+                body,
+                ..
+            } => {
+                ident(app);
+                text(path);
+                if let Some(via) = via {
+                    ident(via);
+                }
+                if let Some(body) = body {
+                    text(body);
+                }
+            }
+            StepKind::Reply { app, status, body } => {
+                ident(app);
+                ident(status);
+                if let Some(body) = body {
+                    text(body);
+                }
+            }
+            StepKind::Fact { .. } | StepKind::Check(_) => {}
+        }
+    }
+}
+
 /// What a step does, whether written with its own word or with `and`.
 #[derive(Clone, Copy)]
 enum Kind {
@@ -830,6 +1239,15 @@ fn placeholder(text: &str) -> Option<(usize, usize)> {
         from = open + 1;
     }
     None
+}
+
+/// `1 cell`, `2 cells`.
+fn count(n: usize, noun: &str) -> String {
+    if n == 1 {
+        format!("1 {noun}")
+    } else {
+        format!("{n} {noun}s")
+    }
 }
 
 fn is_snake(word: &str) -> bool {

@@ -1,0 +1,22 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&text)
+---
+pass  The stock level of an item is its quantity on hand
+pass  An item that is not stocked is not found
+pass  Received stock is added to the quantity on hand
+pass  Shipping takes the shipped quantity off the quantity on hand
+pass  Shipping more than the quantity on hand is refused and changes nothing
+FAIL  Stock that falls to its reorder level or below is reordered up to its target level
+            | on hand | target level | left | reorders       |
+      pass  | 12      | 50           | 11   | ""             |
+      FAIL  | 11      | 50           | 10   | "bolt-m6 40\n" |
+            requirements/stock.req.inset:39
+            then StockTracker replies OK with <reorders>
+            but the reply was OK with an empty body
+      pass  | 1       | 50           | 0    | "bolt-m6 50\n" |
+      pass  | 11      | 5            | 10   | ""             |
+pass  A new reorder for an item replaces its earlier one
+pass  A database failure fails the request and changes nothing
+
+8 requirements: 7 passed, 1 failed

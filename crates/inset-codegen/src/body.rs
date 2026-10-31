@@ -175,7 +175,7 @@ fn lit(l: &Lit) -> TokenStream {
     }
 }
 
-impl Emitter {
+impl Emitter<'_> {
     pub(crate) fn ty(&mut self, t: &Type) -> TokenStream {
         ty(t)
     }
@@ -376,12 +376,13 @@ impl Emitter {
                 quote!(return #value)
             }
             ExprKind::Send(message) => {
-                self.unsupported("`send`", e.span, "sent here");
-                self.expr(message)
+                let message = self.expr(message);
+                quote!(::inset_runtime::send(#message))
             }
-            ExprKind::Move(_) => {
-                self.unsupported("`move` across a boundary", e.span, "moved here");
-                quote!(())
+            // Rust moves a place it is given, so the place is all there is.
+            ExprKind::Move(place) => {
+                let parts = place.parts.iter().map(|p| ident(&p.name));
+                quote!(#(#parts).*)
             }
             ExprKind::Closure(closure) => self.closure(closure),
             ExprKind::Match { scrutinee, arms } => {

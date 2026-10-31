@@ -1,6 +1,6 @@
 //! A document's outline: the app with its settings, grants and children;
 //! each component with its fields, children and handlers; and each
-//! requirement by its sentence. It comes from the file's syntax tree alone,
+//! requirement by its sentence, with the rows of its examples table. It comes from the file's syntax tree alone,
 //! so it works on a file that does not check.
 
 use inset_syntax::ast::*;
@@ -17,13 +17,30 @@ pub(crate) fn outline(text: &str, requirements: bool, lines: &LineIndex) -> Vec<
             .requirements
             .iter()
             .filter_map(|r| {
+                // Each row of an examples table is a case of its own.
+                let rows = r
+                    .examples
+                    .iter()
+                    .flat_map(|examples| &examples.rows)
+                    .filter_map(|row| {
+                        let cells: Vec<&str> = row.cells.iter().map(|c| c.value.as_str()).collect();
+                        outline.symbol(
+                            &format!("| {} |", cells.join(" | ")),
+                            SymbolKind::FIELD,
+                            Some("examples row".into()),
+                            row.span,
+                            row.span,
+                            Vec::new(),
+                        )
+                    })
+                    .collect();
                 outline.symbol(
                     &r.sentence.value,
                     SymbolKind::FUNCTION,
                     Some("requirement".into()),
                     r.span,
                     r.sentence.span,
-                    Vec::new(),
+                    rows,
                 )
             })
             .collect();

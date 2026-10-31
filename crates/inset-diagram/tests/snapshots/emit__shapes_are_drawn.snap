@@ -317,6 +317,90 @@ expression: json
                 }
               ]
             }
+          },
+          {
+            "method": "POST",
+            "path": "/add/{n}",
+            "via": "Shapes/front/field:web",
+            "handler": {
+              "id": "Shapes/front/fn:add",
+              "name": "add",
+              "doc": "Adds twice, and replies with the total and a key passed there and back.",
+              "receiver": "ref",
+              "async": true,
+              "params": [
+                {
+                  "name": "n",
+                  "type": "u32"
+                }
+              ],
+              "returns": "String",
+              "body": [
+                {
+                  "kind": "action",
+                  "id": "Shapes/front/fn:add/0",
+                  "text": "send self.tally.add(n)",
+                  "links": [
+                    "Shapes/front/fn:add->Shapes/front/tally/fn:add"
+                  ]
+                },
+                {
+                  "kind": "action",
+                  "id": "Shapes/front/fn:add/1",
+                  "text": "send self.tally.add(n + 1)",
+                  "links": [
+                    "Shapes/front/fn:add->Shapes/front/tally/fn:add#2"
+                  ]
+                },
+                {
+                  "kind": "action",
+                  "id": "Shapes/front/fn:add/2",
+                  "text": "let key = format!(\"added {n}\")"
+                },
+                {
+                  "kind": "action",
+                  "id": "Shapes/front/fn:add/3",
+                  "text": "let total = self.tally.record(&key).await",
+                  "links": [
+                    "Shapes/front/fn:add->Shapes/front/tally/fn:record"
+                  ]
+                },
+                {
+                  "kind": "action",
+                  "id": "Shapes/front/fn:add/4",
+                  "text": "let echoed = self.tally.echo(move key).await",
+                  "links": [
+                    "Shapes/front/fn:add->Shapes/front/tally/fn:echo"
+                  ]
+                },
+                {
+                  "kind": "return",
+                  "id": "Shapes/front/fn:add/5",
+                  "text": "format!(\"{total} {echoed}\")"
+                }
+              ]
+            }
+          }
+        ],
+        "messages": [
+          {
+            "id": "Shapes/front/fn:heard",
+            "name": "heard",
+            "doc": "Hears what the tally noted.",
+            "receiver": "ref",
+            "params": [
+              {
+                "name": "note",
+                "type": "String"
+              }
+            ],
+            "body": [
+              {
+                "kind": "action",
+                "id": "Shapes/front/fn:heard/0",
+                "text": "let _ = note"
+              }
+            ]
           }
         ],
         "algorithms": [
@@ -356,6 +440,11 @@ expression: json
                 "pass": "new",
                 "field": "total",
                 "text": "0"
+              },
+              {
+                "pass": "connect",
+                "field": "noted",
+                "to": "Shapes/front/fn:heard"
               }
             ],
             "fields": [
@@ -370,6 +459,13 @@ expression: json
                 "name": "total",
                 "type": "u32",
                 "kind": "state"
+              },
+              {
+                "id": "Shapes/front/tally/field:noted",
+                "name": "noted",
+                "type": "Outlet<String>",
+                "kind": "outlet",
+                "doc": "Each key recorded."
               }
             ],
             "messages": [
@@ -389,6 +485,54 @@ expression: json
                     "kind": "action",
                     "id": "Shapes/front/tally/fn:add/0",
                     "text": "self.total += n"
+                  }
+                ]
+              },
+              {
+                "id": "Shapes/front/tally/fn:record",
+                "name": "record",
+                "doc": "Notes a key, and returns the total.",
+                "receiver": "ref",
+                "params": [
+                  {
+                    "name": "key",
+                    "type": "&str"
+                  }
+                ],
+                "returns": "u32",
+                "body": [
+                  {
+                    "kind": "action",
+                    "id": "Shapes/front/tally/fn:record/0",
+                    "text": "send self.noted.emit(key.to_string())",
+                    "links": [
+                      "Shapes/front/tally/fn:record->Shapes/front/tally/field:noted"
+                    ]
+                  },
+                  {
+                    "kind": "return",
+                    "id": "Shapes/front/tally/fn:record/1",
+                    "text": "self.total"
+                  }
+                ]
+              },
+              {
+                "id": "Shapes/front/tally/fn:echo",
+                "name": "echo",
+                "doc": "Returns the key it is given.",
+                "receiver": "ref",
+                "params": [
+                  {
+                    "name": "key",
+                    "type": "String"
+                  }
+                ],
+                "returns": "String",
+                "body": [
+                  {
+                    "kind": "return",
+                    "id": "Shapes/front/tally/fn:echo/0",
+                    "text": "key"
                   }
                 ]
               }
@@ -566,6 +710,66 @@ expression: json
       "id": "Shapes/front/tally/field:counts->Shapes/grant:counts",
       "from": "Shapes/front/tally/field:counts",
       "to": "Shapes/grant:counts"
+    },
+    {
+      "kind": "message",
+      "id": "Shapes/front/fn:add->Shapes/front/tally/fn:add",
+      "from": "Shapes/front/fn:add",
+      "to": "Shapes/front/tally/fn:add",
+      "send": true,
+      "args": [
+        {
+          "pass": "copy",
+          "text": "n"
+        }
+      ]
+    },
+    {
+      "kind": "message",
+      "id": "Shapes/front/fn:add->Shapes/front/tally/fn:add#2",
+      "from": "Shapes/front/fn:add",
+      "to": "Shapes/front/tally/fn:add",
+      "send": true,
+      "args": [
+        {
+          "pass": "new",
+          "text": "n + 1"
+        }
+      ]
+    },
+    {
+      "kind": "message",
+      "id": "Shapes/front/fn:add->Shapes/front/tally/fn:record",
+      "from": "Shapes/front/fn:add",
+      "to": "Shapes/front/tally/fn:record",
+      "args": [
+        {
+          "pass": "lend",
+          "text": "key"
+        }
+      ]
+    },
+    {
+      "kind": "message",
+      "id": "Shapes/front/fn:add->Shapes/front/tally/fn:echo",
+      "from": "Shapes/front/fn:add",
+      "to": "Shapes/front/tally/fn:echo",
+      "args": [
+        {
+          "pass": "move",
+          "text": "key"
+        }
+      ]
+    },
+    {
+      "kind": "emit",
+      "id": "Shapes/front/tally/fn:record->Shapes/front/tally/field:noted",
+      "from": "Shapes/front/tally/fn:record",
+      "to": "Shapes/front/tally/field:noted",
+      "value": {
+        "pass": "new",
+        "text": "key.to_string()"
+      }
     }
   ]
 }

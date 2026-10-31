@@ -10,7 +10,7 @@ use inset_syntax::Span;
 use inset_syntax::ast::{self, Block, Expr, ExprKind, Stmt};
 
 use super::{Emitter, Scope};
-use crate::model::{Branch, Exit, Step};
+use crate::model::{Arg, Branch, Edge, Exit, FieldKind, Pass, Step};
 
 /// What happens to the final value of a block.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -25,6 +25,8 @@ enum Value {
 
 /// The function a flowchart is drawn for.
 struct Context<'s> {
+    /// The function's ID, where its message and emit edges start.
+    function: &'s str,
     /// What the error path of a `?` returns: `None` in a function that
     /// returns an `Option`, `Err(error)` in one that returns a `Result`.
     exit: Option<&'static str>,
@@ -54,7 +56,11 @@ impl Emitter<'_> {
             },
             _ => None,
         });
-        let cx = Context { exit, scope };
+        let cx = Context {
+            function: id,
+            exit,
+            scope,
+        };
         let value = match function.ret {
             Some(_) => Value::Returned,
             None => Value::Discarded,
@@ -510,18 +516,26 @@ impl Emitter<'_> {
             ExprKind::For { .. } | ExprKind::While { .. } => {
                 self.unsupported("a loop inside an expression", expr.span, "this loop");
             }
-            // A capability call is a step linked to the capability's edge.
-            // An awaited message needs a message arrow, which is not drawn yet.
+            // A capability call is a step linked to the capability's edge,
+            // and a message, awaited or sent, a step linked to its arrow.
             ExprKind::Await(inner) if self.calls_a_capability(cx, inner) => {
                 self.walk(cx, inner, uses, in_closure);
             }
-            ExprKind::Await(_) => {
-                self.unsupported("`.await` on a message", expr.span, "awaited here");
-            }
-            ExprKind::Send(_) => self.unsupported("`send`", expr.span, "sent here"),
-            ExprKind::Move(_) => {
-                self.unsupported("`move` across a boundary", expr.span, "moved here");
-            }
+            ExprKind::Await(inner) => match self.message(cx, inner, false) {
+                Some(edge) => {
+                    link(uses, edge);
+                    self.walk_args(cx, inner, uses, in_closure);
+                }
+                None => self.unsupported("this `.await`", expr.span, "awaited here"),
+            },
+            ExprKind::Send(inner) => match self.message(cx, inner, true) {
+                Some(edge) => {
+                    link(uses, edge);
+                    self.walk_args(cx, inner, uses, in_closure);
+                }
+                None => self.unsupported("this `send`", expr.span, "sent here"),
+            },
+            ExprKind::Move(_) => {}
             ExprKind::If {
                 cond,
                 then_block,
@@ -553,6 +567,115 @@ impl Emitter<'_> {
                 self.unsupported("a block inside an expression", expr.span, "this block");
             }
         }
+    }
+
+    /// Walks the arguments of a message, for the links they make.
+    fn walk_args(&mut self, cx: &Context<'_>, call: &Expr, uses: &mut Uses, in_closure: bool) {
+        if let ExprKind::MethodCall { args, .. } = &call.kind {
+            for arg in args {
+                self.walk(cx, arg, uses, in_closure);
+            }
+        }
+    }
+
+    /// The edge a message makes, when `call` sends one: a message of a
+    /// child or a lent sibling, `self.name.message(...)`, or with `send`,
+    /// a value emitted through an outlet, `self.outlet.emit(value)`. The
+    /// edge is added, and its ID returned.
+    fn message(&mut self, cx: &Context<'_>, call: &Expr, send: bool) -> Option<String> {
+        let ExprKind::MethodCall {
+            receiver,
+            method,
+            args,
+        } = &call.kind
+        else {
+            return None;
+        };
+        let ExprKind::Field { base, name } = &receiver.kind else {
+            return None;
+        };
+        let is_self = matches!(&base.kind, ExprKind::Path(p) if matches!(p.segments.as_slice(), [s] if s.ident.name == "self"));
+        let scope = cx.scope?;
+        if !is_self {
+            return None;
+        }
+        let method = method.ident.name.as_str();
+        let field = scope
+            .definition
+            .fields
+            .iter()
+            .find(|f| f.name.name == name.name);
+        let is_outlet = field.is_some_and(|f| super::field_kind(&f.ty) == FieldKind::Outlet);
+        if send && is_outlet && method == "emit" {
+            let [value] = args.as_slice() else {
+                return None;
+            };
+            let to = format!("{}/field:{}", scope.component, name.name);
+            let id = self.edge_id(cx.function, &to);
+            self.locate(&id, call.span);
+            self.emit_edges.push(Edge::Emit {
+                id: id.clone(),
+                from: cx.function.to_string(),
+                to,
+                value: self.arg(value),
+            });
+            return Some(id);
+        }
+        let (_, target, definition) = scope.handles.iter().find(|(h, ..)| *h == name.name)?;
+        let is_message = definition.functions.iter().any(|f| {
+            f.name.name == method
+                && f.attrs
+                    .iter()
+                    .any(|a| a.kind == ast::AttributeKind::Message)
+        });
+        if !is_message {
+            return None;
+        }
+        let to = format!("{target}/fn:{method}");
+        let id = self.edge_id(cx.function, &to);
+        self.locate(&id, call.span);
+        let args = args.iter().map(|arg| self.arg(arg)).collect();
+        self.message_edges.push(Edge::Message {
+            id: id.clone(),
+            from: cx.function.to_string(),
+            to,
+            send,
+            args,
+        });
+        Some(id)
+    }
+
+    /// How a value crosses a boundary, from how it is written.
+    fn arg(&self, arg: &Expr) -> Arg {
+        let (pass, span) = match &arg.kind {
+            ExprKind::Ref { operand, .. } => (Pass::Lend, operand.span),
+            ExprKind::Move(place) => (Pass::Move, place.span),
+            // The checker allows a bare place only when it is `Copy`.
+            ExprKind::Path(_) | ExprKind::Field { .. } => (Pass::Copy, arg.span),
+            _ => (Pass::New, arg.span),
+        };
+        Arg {
+            pass,
+            text: self.text(span),
+        }
+    }
+
+    /// `<from>-><to>`, with `#2` and so on added when the two are already joined.
+    fn edge_id(&self, from: &str, to: &str) -> String {
+        let id = format!("{from}->{to}");
+        let taken = |id: &str| {
+            self.message_edges
+                .iter()
+                .chain(&self.emit_edges)
+                .any(|e| e.id() == id)
+        };
+        if !taken(&id) {
+            return id;
+        }
+        (2..)
+            .map(|n| format!("{id}#{n}"))
+            .find(|id| !taken(id))
+            .expect("some number is free")
     }
 
     /// Walks a block inside a closure, for the links it makes.

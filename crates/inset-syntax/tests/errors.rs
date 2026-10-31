@@ -338,3 +338,89 @@ fn via_without_server() {
          \x20   then HelloHttp replies OK with \"Hello, Ada!\"\n",
     );
 }
+
+#[test]
+fn examples_row_with_too_few_cells() {
+    requirements(
+        "examples_row_with_too_few_cells",
+        r#"requirement "Visitors are greeted by the name in the web address"
+    when HelloHttp receives GET /hello/<name>
+    then HelloHttp replies OK with "Hello, <name>!"
+    examples
+    | name | greeting |
+    | Ada  |
+"#,
+    );
+}
+
+#[test]
+fn examples_heading_repeated() {
+    requirements(
+        "examples_heading_repeated",
+        r#"requirement "Visitors are greeted by the name in the web address"
+    when HelloHttp receives GET /hello/<name>
+    then HelloHttp replies OK with "Hello, <name>!"
+    examples
+    | name | <name> | name |
+    | Ada  | Ada    | Ada  |
+"#,
+    );
+}
+
+#[test]
+fn examples_without_rows() {
+    requirements(
+        "examples_without_rows",
+        r#"requirement "Visitors are greeted by the name in the web address"
+    when HelloHttp receives GET /hello/<name>
+    then HelloHttp replies OK with "Hello, <name>!"
+    examples
+    | name |
+"#,
+    );
+}
+
+/// A placeholder no heading names stays as written, so a step it breaks
+/// says which placeholder has no column.
+#[test]
+fn placeholder_without_a_column() {
+    requirements(
+        "placeholder_without_a_column",
+        r#"requirement "Visitors are greeted by the name in the web address"
+    when HelloHttp receives GET /hello/Ada
+    then HelloHttp replies <status> with "Hello, <name>!"
+    examples
+    | name |
+    | Ada  |
+"#,
+    );
+}
+
+/// A cell that breaks the step is reported once for each row it is in,
+/// at the placeholder, naming the row. A mistake outside the placeholders
+/// is reported once.
+#[test]
+fn examples_row_that_breaks_a_step() {
+    requirements(
+        "examples_row_that_breaks_a_step",
+        r#"requirement "Visitors are greeted by the name in the web address"
+    when HelloHttp receives GET /hello/Ada
+    then HelloHttp replies OK with <greeting> please
+    examples
+    | greeting      |
+    | "Hello, Ada!" |
+    | Hello         |
+"#,
+    );
+}
+
+#[test]
+fn placeholder_without_examples() {
+    requirements(
+        "placeholder_without_examples",
+        r#"requirement "Visitors are greeted by the name in the web address"
+    when HelloHttp receives GET /hello/Ada
+    then HelloHttp replies OK with <greeting>
+"#,
+    );
+}

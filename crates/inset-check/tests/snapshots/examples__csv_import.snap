@@ -2,13 +2,6 @@
 source: crates/inset-check/tests/examples.rs
 expression: "remaining(\"csv-import\")"
 ---
-Error: `examples` is not supported yet
-    ╭─[ requirements/import.req.inset:57:5 ]
-    │
- 57 │     examples
-    │     ────┬───  
-    │         ╰───── the parser does not handle this yet
-────╯
 Error: `for all` is not supported yet
     ╭─[ requirements/import.req.inset:64:5 ]
     │
@@ -16,14 +9,12 @@ Error: `for all` is not supported yet
     │     ─┬─  
     │      ╰─── the parser does not handle this yet
 ────╯
-Error: placeholders are not supported yet
+Error: a placeholder from `for all` is not supported yet
     ╭─[ requirements/import.req.inset:72:36 ]
     │
  72 │     and products["bolt-m6"].net == <net>
     │                                    ──┬──  
     │                                      ╰──── the parser does not handle this yet
-    │ 
-    │ Help: a placeholder takes its value from an `examples` table or a `for all`
 ────╯
 Error: `for all` is not supported yet
     ╭─[ requirements/import.req.inset:75:5 ]
@@ -32,14 +23,12 @@ Error: `for all` is not supported yet
     │     ─┬─  
     │      ╰─── the parser does not handle this yet
 ────╯
-Error: placeholders are not supported yet
+Error: a placeholder from `for all` is not supported yet
     ╭─[ requirements/import.req.inset:83:38 ]
     │
  83 │     and products["bolt-m6"].gross >= <net>
     │                                      ──┬──  
     │                                        ╰──── the parser does not handle this yet
-    │ 
-    │ Help: a placeholder takes its value from an `examples` table or a `for all`
 ────╯
 Error: `#[rust]` is not supported yet
     ╭─[ src/main.inset:39:3 ]

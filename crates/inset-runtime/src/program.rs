@@ -125,15 +125,66 @@ pub(crate) fn start<A: App>(restore: Option<Vec<u8>>) -> Result<(), Stopped> {
     });
     A::start(&Scope::root(A::NAME), &mut Grants(()))?;
     if let Some(state) = restore {
-        let mut state: BTreeMap<String, serde_json::Value> =
-            serde_json::from_slice(&state).map_err(|e| restore_failed(e.to_string()))?;
+        let Recovery {
+            mut fields,
+            mut mailboxes,
+        } = Recovery::read(&state).map_err(restore_failed)?;
         for actor in PROGRAM.with_borrow(|p| p.actors.clone()) {
-            if let Some(saved) = state.remove(actor.id()) {
+            if let Some(saved) = fields.remove(actor.id()) {
                 actor.restore(saved).map_err(restore_failed)?;
+            }
+            if let Some(messages) = mailboxes.remove(actor.id()) {
+                actor.requeue(messages).map_err(restore_failed)?;
             }
         }
     }
     run_until_idle()
+}
+
+/// What a panic hands the host to start a fresh instance from, by each
+/// component's diagram ID.
+/// Written as `{"fields": {...}, "mailboxes": {...}}`.
+#[derive(Default)]
+struct Recovery {
+    /// Each component's state fields, in their stored form.
+    fields: BTreeMap<String, serde_json::Value>,
+    /// The messages waiting in each mailbox that is not empty.
+    mailboxes: BTreeMap<String, Vec<serde_json::Value>>,
+}
+
+impl Recovery {
+    fn write(self) -> Vec<u8> {
+        let mut json = serde_json::Map::new();
+        json.insert("fields".into(), self.fields.into_iter().collect());
+        if !self.mailboxes.is_empty() {
+            let mailboxes = self
+                .mailboxes
+                .into_iter()
+                .map(|(id, messages)| (id, serde_json::Value::Array(messages)));
+            json.insert("mailboxes".into(), mailboxes.collect());
+        }
+        serde_json::Value::Object(json).to_string().into_bytes()
+    }
+
+    fn read(bytes: &[u8]) -> Result<Recovery, String> {
+        let json: serde_json::Value = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
+        let object = |name: &str| match json.get(name) {
+            None => Ok(serde_json::Map::new()),
+            Some(serde_json::Value::Object(map)) => Ok(map.clone()),
+            Some(_) => Err(format!("`{name}` is not an object")),
+        };
+        let mailboxes = object("mailboxes")?
+            .into_iter()
+            .map(|(id, messages)| match messages {
+                serde_json::Value::Array(messages) => Ok((id, messages)),
+                _ => Err(format!("the mailbox of {id} is not a list")),
+            })
+            .collect::<Result<_, String>>()?;
+        Ok(Recovery {
+            fields: object("fields")?.into_iter().collect(),
+            mailboxes,
+        })
+    }
 }
 
 fn restore_failed(message: String) -> Stopped {
@@ -169,6 +220,10 @@ pub(crate) fn report_rolled_back(component: &str, failure: &Failure, message: &s
     report::rolled_back(component, &failure.to_string(), message);
 }
 
+pub(crate) fn report_restarted(component: &str, failure: &Failure, message: &str, restarted: &str) {
+    report::restarted(component, &failure.to_string(), message, restarted);
+}
+
 /// Runs before a panic traps the instance. If every handler the panic
 /// interrupts rolls back, it hands the host the state to start again from.
 fn panic_hook(info: &std::panic::PanicHookInfo<'_>) {
@@ -196,31 +251,51 @@ fn panic_hook(info: &std::panic::PanicHookInfo<'_>) {
 }
 
 /// The state to start a fresh instance from, if the panic can be survived:
-/// nothing is waiting in a mailbox, and every running handler either
-/// panicked or awaits a reply from one that did, and rolls back.
+/// every running handler either panicked or awaits a reply from one that
+/// did, and each is rolled back or restarted, and no message in a mailbox
+/// has a sender waiting for its reply. With it, the component that a
+/// `restart` of the panicked handler resets, if any.
 fn recovery(
     actors: &[Rc<dyn Running>],
     panicked: &dyn Running,
     failure: &Failure,
-) -> Option<Vec<u8>> {
-    let mut state = BTreeMap::new();
+) -> Option<(Vec<u8>, Option<String>)> {
+    let mut restarted: Vec<String> = Vec::new();
+    let mut panicked_restarts = None;
     for actor in actors {
-        if actor.queued() > 0 {
-            return None;
-        }
         if let Some(scope) = actor.running() {
-            let condition = if actor.id() == panicked.id() {
+            let is_panicked = actor.id() == panicked.id();
+            let condition = if is_panicked {
                 failure.clone()
             } else {
                 Failure::Message(scope.awaiting()?)
             };
-            if actor.responds(&condition) != Some(Response::Rollback) {
-                return None;
+            if let (Response::Restart, target) = actor::resolve(actor.clone(), &condition)? {
+                if is_panicked {
+                    panicked_restarts = Some(target.id().to_string());
+                }
+                restarted.push(target.id().to_string());
             }
         }
-        state.insert(actor.id().to_string(), actor.snapshot()?);
     }
-    serde_json::to_vec(&state).ok()
+    let mut recovery = Recovery::default();
+    for actor in actors {
+        let id = actor.id();
+        let is_restarted = restarted.iter().any(|r| {
+            id == r
+                || id
+                    .strip_prefix(r.as_str())
+                    .is_some_and(|rest| rest.starts_with('/'))
+        });
+        recovery
+            .fields
+            .insert(id.to_string(), actor.snapshot(is_restarted)?);
+        let queued = actor.queued()?;
+        if !queued.is_empty() {
+            recovery.mailboxes.insert(id.to_string(), queued);
+        }
+    }
+    Some((recovery.write(), panicked_restarts))
 }
 
 /// Reports to the host. Outside WebAssembly, where the runtime's own tests
@@ -233,13 +308,18 @@ mod report {
         report::rolled_back(component, failure, message);
     }
 
+    pub(super) fn restarted(component: &str, failure: &str, message: &str, restarted: &str) {
+        report::restarted(component, failure, message, restarted);
+    }
+
     pub(super) fn trapping(
         component: &str,
         failure: &str,
         message: &str,
-        recovery: Option<Vec<u8>>,
+        recovery: Option<(Vec<u8>, Option<String>)>,
     ) {
-        report::trapping(component, failure, message, recovery.as_deref());
+        let recovery = recovery.map(|(state, restarted)| report::Recovery { state, restarted });
+        report::trapping(component, failure, message, recovery.as_ref());
     }
 }
 
@@ -256,13 +336,21 @@ pub(crate) mod report {
             .with_borrow_mut(|r| r.push(format!("{component} rolled back {failure}: {message}")));
     }
 
+    pub(super) fn restarted(component: &str, failure: &str, message: &str, restarted: &str) {
+        REPORTS.with_borrow_mut(|r| {
+            r.push(format!(
+                "{restarted} restarted after {component} failed with {failure}: {message}"
+            ))
+        });
+    }
+
     pub(super) fn trapping(
         component: &str,
         failure: &str,
         message: &str,
-        recovery: Option<Vec<u8>>,
+        recovery: Option<(Vec<u8>, Option<String>)>,
     ) {
-        let recovery = recovery.map(|state| String::from_utf8(state).expect("JSON"));
+        let recovery = recovery.map(|(state, _)| String::from_utf8(state).expect("JSON"));
         REPORTS.with_borrow_mut(|r| {
             r.push(format!(
                 "{component} trapping {failure}: {message}; recovery {recovery:?}"
