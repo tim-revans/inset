@@ -3,8 +3,10 @@
 //
 // The requirements are found in each program's `requirements/` files and
 // read through the language server's outline, so the extension does not
-// parse Inset itself. They run with `inset test <program> --json`, which
-// builds the program and runs every requirement in it. So running one
+// parse Inset itself. They run with `inset test <program> --json
+// --coverage`, which builds the program and runs every requirement in it,
+// and writes what they reached for the diagram panel's coverage view.
+// Code marked `#[defensive]` that a requirement reached fails the program. So running one
 // requirement runs, and reports, all of its program's requirements: each
 // starts the program afresh, so the others' results are as good as a run of
 // their own.
@@ -33,6 +35,11 @@ const { programRoot } = require("./program");
  */
 
 /**
+ * Code marked `#[defensive]` that a requirement reached, as `inset test --json` prints it.
+ * @typedef {{ id: string, at: string, reason: string, requirements: string[] }} Defensive
+ */
+
+/**
  * The last result of a requirement, for the panel.
  * @typedef {{ result: "pass" | "fail" | "error", detail?: string, location?: vscode.Location }} Result
  */
@@ -58,6 +65,8 @@ class Requirements {
     this.output = "";
     /** Fires when the list or a result changes. */
     this.changed = new vscode.EventEmitter();
+    /** Fires with a program's root when its requirements have run. */
+    this.ran = new vscode.EventEmitter();
     this.tree = new RequirementsTree(this);
     // The panel shows only in a workspace with requirements.
     this.changed.event(() =>
@@ -68,6 +77,7 @@ class Requirements {
     context.subscriptions.push(
       this.controller,
       this.changed,
+      this.ran,
       watcher,
       watcher.onDidCreate(() => this.discoverSoon()),
       watcher.onDidChange(() => this.discoverSoon()),
@@ -243,11 +253,12 @@ class Requirements {
       this.output += text;
     };
     print(`inset test ${label}\n`);
-    const { code, stdout, stderr } = await execute(this.command(), ["test", root, "--json"], root, token);
+    const { code, stdout, stderr } = await execute(this.command(), ["test", root, "--json", "--coverage"], root, token);
+    this.ran.fire(root);
     if (stderr) {
       print(stderr);
     }
-    /** @type {{ requirements: Outcome[] } | undefined} */
+    /** @type {{ requirements: Outcome[], defensive?: Defensive[] } | undefined} */
     let report;
     try {
       report = JSON.parse(stdout);
@@ -269,6 +280,15 @@ class Requirements {
       return;
     }
     this.results.delete(program.id);
+    const defensive = report.defensive ?? [];
+    if (defensive.length > 0) {
+      const text = defensive
+        .map((d) => `Defensive code was reached: ${d.id}\n${d.at}\n#[defensive(${JSON.stringify(d.reason)})]\nbut ${d.requirements.map((r) => JSON.stringify(r)).join(" and ")} reached it`)
+        .join("\n\n");
+      print(`FAIL  ${text.replace(/\n/g, "\n      ")}\n`);
+      run.failed(program, new vscode.TestMessage(text));
+      this.results.set(program.id, { result: "fail", detail: text });
+    }
     for (const outcome of report.requirements) {
       const item = program.children.get(requirementId(root, outcome.sentence));
       if (!item) {

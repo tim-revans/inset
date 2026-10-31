@@ -12,7 +12,16 @@
 //! hold fails it. A fact that does not hold reports both values, written as
 //! Rust's `{:?}` writes them, as `assert_eq!` does. The report is the same
 //! every time for the same program, so it holds no timings.
+//!
+//! **Coverage.** The program reports which elements of its diagram each
+//! case reached, and each element is credited to the requirement whose
+//! case reached it, so a requirement with an examples table is credited
+//! with what any of its rows reached. A requirement that fails is credited
+//! too: its sentence still says the code is wanted. An element marked
+//! `#[defensive]` that a requirement reached fails the run, because the
+//! reason given for it is then wrong.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use inset_check::status::STATUSES;
@@ -30,6 +39,30 @@ pub struct TestReport {
     pub failed: usize,
     /// In order of file and then of position.
     pub requirements: Vec<Outcome>,
+    /// Code marked `#[defensive]` that a requirement reached, in the
+    /// order of the diagram.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub defensive: Vec<Reached>,
+    /// Which requirements reached each element of the diagram, by ID.
+    #[serde(skip)]
+    pub coverage: inset_diagram::model::Coverage,
+    /// Each element coverage counts, with where it is, when the program has
+    /// a diagram.
+    #[serde(skip)]
+    pub elements: Vec<(inset_diagram::coverage::Element, String)>,
+}
+
+/// An element marked `#[defensive]`, which a requirement reached.
+#[derive(Debug, Serialize)]
+pub struct Reached {
+    /// The element's diagram ID.
+    pub id: String,
+    /// Where it is, as `src/main.inset:12`.
+    pub at: String,
+    /// The reason the `#[defensive]` gives.
+    pub reason: String,
+    /// The sentences of the requirements that reached it.
+    pub requirements: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -111,13 +144,21 @@ pub fn run(program: &Program, component: &Path) -> Result<TestReport, String> {
         working_dir,
     };
     let mut requirements = Vec::new();
+    let mut reached: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for requirement in &plan.requirements {
         let file = &program.files[requirement.file];
         let line = |span: Span| file.text[..span.start].matches('\n').count() + 1;
         // Each case starts the program afresh.
-        let run_case = |steps: &[PlannedStep]| -> Result<Option<Failure>, String> {
+        let mut run_case = |steps: &[PlannedStep]| -> Result<Option<Failure>, String> {
             let mut running = host.start(&options).map_err(|e| e.to_string())?;
-            Ok(run_steps(&plan, steps, &mut running).map(|failed| {
+            let failed = run_steps(&plan, steps, &mut running);
+            for id in running.reached() {
+                let by = reached.entry(id.clone()).or_default();
+                if !by.contains(&requirement.sentence) {
+                    by.push(requirement.sentence.clone());
+                }
+            }
+            Ok(failed.map(|failed| {
                 let (expected, actual) = failed.values.unzip();
                 Failure {
                     line: line(failed.span),
@@ -156,12 +197,73 @@ pub fn run(program: &Program, component: &Path) -> Result<TestReport, String> {
         });
     }
     let failed = requirements.iter().filter(|r| r.result == "fail").count();
+    let coverage = inset_diagram::model::Coverage { reached };
+    // A program whose diagram cannot be drawn yet has no elements to check.
+    let elements: Vec<_> = match inset_diagram::emit_with_sources(program) {
+        Ok(emitted) => inset_diagram::coverage::elements(&emitted.diagram)
+            .into_iter()
+            .map(|element| {
+                let at = emitted
+                    .sources
+                    .get(&element.id)
+                    .map_or_else(String::new, |source| {
+                        let file = &program.files[source.file];
+                        let line = file.text[..source.span.start].matches('\n').count() + 1;
+                        format!("{}:{line}", file.path)
+                    });
+                (element, at)
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    let defensive = elements
+        .iter()
+        .filter_map(|(element, at)| {
+            let reason = element.defensive.clone()?;
+            let requirements = coverage.reached.get(&element.id)?.clone();
+            Some(Reached {
+                id: element.id.clone(),
+                at: at.clone(),
+                reason,
+                requirements,
+            })
+        })
+        .collect();
     Ok(TestReport {
         app: host.manifest().app.clone(),
         passed: requirements.len() - failed,
         failed,
         requirements,
+        defensive,
+        coverage,
+        elements,
     })
+}
+
+/// How much of the program the requirements reached, with each element
+/// none reached, as `inset test --coverage` prints it.
+pub fn render_coverage(report: &TestReport) -> String {
+    let mut reached = 0;
+    let mut excused = 0;
+    let mut missed = Vec::new();
+    for (element, at) in &report.elements {
+        if report.coverage.reached.contains_key(&element.id) {
+            reached += 1;
+        } else if element.defensive.is_some() || element.inside_defensive {
+            excused += 1;
+        } else {
+            missed.push((&element.id, at));
+        }
+    }
+    let total = report.elements.len();
+    let mut out = format!(
+        "\ncoverage: {reached} of {total} reached, {excused} excused, {} not reached\n",
+        missed.len()
+    );
+    for (id, at) in missed {
+        out.push_str(&format!("  not reached  {id}  {at}\n"));
+    }
+    out
 }
 
 /// Runs a case's steps, and returns the first that does not hold, with
@@ -495,6 +597,24 @@ fn examples_table(headings: &[String], rows: &[RowOutcome]) -> Vec<String> {
 
 /// The report as `inset test` prints it.
 pub fn render(report: &TestReport) -> String {
+    let mut out = render_requirements(report);
+    for reached in &report.defensive {
+        out.push_str(&format!(
+            "FAIL  defensive code was reached: {}\n      {}\n      #[defensive({:?})]\n",
+            reached.id, reached.at, reached.reason
+        ));
+        let by: Vec<String> = reached
+            .requirements
+            .iter()
+            .map(|sentence| format!("{sentence:?}"))
+            .collect();
+        out.push_str(&format!("      but {} reached it\n", by.join(" and ")));
+    }
+    out.push_str(&summary(report));
+    out
+}
+
+fn render_requirements(report: &TestReport) -> String {
     let mut out = String::new();
     for outcome in &report.requirements {
         let result = if outcome.result == "fail" {
@@ -518,13 +638,20 @@ pub fn render(report: &TestReport) -> String {
             }
         }
     }
+    out
+}
+
+/// The last lines: how many requirements passed and failed, and how much
+/// defensive code was reached.
+fn summary(report: &TestReport) -> String {
+    let mut out = String::new();
     let total = report.requirements.len();
     let noun = if total == 1 {
         "requirement"
     } else {
         "requirements"
     };
-    if total > 0 {
+    if total > 0 || !report.defensive.is_empty() {
         out.push('\n');
     }
     out.push_str(&match (report.passed, report.failed) {
@@ -533,5 +660,10 @@ pub fn render(report: &TestReport) -> String {
         (0, _) => format!("{total} {noun} failed\n"),
         (passed, failed) => format!("{total} {noun}: {passed} passed, {failed} failed\n"),
     });
+    match report.defensive.len() {
+        0 => {}
+        1 => out.push_str("1 element marked defensive was reached\n"),
+        n => out.push_str(&format!("{n} elements marked defensive were reached\n")),
+    }
     out
 }

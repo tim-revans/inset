@@ -234,7 +234,7 @@ impl<'v> Canvas<'v> {
             h = n(height)
         ));
         out.push('\n');
-        out.push_str(&theme::style(self.view.theme));
+        out.push_str(&theme::style(self.view.theme, self.view.coverage));
         out.push_str(DEFS);
         if !self.view.transparent {
             out.push_str(&format!(

@@ -1,0 +1,15 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&text)
+---
+pass  A stored price is the item's price
+pass  A price of nothing is refused
+FAIL  defensive code was reached: Prices/Shop/fn:set/0/b0
+      src/main.inset:33
+      #[defensive("the shop's form never sends a price of nothing")]
+      but "A price of nothing is refused" reached it
+
+2 requirements passed
+1 element marked defensive was reached
+
+coverage: 5 of 8 reached, 3 excused, 0 not reached

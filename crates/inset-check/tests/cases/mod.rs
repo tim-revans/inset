@@ -675,6 +675,24 @@ pub fn all() -> Vec<Case> {
             "then Catalogue replies OK with 20",
         ),
     );
+    {
+        // `#[defensive]` on a whole function, on a statement that is no
+        // branch and has no `?`, and inside a closure.
+        let main = edit(
+            COUNTING,
+            "    #[message]\n    fn add(",
+            "    #[message]\n    #[defensive(\"nothing adds\")]\n    fn add(",
+        );
+        let main = edit(
+            &main,
+            "        let total = self.tally.total().await;",
+            "        #[defensive(\"the total is always there\")]\n        \
+             let total = self.tally.total().await;\n        \
+             let doubled: Vec<u32> = vec![n].iter().map(|x| {\n            \
+             #[defensive(\"never zero\")]\n            x * 2\n        }).collect();",
+        );
+        add("defensive_marks_nothing", main, COUNTING_REQ.to_string());
+    }
     add(
         "unknown_query_parameter",
         CATALOGUE.to_string(),

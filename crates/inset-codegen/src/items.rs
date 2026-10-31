@@ -12,6 +12,7 @@ use quote::quote;
 
 use crate::Emitter;
 use crate::body::{docs, ident, pattern};
+use crate::coverage::Owner;
 
 /// Names the generated route code gives its own variables. A handler
 /// parameter with one of these names is renamed where it is read.
@@ -23,6 +24,7 @@ impl<'a> Emitter<'a> {
     /// emitted code exactly as in the Inset source.
     pub(crate) fn module(&mut self, modules: &'a Modules, index: usize) -> TokenStream {
         let module = &modules.list[index];
+        let outer = std::mem::replace(&mut self.module_path, module.path.clone());
         let items: Vec<_> = module
             .ast
             .items
@@ -48,6 +50,7 @@ impl<'a> Emitter<'a> {
                 _ => self.item(item),
             })
             .collect();
+        self.module_path = outer;
         quote!(#(#items)*)
     }
 
@@ -59,7 +62,14 @@ impl<'a> Emitter<'a> {
                 let vis = self.vis(&item.vis);
                 self.component(item_docs, vis, component)
             }
-            ItemKind::Function(function) => self.function(function),
+            ItemKind::Function(function) => {
+                self.owner = Owner::Algorithms;
+                let owner = match self.module_path.as_slice() {
+                    [] => self.app.clone(),
+                    path => format!("{}/mod:{}", self.app, path.join("::")),
+                };
+                self.function(function, &format!("{owner}/fn:{}", function.name.name))
+            }
             ItemKind::Struct(s) => {
                 let vis = self.vis(&item.vis);
                 let derive = self.derive(item);
@@ -301,6 +311,11 @@ impl<'a> Emitter<'a> {
             }
         });
 
+        let algorithms = self.has_algorithms.then(|| {
+            quote!(
+                const BRANCHES: &'static [&'static str] = ALGORITHM_BRANCHES;
+            )
+        });
         quote! {
             #docs
             struct #name;
@@ -313,6 +328,8 @@ impl<'a> Emitter<'a> {
                 const GRANTS: &'static [::inset_runtime::Grant] = &[#(#grants),*];
 
                 #front_end
+
+                #algorithms
 
                 fn start(
                     #scope: &::inset_runtime::Scope,
@@ -406,6 +423,8 @@ impl<'a> Emitter<'a> {
             }
         };
 
+        self.owner = Owner::Component;
+        self.branches.clear();
         let respond = self.respond_fn(c);
         let rolls_back = c.failure.as_ref().is_some_and(|f| {
             f.arms
@@ -418,7 +437,22 @@ impl<'a> Emitter<'a> {
             )
         });
 
-        let functions: Vec<_> = c.functions.iter().map(|f| self.function(f)).collect();
+        let functions: Vec<_> = c
+            .functions
+            .iter()
+            .map(|f| self.function(f, &format!("fn:{}", f.name.name)))
+            .collect();
+        let branches = std::mem::take(&mut self.branches);
+        let path: Vec<&str> = std::iter::once("crate")
+            .chain(self.module_path.iter().map(String::as_str))
+            .chain([component_name.as_str()])
+            .collect();
+        self.elements
+            .components
+            .push((path.join("::"), branches.clone()));
+        let branches = quote! {
+            const BRANCHES: &'static [&'static str] = &[#(#branches),*];
+        };
         let (messages, message_types) = self.messages(c, &vis);
 
         let servers_fn = (!servers.is_empty()).then(|| {
@@ -488,6 +522,8 @@ impl<'a> Emitter<'a> {
                 const NAME: &'static str = #component_name;
 
                 #rolls_back
+
+                #branches
 
                 #saved
 
@@ -817,12 +853,24 @@ impl<'a> Emitter<'a> {
                     FailureResponse::Rollback => quote!(Rollback),
                     FailureResponse::Restart => quote!(Restart),
                 };
-                quote!(#pattern => Some(::inset_runtime::Response::#response),)
+                let segment = match &arm.condition.kind {
+                    FailureConditionKind::Panic => "panic".to_string(),
+                    FailureConditionKind::Overflow => "overflow".to_string(),
+                    FailureConditionKind::Capability(field) => format!("capability:{}", field.name),
+                    FailureConditionKind::Message(field) => format!("message:{}", field.name),
+                    FailureConditionKind::Child(name) => format!("child:{}", name.name),
+                    FailureConditionKind::Other => "any".to_string(),
+                };
+                let index =
+                    proc_macro2::Literal::usize_unsuffixed(self.list(format!("failure:{segment}")));
+                quote!(#pattern => Some((::inset_runtime::Response::#response, #index)),)
             })
             .collect();
         let rest = (!catch_all).then(|| quote!(_ => None,));
         Some(quote! {
-            fn respond(failure: &::inset_runtime::Failure) -> Option<::inset_runtime::Response> {
+            fn respond(
+                failure: &::inset_runtime::Failure,
+            ) -> Option<(::inset_runtime::Response, usize)> {
                 match failure {
                     #(#arms)*
                     #rest
@@ -868,7 +916,9 @@ impl<'a> Emitter<'a> {
         })
     }
 
-    fn function(&mut self, f: &Function) -> TokenStream {
+    /// A function, which marks what coverage counts in it. `id` is its
+    /// diagram ID: relative to the running component for a component's.
+    fn function(&mut self, f: &Function, id: &str) -> TokenStream {
         let docs = docs(&f.docs);
         let asyncness = f.is_async.then(|| quote!(async));
         let vis = self.vis(&f.vis);
@@ -890,7 +940,7 @@ impl<'a> Emitter<'a> {
             let t = self.ty(t);
             quote!(-> #t)
         });
-        let body = self.block(&f.body);
+        let body = self.covered_body(id, f);
         quote! {
             #docs
             #vis #asyncness fn #name(#receiver #(#params),*) #ret #body

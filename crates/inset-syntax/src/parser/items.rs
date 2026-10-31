@@ -155,6 +155,38 @@ impl Parser<'_> {
         Ok(attrs)
     }
 
+    /// `#[defensive("reason")]` where only it may be written: above a
+    /// statement, a `match` arm or a `failure` arm, named by `place`.
+    pub(super) fn parse_defensive(&mut self, place: &str) -> PResult<Option<Defensive>> {
+        let mut defensive = None;
+        while self.at(P::Pound) {
+            let attr = self.parse_attr()?;
+            match attr.kind {
+                AttributeKind::Defensive(reason) if defensive.is_none() => {
+                    defensive = Some(Defensive {
+                        reason,
+                        span: attr.span,
+                    });
+                }
+                AttributeKind::Defensive(_) => {
+                    return Err(self.report(Diagnostic::new(
+                        "the code is marked defensive twice",
+                        attr.span,
+                        "this repeats the `#[defensive]` above it",
+                    )));
+                }
+                _ => {
+                    return Err(self.report(Diagnostic::new(
+                        format!("this attribute does not go on {place}"),
+                        attr.span,
+                        "only `#[defensive]` goes here",
+                    )));
+                }
+            }
+        }
+        Ok(defensive)
+    }
+
     pub(super) fn parse_attr(&mut self) -> PResult<Attribute> {
         let start = self.bump().span;
         if self.at(P::Not) {
@@ -197,7 +229,31 @@ impl Parser<'_> {
                         }
                     }
                 }
-                "rust" | "defensive" => {
+                "defensive" => {
+                    let Some(open) = self.at(P::LParen).then(|| self.bump().span) else {
+                        return Err(self.report(
+                            Diagnostic::new(
+                                "`#[defensive]` needs a reason",
+                                name_span,
+                                "the reason goes after this",
+                            )
+                            .with_help(
+                                "say why no requirement can reach the code, such as \
+                                 `#[defensive(\"parse_row has already checked every price\")]`",
+                            ),
+                        ));
+                    };
+                    let T::Str(value) = self.kind().clone() else {
+                        return Err(self.expected("the reason, as a string"));
+                    };
+                    let reason = StrLit {
+                        value,
+                        span: self.bump().span,
+                    };
+                    self.expect_close(P::RParen, open, "the reason")?;
+                    AttributeKind::Defensive(reason)
+                }
+                "rust" => {
                     return Err(self.unsupported(&format!("`#[{name}]`"), name_span));
                 }
                 _ => {
@@ -997,6 +1053,7 @@ impl Parser<'_> {
     pub(super) fn parse_failure_arm(&mut self) -> PResult<FailureArm> {
         let docs = self.parse_docs();
         let start = docs.first().map_or(self.span(), |d| d.span);
+        let defensive = self.parse_defensive("a `failure` arm")?;
         let condition = self.parse_failure_condition()?;
         self.expect(P::FatArrow, "the failure condition")?;
         let response = match self.kind() {
@@ -1009,6 +1066,7 @@ impl Parser<'_> {
             docs,
             condition,
             response,
+            defensive,
             span: start.to(end),
         })
     }

@@ -2,7 +2,9 @@
 // edited, beside the code. The language server draws it, through its
 // `inset/diagram` request, so the picture comes from the compiler's own
 // renderer. Clicking an element opens its source, and the panel redraws
-// whenever an Inset file is saved.
+// whenever an Inset file is saved. With coverage on, the picture marks what
+// the requirements reached in their last run, which writes the coverage
+// the panel reads, and the panel redraws after each run.
 
 const vscode = require("vscode");
 const { programRoot } = require("./program");
@@ -35,6 +37,8 @@ class DiagramPanel {
     /** The function whose flowchart is shown, or the components when null. */
     this.flowchart = null;
     this.expandAll = false;
+    /** Whether the picture marks what the last run of the requirements reached. */
+    this.coverage = false;
     /** @type {Picture | undefined} */
     this.picture = undefined;
     /** Fires with the IDs the webview drew, once it has drawn a picture. */
@@ -124,6 +128,9 @@ class DiagramPanel {
     } else if (this.expandAll) {
       options.push("--expand-all");
     }
+    if (this.coverage) {
+      options.push("--coverage");
+    }
     /** @type {Picture | null} */
     let picture;
     try {
@@ -154,6 +161,7 @@ class DiagramPanel {
       functions: picture.functions,
       flowchart: this.flowchart,
       expandAll: this.expandAll,
+      coverage: this.coverage,
       clickable: Object.keys(picture.sources),
       problems: picture.problems.map((p) => p.message),
     });
@@ -170,6 +178,7 @@ class DiagramPanel {
       case "view":
         this.flowchart = message.flowchart || null;
         this.expandAll = Boolean(message.expandAll);
+        this.coverage = Boolean(message.coverage);
         return this.refresh();
       case "open":
         return this.open(this.picture?.sources[message.id]);
@@ -192,6 +201,19 @@ class DiagramPanel {
     const viewColumn =
       this.panel?.viewColumn === vscode.ViewColumn.One ? vscode.ViewColumn.Two : vscode.ViewColumn.One;
     await vscode.window.showTextDocument(uri, { viewColumn, selection: range, preserveFocus: true });
+  }
+
+  /** Redraws after the requirements of the program shown have run, when coverage is shown. */
+  ran(root) {
+    if (this.coverage && this.target && programRoot(this.target) === root) {
+      this.refresh();
+    }
+  }
+
+  /** For tests: shows or hides coverage, as the reader's checkbox does. */
+  showCoverage(on) {
+    this.coverage = on;
+    return this.refresh();
   }
 
   /** For tests: clicks the element with an ID in the webview, as a reader would. */
@@ -226,6 +248,7 @@ function html(webview, media) {
 <div class="toolbar">
   <label>Show <select id="view"><option value="">Components</option></select></label>
   <label><input type="checkbox" id="expand-all"> Expand every component</label>
+  <label title="What the requirements reached when they last ran"><input type="checkbox" id="coverage"> Coverage</label>
 </div>
 <p id="message" hidden></p>
 <ul id="problems" hidden></ul>

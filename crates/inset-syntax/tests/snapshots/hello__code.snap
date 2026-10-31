@@ -245,6 +245,7 @@ Module {
                                             span: 436..461,
                                         },
                                         semi: false,
+                                        defensive: None,
                                     },
                                 ],
                                 span: 426..467,

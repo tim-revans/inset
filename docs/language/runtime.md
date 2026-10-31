@@ -13,7 +13,7 @@ How a built Inset program runs: the Rust the compiler emits, the runtime library
 | [`crates/inset-value`](../../crates/inset-value/) | The stored form of values, which the runtime and the test runner share (see [Tables](#tables)) |
 | [`crates/inset-host`](../../crates/inset-host/) | The Wasmtime host: loads a program, resolves its settings and grants, serves its HTTP servers, keeps its tables in SQLite, or puts fakes behind its grants for tests |
 
-A built program is one WebAssembly component. It exports `describe`, which returns its manifest of settings and grants, `start`, and `handle`, which takes one HTTP request through a named `HttpServer` grant. It imports Inset's capabilities and a `report` interface, through which it tells the host about rollbacks.
+A built program is one WebAssembly component. It exports `describe`, which returns its manifest of settings and grants, `start`, and `handle`, which takes one HTTP request through a named `HttpServer` grant. It imports Inset's capabilities and a `report` interface, through which it tells the host about rollbacks and which parts of it have run (see [Coverage](#coverage)).
 
 The host starts one instance of the program and keeps it for as long as the program runs. It calls `handle` for one request at a time, and `handle` returns once every component is idle again.
 
@@ -39,6 +39,7 @@ Each Inset item becomes Rust items in source order, each with its doc comment. E
 - **Routes** become `route`, which matches the request against each route attribute in order, converts the path parameters, and returns the handler to call. A parameter that does not convert means the route does not match, so the request gets `404 Not Found`, as `syntax.md` says. A query parameter or a body that does not convert gets `400 Bad Request`, and so does a missing query parameter that is not an `Option`.
 - **JSON** is read and written by serde and `serde_json`, which the runtime re-exports. A data type deriving `Serialize` or `Deserialize` names the runtime's derives, `::inset_runtime::serde::Serialize`, with `#[serde(crate = "::inset_runtime::serde")]`, and keeps its own `#[serde]` attributes. `Json<T>` is the runtime's: a `Json<T>` body is read with `request.json()`, and a `Json<T>` reply is written with `application/json`. Serde's form never changes the stored form, which `Stored` writes.
 - **The front end**'s files are copied into the generated project's `web/` and compiled into the component with `include_bytes!`, as the app's `FRONT_END`, with each file's content type from its extension. A `GET` that no route of the front end's server takes is answered from them (see [The front end](#the-front-end)).
+- **Coverage** is marked as the code runs: a statement at the start of each function and branch, and `coverage::exit` around the value of each `?` (see [Coverage](#coverage)).
 - `inset_runtime::export!(App)` exports the program.
 
 *Why messages are values:* a closure cannot be written out, and a value can. When a panic traps the instance, the messages waiting in mailboxes go to the fresh instance with the components' state (see [Failures and rollback](#failures-and-rollback)).
@@ -183,6 +184,20 @@ The program serves its front end itself, from the files compiled into it, throug
 *Why the files are compiled in:* the built component is then the whole program, so `inset run`, a requirement test and a deployed copy serve the same page. The program reads no file at run time, and the host grants no file access for the front end.
 
 *Why the content type of a request is not checked:* the host passes a request's method, path and body to the program, but not its headers. A `Json<T>` body is read as JSON whatever `Content-Type` it was sent with. Checking it comes with request headers, which wait for an example that needs them.
+
+## Coverage
+
+The emitted code counts its own coverage. At the start of each function and of each branch, the compiler adds a statement that marks the element reached, by its index in a list of the diagram IDs coverage counts. A `?` passes its value through `coverage::exit`, which marks the error path when the value is an `Err` or `None` and returns it unchanged. A loop is wrapped in a block with a flag that its body sets, so the end of the loop can tell whether the body ran at all. The runtime marks each `failure` arm itself, when it uses the arm's response.
+
+A component's list holds IDs relative to a running component, such as `fn:ship/1/b0`, in `Component::BRANCHES`, and each running component keeps a flag for each, because a component type started twice runs as two components with IDs of their own. The top-level algorithms' elements have full IDs, in `App::BRANCHES`. A mark is a load and a store, made only in the running handler's own component: a component's function that runs while another component's handler is running marks nothing.
+
+When a request returns, when the program has started, and in the panic hook before the instance traps, the runtime reports what has been reached since its last report, through `report.reached`, by full diagram ID. So each element is reported once per instance, and a long-running program soon reports nothing. The host keeps the set, and carries it into the fresh instance it starts after a panic. `inset test` reads it after each case, and credits each element to the requirement whose case reached it.
+
+*Why instrument the Rust rather than trace inside Wasmtime:* the compiler knows which Rust it emitted for each branch of the flowchart, and Wasmtime does not. Tracing would need a map from WebAssembly code back through rustc's optimisations to Inset's branches, which no tool keeps. Marking the branches in the source makes the IDs exact, and a test checks that the compiler marks exactly the elements the diagram draws, by the same IDs.
+
+*Why always, and not only in tests:* the program `inset test` runs is the program `inset run` serves, so a test never runs a different build from the one deployed. A mark costs a load and a store, and reports stop once everything that runs has run.
+
+*Why a flag, not a count:* coverage asks only whether a requirement reached an element. A count would cost the same, and would say how often a test happened to run a loop, which no review asks.
 
 ## Starting a program
 

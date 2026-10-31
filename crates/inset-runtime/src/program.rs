@@ -6,6 +6,7 @@ use std::rc::Rc;
 use std::sync::Once;
 
 use crate::actor::{self, Running, Scope};
+use crate::coverage;
 use crate::executor;
 use crate::failure::{Failure, Response, Stopped};
 use crate::http::{HttpServer, Reply, Request};
@@ -20,6 +21,10 @@ pub trait App {
 
     /// The app's front end, if it has one.
     const FRONT_END: Option<FrontEnd> = None;
+
+    /// The elements coverage counts in the top-level algorithms, by their
+    /// full IDs, which [`crate::coverage::algorithm`] marks by index.
+    const BRANCHES: &'static [&'static str] = &[];
 
     /// The app's `start` statements.
     fn start(scope: &Scope, grants: &mut Grants) -> Result<(), Stopped>;
@@ -158,6 +163,13 @@ pub(crate) fn start<A: App>(restore: Option<Vec<u8>>) -> Result<(), Stopped> {
         }));
     });
     PROGRAM.with_borrow_mut(|p| p.front_end = A::FRONT_END);
+    coverage::start(A::BRANCHES);
+    let started = start_app::<A>(restore);
+    report_reached();
+    started
+}
+
+fn start_app<A: App>(restore: Option<Vec<u8>>) -> Result<(), Stopped> {
     A::start(&Scope::root(A::NAME), &mut Grants(()))?;
     if let Some(state) = restore {
         let Recovery {
@@ -232,6 +244,27 @@ fn restore_failed(message: String) -> Stopped {
 
 /// Delivers a request, and runs until the program is idle again.
 pub(crate) fn handle(server: &str, request: Request) -> Result<Reply, Stopped> {
+    let handled = handle_request(server, request);
+    report_reached();
+    handled
+}
+
+/// Tells the host which elements have been reached since it was last told.
+fn report_reached() {
+    let Ok(actors) = PROGRAM.with(|p| p.try_borrow().map(|p| p.actors.clone())) else {
+        return;
+    };
+    let mut reached = Vec::new();
+    for actor in actors {
+        actor.take_reached(&mut reached);
+    }
+    coverage::take_algorithms(&mut reached);
+    if !reached.is_empty() {
+        report::reached(&reached);
+    }
+}
+
+fn handle_request(server: &str, request: Request) -> Result<Reply, Stopped> {
     if let Some(stopped) = stopped() {
         return Err(stopped);
     }
@@ -290,6 +323,8 @@ fn panic_hook(info: &std::panic::PanicHookInfo<'_>) {
     });
     let component = panicked.as_ref().map_or("start", |a| a.id()).to_string();
     let recovery = panicked.and_then(|panicked| recovery(&actors, &*panicked, &failure));
+    // What ran before the panic, including the `failure` arms that answer it.
+    report_reached();
     report::trapping(&component, &failure.to_string(), &message, recovery);
 }
 
@@ -355,6 +390,10 @@ mod report {
         report::restarted(component, failure, message, restarted);
     }
 
+    pub(super) fn reached(elements: &[String]) {
+        report::reached(elements);
+    }
+
     pub(super) fn trapping(
         component: &str,
         failure: &str,
@@ -372,6 +411,11 @@ pub(crate) mod report {
 
     thread_local! {
         pub(crate) static REPORTS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+        pub(crate) static REACHED: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    }
+
+    pub(super) fn reached(elements: &[String]) {
+        REACHED.with_borrow_mut(|r| r.extend_from_slice(elements));
     }
 
     pub(super) fn rolled_back(component: &str, failure: &str, message: &str) {

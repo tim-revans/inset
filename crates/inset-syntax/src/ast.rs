@@ -116,6 +116,17 @@ pub enum AttributeKind {
     Status(Ident),
     /// `#[serde(name = "value", ...)]` on a data type, field or variant.
     Serde(Vec<SerdeArg>),
+    /// `#[defensive("reason")]`, which goes on a statement, a `match` arm
+    /// or a `failure` arm rather than an item.
+    Defensive(StrLit),
+}
+
+/// `#[defensive("reason")]`: code no requirement can reach by design, which
+/// coverage shows as excused rather than uncovered.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Defensive {
+    pub reason: StrLit,
+    pub span: Span,
 }
 
 /// `name = "value"`, or a bare `name`, in `#[serde(...)]`.
@@ -306,6 +317,7 @@ pub struct FailureArm {
     pub docs: Vec<Doc>,
     pub condition: FailureCondition,
     pub response: FailureResponse,
+    pub defensive: Option<Defensive>,
     pub span: Span,
 }
 
@@ -421,11 +433,25 @@ pub enum Stmt {
         ty: Option<Type>,
         init: Option<Expr>,
         else_block: Option<Block>,
+        defensive: Option<Defensive>,
         span: Span,
     },
     /// An expression, with or without its `;`. A block's last statement
     /// without `;` is its value.
-    Expr { expr: Expr, semi: bool },
+    Expr {
+        expr: Expr,
+        semi: bool,
+        defensive: Option<Defensive>,
+    },
+}
+
+impl Stmt {
+    /// The `#[defensive]` written above the statement, if any.
+    pub fn defensive(&self) -> Option<&Defensive> {
+        match self {
+            Stmt::Let { defensive, .. } | Stmt::Expr { defensive, .. } => defensive.as_ref(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -595,6 +621,7 @@ pub struct MatchArm {
     pub pattern: Pattern,
     pub guard: Option<Expr>,
     pub body: Expr,
+    pub defensive: Option<Defensive>,
     pub span: Span,
 }
 

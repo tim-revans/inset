@@ -748,7 +748,7 @@ requirement "The gross price is never below the net price"
 
 ## Requirements and coverage
 
-**Status:** The layout and coverage rules are Used. `#[defensive]` is Draft.
+**Status:** The layout and coverage rules are Used. `#[defensive]` is Draft: the compiler implements it and a test program uses it, but no example needs one yet.
 
 A program's directory holds its code in `src/` and its requirements in `requirements/`. Together they are one program. The compiler rejects a `*.req.inset` file in `src/` and a `*.inset` code file in `requirements/`.
 
@@ -758,7 +758,10 @@ A program's directory holds its code in `src/` and its requirements in `requirem
 
 - Coverage counts branches, not statements. A branch is each way out of an `if`, `else`, `match` arm or `let ... else`, the error path of each `?`, and running a loop's body or not.
 - Each arm of a `failure` block is a branch too. A requirement reaches it by making the failure happen, as the Stock tracker's `and items fails` reaches both of its arms.
+- Entering a function counts too, so a function with no branches, such as the Stock tracker's `pending_reorders`, is uncovered when no requirement calls it.
 - The branches are the edges of the flowcharts, and the overlay colours those edges, so what counts as covered is exactly what the reviewer sees.
+- A requirement with an examples table covers what any of its rows reached. A requirement that fails still covers what it reached: its sentence says the code is wanted, and the failure is reported anyway.
+- `inset test --coverage` writes which requirements reached each branch, and lists what none reached. `inset diagram --coverage` draws it (see [`diagrams.md`](diagrams.md#coverage)).
 
 *Why branches:* an `if` with no `else` can have every statement run without the case where its condition is false ever being tested. Statement coverage would call it covered, and the missing requirement would go unseen.
 
@@ -766,7 +769,9 @@ A program's directory holds its code in `src/` and its requirements in `requirem
 
 - on a `match` arm, or on a `failure` arm;
 - as the first line of the block of an `if` or `else` branch, or of a `let ... else`, marking that branch;
-- on a statement, marking the branches inside it, such as the error path of a `?`.
+- on a statement with a `?`, marking the `?`'s error path.
+
+A mark anywhere else excuses nothing, so the checker refuses it: on a statement that is not the first line of a branch and has no `?`, and inside a closure, whose branches coverage does not count.
 
 ```inset
 let Some(net) = parse_price(&fields[2]) else {
@@ -775,8 +780,8 @@ let Some(net) = parse_price(&fields[2]) else {
 };
 ```
 
-- The overlay shows defensive code as excused, not as covered, with its reason, so the reviewer judges each excuse.
-- Defensive code that a requirement does reach is reported, because the reason given for it is then wrong.
+- The overlay shows defensive code as excused, not as covered, with its reason, so the reviewer judges each excuse. Everything inside an excused branch is excused with it, because nothing can reach it without reaching the branch.
+- Defensive code that a requirement does reach fails `inset test`, which reports the code, its reason and the requirements that reached it, because the reason given for it is then wrong.
 - A whole function or component cannot be marked. Code that no requirement can reach at all is not defensive but unused, and should be deleted.
 
 *Why not whole functions:* a mark on a function would excuse everything in it at once, which is the easiest way to hide behaviour nobody asked for. Marking single branches keeps each excuse small enough to judge.

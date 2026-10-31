@@ -1,0 +1,53 @@
+// Code marked `#[defensive]` in each place it may go. One mark is wrong: a
+// requirement reaches it, which `inset test` reports. `tests/test.rs` runs it.
+
+/// A price list a shop keeps, in pence.
+app Prices {
+    grant http: HttpServer { port: 8080 };
+    grant prices: Table<String, u32> { file: "prices.db", name: "prices" };
+    start Shop { http: move http, prices: move prices };
+}
+
+/// Why a price was not stored.
+#[derive(Debug)]
+enum PriceError {
+    /// A price of nothing.
+    #[status(BadRequest)]
+    Free,
+}
+
+/// Stores and looks up prices.
+component Shop {
+    http: HttpServer,
+    prices: Table<String, u32>,
+
+    failure {
+        /// Only the request that hit the database error fails.
+        #[defensive("no requirement makes the prices table fail")]
+        Capability(prices) => rollback,
+    }
+
+    /// Stores a price, replacing any earlier one.
+    #[put("/prices/{sku}", via = http, body = pence)]
+    async fn set(&mut self, sku: String, pence: u32) -> Result<String, PriceError> {
+        if pence == 0 {
+            #[defensive("the shop's form never sends a price of nothing")]
+            return Err(PriceError::Free);
+        }
+        self.prices.insert(sku, pence).await;
+        Ok(pence.to_string())
+    }
+
+    /// The price of an item.
+    #[get("/prices/{sku}", via = http)]
+    async fn price(&self, sku: String) -> Option<String> {
+        #[defensive("the shop asks only for items it stocks")]
+        let pence = self.prices.get(&sku).await?;
+        let text = match pence {
+            #[defensive("a price of nothing is never stored")]
+            0 => "free".to_string(),
+            p => p.to_string(),
+        };
+        Some(text)
+    }
+}

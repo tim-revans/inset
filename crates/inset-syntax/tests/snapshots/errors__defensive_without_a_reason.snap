@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "component C {\n    fn f(n: u32) -> u32 {\n        match n {\n            #[defensive]\n            0 => 1,\n            n => n,\n        }\n    }\n}\n"
+---
+Error: `#[defensive]` needs a reason
+   ╭─[ main.inset:4:15 ]
+   │
+ 4 │             #[defensive]
+   │               ────┬────  
+   │                   ╰────── the reason goes after this
+   │ 
+   │ Help: say why no requirement can reach the code, such as `#[defensive("parse_row has already checked every price")]`
+───╯

@@ -115,6 +115,9 @@ struct Emitter<'a> {
     emit_edges: Vec<Edge>,
     /// Where each element is, by program-wide span.
     sources: BTreeMap<String, Span>,
+    /// The reason of the `#[defensive]` on the statement being drawn,
+    /// which excuses its error path.
+    excused: Option<String>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -141,6 +144,7 @@ impl<'a> Emitter<'a> {
             message_edges: Vec::new(),
             emit_edges: Vec::new(),
             sources: BTreeMap::new(),
+            excused: None,
             diagnostics: Vec::new(),
         }
     }
@@ -643,7 +647,7 @@ impl<'a> Emitter<'a> {
                 FailureResponse::Restart => Response::Restart,
             },
             reason: doc(&arm.docs).unwrap_or_default(),
-            defensive: None,
+            defensive: arm.defensive.as_ref().map(|d| d.reason.value.clone()),
         }
     }
 

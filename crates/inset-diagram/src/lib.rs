@@ -25,6 +25,7 @@
 //! with fresh output. After a deliberate change, run them with `INSET_BLESS=1`
 //! to rewrite those files, and review the difference before committing it.
 
+pub mod coverage;
 pub mod model;
 pub mod view;
 
@@ -67,10 +68,19 @@ pub fn to_json(diagram: &Diagram) -> String {
     out
 }
 
-/// Draws one view of the diagram as SVG.
+/// Draws one view of the diagram as SVG. A view with `coverage` needs the
+/// diagram's `coverage`.
 pub fn render(diagram: &Diagram, view: &View) -> Result<String, String> {
+    let statuses = match (&diagram.coverage, view.coverage) {
+        (_, false) => None,
+        (Some(reached), true) => Some(coverage::statuses(diagram, reached)),
+        (None, true) => {
+            return Err("there is no coverage to draw: run `inset test --coverage` first".into());
+        }
+    };
+    let statuses = statuses.as_ref();
     match &view.flowchart {
-        None => Ok(components::render(diagram, view)),
+        None => Ok(components::render(diagram, view, statuses)),
         Some(id) => {
             let index = validate::Index::new(diagram);
             let function = index
@@ -87,7 +97,7 @@ pub fn render(diagram: &Diagram, view: &View) -> Result<String, String> {
                 .get(id.as_str())
                 .and_then(|owner| index.components.get(owner))
                 .map(|component| component.ty.as_str());
-            Ok(flowchart::render(function, owner, view))
+            Ok(flowchart::render(function, owner, view, statuses))
         }
     }
 }

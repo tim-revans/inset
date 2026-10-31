@@ -19,11 +19,14 @@ impl<'a> Checker<'a> {
         for decl in &self.names.components {
             let mut errors = Vec::new();
             if let Some(attr) = decl.item.attrs.first() {
-                errors.push(Diagnostic::new(
-                    "a component takes no attributes",
-                    attr.span,
-                    "remove this attribute",
-                ));
+                errors.push(match attr.kind {
+                    AttributeKind::Defensive(_) => whole_defensive(attr.span, "component"),
+                    _ => Diagnostic::new(
+                        "a component takes no attributes",
+                        attr.span,
+                        "remove this attribute",
+                    ),
+                });
             }
             let resolver = Resolver {
                 names: &self.names,
@@ -169,6 +172,21 @@ fn check_field_type(decl: &FieldDecl, ty: &Ty, diagnostics: &mut Vec<Diagnostic>
     }
 }
 
+/// `#[defensive]` on a whole function or component, which would excuse
+/// everything in it at once.
+fn whole_defensive(span: Span, what: &str) -> Diagnostic {
+    Diagnostic::new(
+        format!("a whole {what} cannot be marked defensive"),
+        span,
+        format!("this would excuse every branch in the {what}"),
+    )
+    .with_help(
+        "mark each branch no requirement can reach: a `match` arm, a `failure` arm, the \
+         first line of an `if`, `else` or `let ... else` block, or a statement with `?`. \
+         Code no requirement can reach at all is unused, and should be deleted",
+    )
+}
+
 fn signature<'a>(
     function: &'a Function,
     module: usize,
@@ -187,6 +205,9 @@ fn signature<'a>(
                 attr.span,
                 "a function is not handed down",
             )),
+            AttributeKind::Defensive(_) => {
+                diagnostics.push(whole_defensive(attr.span, "function"));
+            }
             AttributeKind::Derive(_) | AttributeKind::Status(_) | AttributeKind::Serde(_) => {
                 diagnostics.push(Diagnostic::new(
                     "this attribute does not go on a function",

@@ -1,6 +1,7 @@
 // Runs inside VS Code, started by `run.mjs` on the repository. Opens each
 // panel and does what a reviewer would: clicks `Greeter` in Hello HTTP's
-// diagram, and runs every requirement from the Test Explorer.
+// diagram, runs every requirement from the Test Explorer, and then turns on
+// the diagram's coverage.
 
 const assert = require("node:assert/strict");
 const { execFileSync } = require("node:child_process");
@@ -109,6 +110,23 @@ async function testExplorer(api) {
 }
 
 /**
+ * After the run, the diagram panel's coverage shows what the requirements
+ * reached: everything in Hello HTTP, as `inset diagram --coverage` draws it.
+ */
+async function coverage(api, example) {
+  await api.diagram.showCoverage(true);
+  const theme = vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Light ? "light" : "dark";
+  const drawn = execFileSync(process.env.INSET_COMMAND, ["diagram", example, "--theme", theme, "--coverage"], {
+    encoding: "utf8",
+  });
+  assert.equal(api.diagram.svg, drawn);
+  assert.match(drawn, /class="cov-covered"/);
+  // Nothing is shaded as not reached: a cross shows only in the key.
+  assert.doesNotMatch(drawn, /class="band"/);
+  await api.diagram.showCoverage(false);
+}
+
+/**
  * The requirements panel lists the sentence as passed, and every Stock
  * tracker requirement too, with each row of its examples table under it.
  */
@@ -125,7 +143,7 @@ async function requirementsPanel(api) {
   const stock = tree.getChildren().find((p) => p.label === "examples/stock-tracker");
   assert.equal(tree.getTreeItem(stock).description, "");
   const stockRequirements = tree.getChildren(stock);
-  assert.equal(stockRequirements.length, 12);
+  assert.equal(stockRequirements.length, 13);
   for (const requirement of stockRequirements) {
     assert.equal(tree.getTreeItem(requirement).description, "passed", requirement.label);
   }
@@ -143,7 +161,7 @@ async function requirementsPanel(api) {
 exports.run = async function () {
   const example = path.join(process.env.INSET_REPO, "examples", "hello-http");
   const api = await vscode.extensions.getExtension("inset.inset").activate();
-  for (const test of [diagramPanel, testExplorer, requirementsPanel]) {
+  for (const test of [diagramPanel, testExplorer, coverage, requirementsPanel]) {
     console.log(`integration: ${test.name}`);
     await test(api, example);
   }

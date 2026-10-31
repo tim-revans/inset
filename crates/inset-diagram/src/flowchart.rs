@@ -7,6 +7,9 @@
 //! entry at the top and, unless every path through it returns, an exit at the
 //! bottom, both at its centre line.
 
+use std::collections::BTreeMap;
+
+use crate::coverage::{self, Status};
 use crate::model::*;
 use crate::svg::{Canvas, LH, Seg, chars, width, wrap};
 use crate::view::{Hide, View};
@@ -28,6 +31,8 @@ enum Item {
         rx: f64,
         class: &'static str,
         id: Option<String>,
+        /// The element whose coverage colours the outline, if not `id`.
+        of: Option<String>,
     },
     Polygon {
         points: Vec<(f64, f64)>,
@@ -38,6 +43,9 @@ enum Item {
         x: f64,
         y: f64,
         segs: Vec<Seg>,
+        /// The element whose coverage colours the text, such as the branch
+        /// a label names.
+        of: Option<String>,
     },
     Path {
         points: Vec<(f64, f64)>,
@@ -106,6 +114,17 @@ fn label(x: f64, y: f64, text: &str, class: &'static str) -> Item {
         x,
         y,
         segs: vec![Seg::new(text, class)],
+        of: None,
+    }
+}
+
+/// The label of a branch or an exit, which coverage colours as the branch.
+fn branch_text(x: f64, y: f64, text: &str, id: &str) -> Item {
+    Item::Text {
+        x,
+        y,
+        segs: vec![Seg::new(text, "dim")],
+        of: Some(id.to_string()),
     }
 }
 
@@ -141,6 +160,7 @@ fn node(text: &str, class: &'static str, rx: f64, id: Option<&str>) -> Block {
         rx,
         class,
         id: id.map(String::from),
+        of: None,
     }];
     text_items(&mut items, 10.0, 4.0, &lines, "");
     Block {
@@ -236,7 +256,9 @@ fn step(step: &Step) -> Block {
                 block
                     .items
                     .push(path(vec![(block.w, y), (x, y)], true, Some(&exit.id)));
-                block.items.push(label(block.w + 6.0, y - 4.0, "?", "dim"));
+                block
+                    .items
+                    .push(branch_text(block.w + 6.0, y - 4.0, "?", &exit.id));
                 let out_w = out.w;
                 block.put(out, x, dy);
                 block.w = x + out_w;
@@ -321,7 +343,8 @@ fn decision(id: &str, text: &str, branches: &[Branch]) -> Block {
             !block.items.is_empty(),
             Some(&branch.id),
         ));
-        out.items.push(label(col_cx + 7.0, top - 6.0, &text, "dim"));
+        out.items
+            .push(branch_text(col_cx + 7.0, top - 6.0, &text, &branch.id));
         bottom = bottom.max(top + block.h);
         if block.falls {
             merge.push((col_cx, top + block.h, branch.id.clone()));
@@ -365,8 +388,12 @@ fn repeat(id: &str, text: &str, body: &Branch, skip: &Branch) -> Block {
     let top = hex_h + BRANCH_GAP;
     out.items
         .push(path(vec![(cx, hex_h), (cx, top)], true, Some(&body.id)));
-    out.items
-        .push(label(cx + 4.0, top - 8.0, &branch_label(body), "dim"));
+    out.items.push(branch_text(
+        cx + 4.0,
+        top - 8.0,
+        &branch_label(body),
+        &body.id,
+    ));
     let inner_h = inner.h;
     let inner_falls = inner.falls;
     let dx = cx - inner.cx;
@@ -396,8 +423,12 @@ fn repeat(id: &str, text: &str, body: &Branch, skip: &Branch) -> Block {
         false,
         Some(&skip.id),
     ));
-    out.items
-        .push(label(right_x + 6.0, hex_h / 2.0 + 16.0, &skip_text, "dim"));
+    out.items.push(branch_text(
+        right_x + 6.0,
+        hex_h / 2.0 + 16.0,
+        &skip_text,
+        &skip.id,
+    ));
     out.h = exit_y;
     out
 }
@@ -411,6 +442,7 @@ fn bar(x: f64, y: f64, w: f64, id: Option<&str>) -> Item {
         rx: 1.0,
         class: "bar",
         id: id.map(String::from),
+        of: None,
     }
 }
 
@@ -440,8 +472,12 @@ fn fork_for(id: &str, text: &str, body: &Branch, skip: &Branch) -> Block {
         true,
         Some(&body.id),
     ));
-    out.items
-        .push(label(cx + 4.0, top - 8.0, &branch_label(body), "dim"));
+    out.items.push(branch_text(
+        cx + 4.0,
+        top - 8.0,
+        &branch_label(body),
+        &body.id,
+    ));
     let (inner_h, inner_falls) = (inner.h, inner.falls);
     let dx = cx - inner.cx;
     out.put(inner, dx, top);
@@ -462,8 +498,12 @@ fn fork_for(id: &str, text: &str, body: &Branch, skip: &Branch) -> Block {
         true,
         Some(&skip.id),
     ));
-    out.items
-        .push(label(right_x + 6.0, bar_y + 18.0, &skip_text, "dim"));
+    out.items.push(branch_text(
+        right_x + 6.0,
+        bar_y + 18.0,
+        &skip_text,
+        &skip.id,
+    ));
     out.h = join_y + 5.0;
     out
 }
@@ -492,7 +532,8 @@ fn fork(id: &str, branches: &[Branch]) -> Block {
             true,
             Some(&branch.id),
         ));
-        out.items.push(label(col_cx + 4.0, top - 8.0, &text, "dim"));
+        out.items
+            .push(branch_text(col_cx + 4.0, top - 8.0, &text, &branch.id));
         if block.falls {
             out.items.push(path(
                 vec![(col_cx, top + block.h), (col_cx, join_y)],
@@ -509,7 +550,12 @@ fn fork(id: &str, branches: &[Branch]) -> Block {
     out
 }
 
-pub(crate) fn render(function: &Function, owner: Option<&str>, view: &View) -> String {
+pub(crate) fn render(
+    function: &Function,
+    owner: Option<&str>,
+    view: &View,
+    statuses: Option<&BTreeMap<Id, Status>>,
+) -> String {
     let mut canvas = Canvas::new(view);
     let title = match owner {
         Some(owner) => format!("{owner}::{}", function.name),
@@ -549,11 +595,13 @@ pub(crate) fn render(function: &Function, owner: Option<&str>, view: &View) -> S
                     rx: 12.0,
                     class: "term",
                     id: None,
+                    of: Some(function.id.clone()),
                 },
                 Item::Text {
                     x: 12.0,
                     y: 16.0,
                     segs,
+                    of: None,
                 },
             ],
         }
@@ -567,6 +615,11 @@ pub(crate) fn render(function: &Function, owner: Option<&str>, view: &View) -> S
         chart = sequence(vec![chart, end]);
     }
 
+    // An element's coverage, when the view shows it.
+    let status = |id: Option<&String>| {
+        let id = id?;
+        statuses?.get(id).copied()
+    };
     for mut item in chart.items {
         item.shift(MARGIN, y);
         match item {
@@ -578,14 +631,37 @@ pub(crate) fn render(function: &Function, owner: Option<&str>, view: &View) -> S
                 rx,
                 class,
                 id,
-            } => canvas.rect((x, y, w, h), rx, class, id.as_deref()),
+                of,
+            } => {
+                let class = match status(of.as_ref().or(id.as_ref())) {
+                    Some(status) => format!("{class} {}", status.class()),
+                    None => class.to_string(),
+                };
+                canvas.rect((x, y, w, h), rx, &class, id.as_deref());
+            }
             Item::Polygon { points, class, id } => canvas.polygon(&points, class, id.as_deref()),
-            Item::Text { x, y, segs } => canvas.text(x, y, &segs),
+            Item::Text { x, y, mut segs, of } => {
+                if let Some(status) = status(of.as_ref()) {
+                    for seg in &mut segs {
+                        seg.class = status.class();
+                    }
+                }
+                canvas.text(x, y, &segs);
+            }
             Item::Path { points, arrow, id } => {
-                canvas.path(&points, "edge", arrow.then_some("arrow"), id.as_deref())
+                let class = match status(id.as_ref()) {
+                    Some(status) => format!("edge {}", status.class()),
+                    None => "edge".to_string(),
+                };
+                canvas.path(&points, &class, arrow.then_some("arrow"), id.as_deref());
             }
         }
     }
-    let w = (MARGIN + chart.w + MARGIN).max(MARGIN + text_w + MARGIN);
-    canvas.finish(w, y + chart.h + MARGIN)
+    let mut w = (MARGIN + chart.w + MARGIN).max(MARGIN + text_w + MARGIN);
+    let mut h = y + chart.h + MARGIN;
+    if statuses.is_some() {
+        h += coverage::legend(&mut canvas, MARGIN, h - 8.0);
+        w = w.max(MARGIN + coverage::legend_w() + MARGIN);
+    }
+    canvas.finish(w, h)
 }

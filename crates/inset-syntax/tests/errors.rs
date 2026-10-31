@@ -424,3 +424,19 @@ fn placeholder_without_examples() {
 "#,
     );
 }
+
+#[test]
+fn defensive_without_a_reason() {
+    code(
+        "defensive_without_a_reason",
+        "component C {\n    fn f(n: u32) -> u32 {\n        match n {\n            #[defensive]\n            0 => 1,\n            n => n,\n        }\n    }\n}\n",
+    );
+}
+
+#[test]
+fn another_attribute_on_a_statement() {
+    code(
+        "another_attribute_on_a_statement",
+        "component C {\n    fn f(n: u32) -> u32 {\n        #[message]\n        n\n    }\n}\n",
+    );
+}

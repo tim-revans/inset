@@ -31,7 +31,7 @@
 //! uncommitted writes, starts a fresh instance from that state and answers
 //! the request with `500 Internal Server Error`. Otherwise the program stops.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -155,12 +155,12 @@ impl Program {
             }
             grants.insert(grant.name.clone(), granted);
         }
-        let (store, instance) =
-            self.instantiate(&tables, Vec::new(), None)
-                .map_err(|e| match e {
-                    Started::Failed(e) => e,
-                    Started::Stopped(stopped) => self.refused(&stopped, &grants),
-                })?;
+        let (store, instance) = self
+            .instantiate(&tables, Vec::new(), BTreeSet::new(), None)
+            .map_err(|e| match e {
+                Started::Failed(e) => e,
+                Started::Stopped(stopped) => self.refused(&stopped, &grants),
+            })?;
         Ok(Running {
             program: self,
             store,
@@ -175,10 +175,12 @@ impl Program {
         &self,
         tables: &BTreeMap<String, Arc<Mutex<Table>>>,
         reports: Vec<Report>,
+        reached: BTreeSet<String>,
         restore: Option<&[u8]>,
     ) -> Result<(Store<State>, bindings::Program), Started> {
         let mut state = State::new(tables.clone());
         state.reports = reports;
+        state.reached = reached;
         let mut store = Store::new(&self.engine, state);
         let failed = |e: wasmtime::Error| Started::Failed(e.into());
         let instance = self.pre.instantiate(&mut store).map_err(failed)?;
@@ -378,6 +380,13 @@ impl Running<'_> {
         &self.store.data().reports
     }
 
+    /// The diagram elements the program has reached since it started, by
+    /// ID: functions entered, branches taken, error paths of `?` and arms of
+    /// `failure` blocks. A fresh instance started after a panic adds to them.
+    pub fn reached(&self) -> &BTreeSet<String> {
+        &self.store.data().reached
+    }
+
     /// Delivers a request through the `HttpServer` grant `server`, and
     /// returns once the program is idle again.
     pub fn request(&mut self, server: &str, request: &Request) -> Result<Response, Stopped> {
@@ -438,9 +447,10 @@ impl Running<'_> {
             message: trapping.message.clone(),
             restarted: recovery.restarted,
         });
+        let reached = std::mem::take(&mut state.reached);
         match self
             .program
-            .instantiate(&self.tables, reports, Some(&recovery.state))
+            .instantiate(&self.tables, reports, reached, Some(&recovery.state))
         {
             Ok((store, instance)) => {
                 self.store = store;
@@ -530,6 +540,7 @@ struct State {
     resources: ResourceTable,
     tables: BTreeMap<String, Arc<Mutex<Table>>>,
     reports: Vec<Report>,
+    reached: BTreeSet<String>,
     trapping: Option<Trapping>,
 }
 
@@ -549,6 +560,7 @@ impl State {
             resources: ResourceTable::new(),
             tables,
             reports: Vec::new(),
+            reached: BTreeSet::new(),
             trapping: None,
         }
     }
@@ -682,6 +694,11 @@ impl report::Host for State {
             message,
             restarted: Some(restarted),
         });
+        Ok(())
+    }
+
+    fn reached(&mut self, elements: Vec<String>) -> wasmtime::Result<()> {
+        self.reached.extend(elements);
         Ok(())
     }
 

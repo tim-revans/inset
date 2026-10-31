@@ -1,0 +1,17 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:16:9-16:50
+`#[defensive]` marks no branch here
+this statement is not a branch, and has no `?`
+help: put it on the first line of the `if`, `else` or `let ... else` block that no requirement can reach, on a `match` arm, or on a statement whose `?` no requirement can make fail
+
+src/main.inset:19:13-19:39
+`#[defensive]` cannot go inside a closure
+coverage does not count the branches of a closure
+help: mark the step that calls the closure instead, if it has a `?`
+
+src/main.inset:30:5-30:33
+a whole function cannot be marked defensive
+this would excuse every branch in the function
+help: mark each branch no requirement can reach: a `match` arm, a `failure` arm, the first line of an `if`, `else` or `let ... else` block, or a statement with `?`. Code no requirement can reach at all is unused, and should be deleted

@@ -8,6 +8,15 @@
 //! Colour only repeats what the shape already says, so a reader who cannot
 //! tell two colours apart loses nothing. `docs/language/diagrams.md` lists the
 //! roles.
+//!
+//! The coverage colours were measured the same way, against the four role
+//! colours and each other, after searching OKLCH for a green, a yellow and a
+//! grey that pass. The closest pairs are in the light palette: uncovered and
+//! capability differ by 15.5 with normal vision and 8.6 under protanopia,
+//! and uncovered and failure by 9.2 under deuteranopia. The lowest text
+//! contrast on a box is light uncovered's, 4.5:1. The shapes carry the same
+//! meaning: an uncovered branch is drawn thick, an excused
+//! one dotted, and each row coverage counts gets a mark, `✓`, `✗`, `~` or `!`.
 
 /// Which palette a picture uses. Following the reader's setting is the default.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -35,7 +44,7 @@ impl std::str::FromStr for Theme {
 }
 
 /// Each token's name, and its value in the dark and the light palette.
-const TOKENS: [(&str, &str, &str); 17] = [
+const TOKENS: [(&str, &str, &str); 20] = [
     // The background, the app box and component boxes.
     ("ground", "#0c1015", "#fdfdfd"),
     ("app-fill", "#13181d", "#f2f6fa"),
@@ -57,6 +66,10 @@ const TOKENS: [(&str, &str, &str); 17] = [
     ("term-fill", "#1a273a", "#e9f1fe"),
     ("node-fill", "#161c23", "#ffffff"),
     ("bar", "#e7ecf0", "#182029"),
+    // Coverage: reached, not reached, and excused by `#[defensive]`.
+    ("covered", "#2fd4b4", "#0b7d74"),
+    ("uncovered", "#e8e337", "#8f6b09"),
+    ("excused", "#7f8a7a", "#4a4858"),
 ];
 
 /// The rules, written against the tokens and scoped to the diagram, so an
@@ -85,11 +98,25 @@ const RULES: &str = r#".inset-diagram text { font-family: ui-monospace, SFMono-R
 .inset-diagram .arrow-cap { fill: var(--capability); }
 "#;
 
-/// The `<style>` element for a theme. The rules name tokens as `var(--name)`,
-/// and each is replaced by its value rather than left as a CSS custom
-/// property, because some SVG renderers, such as image converters, do not
-/// support custom properties.
-pub(crate) fn style(theme: Theme) -> String {
+/// The rules for coverage, which only a picture that shows it carries.
+const COVERAGE_RULES: &str = r#".inset-diagram .cov-covered { stroke: var(--covered); }
+.inset-diagram .cov-uncovered { stroke: var(--uncovered); stroke-width: 3; }
+.inset-diagram .cov-excused { stroke: var(--excused); stroke-dasharray: 2 3; }
+.inset-diagram .cov-contradicted { stroke: var(--uncovered); stroke-width: 3; stroke-dasharray: 2 3; }
+.inset-diagram text.cov-covered { fill: var(--covered); stroke: none; }
+.inset-diagram text.cov-uncovered { fill: var(--uncovered); stroke: none; font-weight: bold; }
+.inset-diagram text.cov-excused { fill: var(--excused); stroke: none; }
+.inset-diagram text.cov-contradicted { fill: var(--uncovered); stroke: none; font-weight: bold; }
+.inset-diagram .band { fill: var(--uncovered); fill-opacity: 0.18; stroke: none; }
+"#;
+
+/// The `<style>` element for a theme, with the coverage rules if the
+/// picture shows coverage. The rules name tokens as `var(--name)`, and each
+/// is replaced by its value rather than left as a CSS custom property,
+/// because some SVG renderers, such as image converters, do not support
+/// custom properties.
+pub(crate) fn style(theme: Theme, coverage: bool) -> String {
+    let rules = |palette| rules(palette, coverage);
     match theme {
         Theme::Dark => format!("<style>\n{}</style>\n", rules(Theme::Dark)),
         Theme::Light => format!("<style>\n{}</style>\n", rules(Theme::Light)),
@@ -102,8 +129,11 @@ pub(crate) fn style(theme: Theme) -> String {
 }
 
 /// The rules with one palette's values in place of the tokens.
-fn rules(palette: Theme) -> String {
+fn rules(palette: Theme, coverage: bool) -> String {
     let mut rules = RULES.to_string();
+    if coverage {
+        rules.push_str(COVERAGE_RULES);
+    }
     for (name, dark, light) in TOKENS {
         let value = if palette == Theme::Light { light } else { dark };
         rules = rules.replace(&format!("var(--{name})"), value);

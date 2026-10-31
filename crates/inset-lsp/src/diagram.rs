@@ -9,7 +9,9 @@
 //! picture draws, by the ID in its `data-id` attribute. A program that does
 //! not check, or has a part that cannot be drawn yet, gets its problems
 //! instead, each with its location. A document outside any program gets
-//! `null`.
+//! `null`. With `--coverage`, the picture marks what the requirements
+//! reached, as the last `inset test --coverage` wrote it, and with no
+//! coverage to show, the problem says how to get it.
 //!
 //! It is answered here rather than by running `inset diagram`, so the
 //! picture comes from the text being edited, by the same compiler that
@@ -91,7 +93,14 @@ impl Server<'_> {
                 }));
             }
         };
-        let diagram = &emitted.diagram;
+        let mut diagram = emitted.diagram.clone();
+        // Coverage comes from the last `inset test --coverage`, which wrote it
+        // beside the program's build.
+        let coverage = match view.coverage {
+            true => inset_diagram::coverage::load(&mut diagram, &root).err(),
+            false => None,
+        };
+        let diagram = &diagram;
         let mut picture = Picture {
             app: Some(diagram.app.name.clone()),
             functions: functions(diagram),
@@ -102,6 +111,13 @@ impl Server<'_> {
                 .collect(),
             ..Picture::default()
         };
+        if let Some(message) = coverage {
+            picture.problems.push(Problem {
+                message,
+                location: None,
+            });
+            return Ok(Some(picture));
+        }
         match render(diagram, &view) {
             Ok(svg) => picture.svg = Some(svg),
             Err(message) => picture.problems.push(Problem {

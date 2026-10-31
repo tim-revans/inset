@@ -1,0 +1,33 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&json)
+---
+{
+  "app": "Prices",
+  "passed": 2,
+  "failed": 0,
+  "requirements": [
+    {
+      "sentence": "A stored price is the item's price",
+      "file": "requirements/prices.req.inset",
+      "line": 1,
+      "result": "pass"
+    },
+    {
+      "sentence": "A price of nothing is refused",
+      "file": "requirements/prices.req.inset",
+      "line": 8,
+      "result": "pass"
+    }
+  ],
+  "defensive": [
+    {
+      "id": "Prices/Shop/fn:set/0/b0",
+      "at": "src/main.inset:33",
+      "reason": "the shop's form never sends a price of nothing",
+      "requirements": [
+        "A price of nothing is refused"
+      ]
+    }
+  ]
+}

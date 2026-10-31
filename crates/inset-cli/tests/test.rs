@@ -262,3 +262,171 @@ fn a_json_reply_that_differs_shows_both_values() {
     insta::assert_snapshot!("broken_catalogue_text", stdout(&text));
     insta::assert_snapshot!("broken_catalogue_json", stdout(&json));
 }
+
+/// A copy of the Stock tracker without the requirement with this sentence.
+fn stock_tracker_without(name: &str, sentence: &str) -> PathBuf {
+    let dir = copy("examples/stock-tracker", name);
+    let path = dir.join("requirements/stock.req.inset");
+    let source = std::fs::read_to_string(&path).unwrap();
+    let kept: Vec<&str> = source
+        .split("\n\n")
+        .filter(|block| !block.starts_with(&format!("requirement {sentence:?}")))
+        .collect();
+    assert_ne!(
+        kept.join("\n\n"),
+        source,
+        "no requirement says {sentence:?}"
+    );
+    std::fs::write(&path, kept.join("\n\n")).unwrap();
+    dir
+}
+
+/// The coverage `inset test --coverage` wrote: each element reached, with
+/// the requirements that reached it.
+fn coverage(dir: &Path) -> serde_json::Map<String, serde_json::Value> {
+    let out = run(&mut inset(&["test", "--coverage"], dir));
+    assert!(out.status.success(), "{}{}", stdout(&out), stderr(&out));
+    let text = std::fs::read_to_string(dir.join("target/inset/coverage.json")).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+    json["reached"].as_object().unwrap().clone()
+}
+
+/// The coverage class an SVG gives the element with this ID: on the
+/// element itself, or on the mark in its row.
+fn marked<'s>(svg: &'s str, id: &str) -> Option<&'s str> {
+    let anchor = format!(r#"data-id="{id}""#);
+    let group = format!(r#"<g {anchor}>"#);
+    let row: Vec<&str> = match svg.lines().position(|line| line == group) {
+        // A row in a box, whose mark is inside its group.
+        Some(start) => svg
+            .lines()
+            .skip(start + 1)
+            .take_while(|line| *line != "</g>")
+            .collect(),
+        None => vec![svg.lines().find(|line| line.contains(&anchor))?],
+    };
+    row.iter().find_map(|line| {
+        let class = line.split("cov-").nth(1)?;
+        Some(&class[..class.find(['"', ' ']).unwrap_or(class.len())])
+    })
+}
+
+fn draw(dir: &Path, view: &[&str]) -> String {
+    let mut args = vec!["diagram", "--coverage", "--theme", "dark"];
+    args.extend_from_slice(view);
+    let out = run(&mut inset(&args, dir));
+    assert!(out.status.success(), "{}", stderr(&out));
+    String::from_utf8(out.stdout).unwrap()
+}
+
+const SHIP: &str = "StockTracker/Warehouse/inventory/fn:ship";
+
+/// With every requirement, the Stock tracker's diagram marks everything
+/// covered. Without the one about shipping too much, the branch that
+/// refuses it turns uncovered on the flowchart, and the component view
+/// marks `Warehouse`, which holds it, before anyone drills down.
+#[test]
+fn code_only_a_deleted_requirement_reached_turns_uncovered() {
+    let full = copy("examples/stock-tracker", "covered-stock-tracker");
+    coverage(&full);
+    let components = draw(&full, &[]);
+    let ship = draw(&full, &["--flowchart", SHIP]);
+    std::fs::remove_dir_all(&full).unwrap();
+    assert_eq!(
+        marked(&components, "StockTracker/Warehouse"),
+        Some("covered")
+    );
+    assert_eq!(marked(&ship, &format!("{SHIP}/1/b0")), Some("covered"));
+    // Nothing stands out: only the key under the picture shows a cross.
+    assert!(!components.contains(r#"class="band""#), "{components}");
+
+    let dir = stock_tracker_without(
+        "uncovered-stock-tracker",
+        "Shipping more than the quantity on hand is refused and changes nothing",
+    );
+    coverage(&dir);
+    let components = draw(&dir, &[]);
+    let ship = draw(&dir, &["--flowchart", SHIP]);
+    let expanded = draw(&dir, &["--expand-all"]);
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(
+        marked(&components, "StockTracker/Warehouse"),
+        Some("uncovered")
+    );
+    assert_eq!(marked(&ship, &format!("{SHIP}/1/b0")), Some("uncovered"));
+    assert_eq!(marked(&ship, &format!("{SHIP}/1/b1")), Some("covered"));
+    assert_eq!(marked(&expanded, SHIP), Some("uncovered"));
+    assert_eq!(
+        marked(&expanded, "StockTracker/Warehouse/inventory/fn:receive"),
+        Some("covered")
+    );
+}
+
+/// Only the requirement about a database failure makes a capability call
+/// fail, so without it neither `failure` arm is reached.
+#[test]
+fn without_the_database_failure_both_failure_arms_are_uncovered() {
+    let dir = stock_tracker_without(
+        "no-failure-stock-tracker",
+        "A database failure fails the request and changes nothing",
+    );
+    let reached = coverage(&dir);
+    let expanded = draw(&dir, &["--expand-all"]);
+    std::fs::remove_dir_all(&dir).unwrap();
+    for arm in [
+        "StockTracker/Warehouse/failure:message:inventory",
+        "StockTracker/Warehouse/inventory/failure:capability:items",
+    ] {
+        assert!(!reached.contains_key(arm), "{arm} was reached");
+        assert_eq!(marked(&expanded, arm), Some("uncovered"), "{arm}");
+    }
+}
+
+/// A requirement with an examples table is credited with what any of its
+/// rows reached: the first row ships without reordering, and the others
+/// reorder, so it reaches both ways through `reorder_quantity`.
+#[test]
+fn an_examples_table_covers_what_its_rows_reach_together() {
+    let dir = copy("examples/stock-tracker", "table-stock-tracker");
+    let reached = coverage(&dir);
+    std::fs::remove_dir_all(&dir).unwrap();
+    let table =
+        "Stock that falls to its reorder level or below is reordered up to its target level";
+    for branch in ["b0", "b1"] {
+        let id = format!("StockTracker/Warehouse/inventory/fn:reorder_quantity/0/{branch}");
+        let by = reached[&id].as_array().unwrap();
+        assert!(by.iter().any(|s| s == table), "{id}: {by:?}");
+    }
+}
+
+/// A requirement that reaches code marked `#[defensive]` fails the run, and
+/// both reports give the code, where it is, its reason and the requirement.
+/// The marks no requirement reached are excused.
+#[test]
+fn defensive_code_a_requirement_reaches_is_reported() {
+    let dir = copy("crates/inset-cli/tests/programs/excuses", "excuses");
+    let text = run(&mut inset(&["test", "--coverage"], &dir));
+    let json = run(&mut inset(&["test", "--json"], &dir));
+    let set = draw(&dir, &["--flowchart", "Prices/Shop/fn:set"]);
+    let price = draw(&dir, &["--flowchart", "Prices/Shop/fn:price"]);
+    let components = draw(&dir, &[]);
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(text.status.code(), Some(1), "{}", stderr(&text));
+    assert_eq!(json.status.code(), Some(1), "{}", stderr(&json));
+    insta::assert_snapshot!("excuses_text", stdout(&text));
+    insta::assert_snapshot!("excuses_json", stdout(&json));
+    assert_eq!(
+        marked(&set, "Prices/Shop/fn:set/0/b0"),
+        Some("contradicted")
+    );
+    assert_eq!(
+        marked(&price, "Prices/Shop/fn:price/0/err"),
+        Some("excused")
+    );
+    assert_eq!(marked(&price, "Prices/Shop/fn:price/1/b0"), Some("excused"));
+    assert_eq!(
+        marked(&components, "Prices/Shop/failure:capability:prices"),
+        Some("excused")
+    );
+    assert_eq!(marked(&components, "Prices/Shop"), Some("contradicted"));
+}

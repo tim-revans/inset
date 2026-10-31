@@ -20,7 +20,7 @@ inset diagram examples/hello-http -o hello-http.svg  # draw its component diagra
 inset run examples/hello-http                        # serve it, then open http://localhost:8080/hello/Ada
 ```
 
-`inset test --json` prints the test report as JSON. `inset diagram --json` prints the diagram data. `inset diagram --flowchart HelloHttp/Greeter/fn:hello` draws one function's flowchart instead. `inset contract examples/hello-http` prints the program's API contract as OpenAPI 3.1, or with `--typescript` as TypeScript types for a front end. `inset build` writes both beside the component.
+`inset test --json` prints the test report as JSON. `inset test --coverage` also lists the code no requirement reached, and `inset diagram --coverage` then marks it on the diagram. `inset diagram --json` prints the diagram data. `inset diagram --flowchart HelloHttp/Greeter/fn:hello` draws one function's flowchart instead. `inset contract examples/hello-http` prints the program's API contract as OpenAPI 3.1, or with `--typescript` as TypeScript types for a front end. `inset build` writes both beside the component.
 
 ## Repository layout
 

@@ -26,6 +26,9 @@
 //!   their crate. [`Json`] is the body and reply wrapper, as in axum.
 //! - **The front end**'s files are compiled into the component, and served
 //!   for a `GET` that no route of their server takes ([`FrontEnd`]).
+//! - **Coverage** is counted by the emitted code itself: it marks each
+//!   function, branch, `?` and `failure` arm it reaches, by its diagram ID,
+//!   and the runtime reports what was reached to the host ([`coverage`]).
 //! - **Failures** are not Rust panics where they can be avoided. A failed
 //!   capability call or message ends its handler by dropping the handler's
 //!   future, so the component's `failure` block can roll it back and the
@@ -41,6 +44,7 @@
 //! including the executor, whose wakers use [`std::task::Wake`].
 
 mod actor;
+pub mod coverage;
 mod executor;
 mod failure;
 mod http;

@@ -21,6 +21,7 @@ pass  A database failure fails the request and changes nothing
 pass  An item is stocked with the levels it is given
 pass  Levels that are not a whole item in JSON are refused
 pass  Stock levels are listed in SKU order
+pass  Nothing is listed when no item is stocked
 pass  Only items at or below their reorder level are listed as low stock
 
-12 requirements: 11 passed, 1 failed
+13 requirements: 12 passed, 1 failed

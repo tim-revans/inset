@@ -77,6 +77,7 @@ async function stop() {
 async function activate(context) {
   diagram = new DiagramPanel(context, () => client);
   requirements = new Requirements(context, insetCommand);
+  context.subscriptions.push(requirements.ran.event((root) => diagram?.ran(root)));
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(async (event) => {
       if (event.affectsConfiguration("inset.server.path")) {

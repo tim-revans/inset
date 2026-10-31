@@ -76,7 +76,19 @@ fn a_panic_restarts_the_child_in_a_fresh_instance() {
             "Panic",
             Some("Counters/Front/tally")
         )
-    );
+    ); // What ran before the panic is reported, with the arm that answered it,
+    // and what the fresh instance runs is added to it.
+    let reached = running.reached();
+    for id in [
+        "Counters/Front/fn:add",
+        "Counters/Front/tally/fn:add/3/b0",
+        "Counters/Front/failure:child:tally",
+        "Counters/Front/fn:counts",
+        "Counters/Front/fn:read_notes",
+    ] {
+        assert!(reached.contains(id), "{id} not in {reached:?}");
+    }
+    assert!(!reached.contains("Counters/Front/failure:panic"));
 }
 
 #[test]

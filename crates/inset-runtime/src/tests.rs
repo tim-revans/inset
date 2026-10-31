@@ -113,7 +113,9 @@ impl Front {
         self.total += n;
         send(self.log.push(format!("add {n}")));
         let seen = self.log.entries().await;
+        crate::coverage::branch::<Front>(0);
         if n == 13 {
+            crate::coverage::branch::<Front>(1);
             fail::<()>(Failure::Capability("http"), "unlucky".into()).await;
         }
         format!("{} after {}", self.total, seen.len())
@@ -142,6 +144,13 @@ impl Front {
 impl Component for Front {
     const NAME: &'static str = "Front";
     const ROLLS_BACK: bool = true;
+    const BRANCHES: &'static [&'static str] = &[
+        "fn:add",
+        "fn:add/3/b0",
+        "failure:capability:http",
+        "failure:message:log",
+        "failure:panic",
+    ];
     type Saved = u32;
     type Message = NoMessage;
     type Messages = Mailbox<Self>;
@@ -154,11 +163,11 @@ impl Component for Front {
         self.total = total;
     }
 
-    fn respond(failure: &Failure) -> Option<Response> {
+    fn respond(failure: &Failure) -> Option<(Response, usize)> {
         match failure {
-            Failure::Capability("http") => Some(Response::Rollback),
-            Failure::Message("log") => Some(Response::Rollback),
-            Failure::Panic => Some(Response::Rollback),
+            Failure::Capability("http") => Some((Response::Rollback, 2)),
+            Failure::Message("log") => Some((Response::Rollback, 3)),
+            Failure::Panic => Some((Response::Rollback, 4)),
             _ => None,
         }
     }
@@ -224,6 +233,7 @@ impl Log {
 impl Component for Log {
     const NAME: &'static str = "Log";
     const ROLLS_BACK: bool = true;
+    const BRANCHES: &'static [&'static str] = &["failure:capability:disk"];
     type Saved = Vec<String>;
     type Message = LogMessage;
     type Messages = LogMessages;
@@ -252,9 +262,9 @@ impl Component for Log {
         self.entries = entries;
     }
 
-    fn respond(failure: &Failure) -> Option<Response> {
+    fn respond(failure: &Failure) -> Option<(Response, usize)> {
         match failure {
-            Failure::Capability("disk") => Some(Response::Rollback),
+            Failure::Capability("disk") => Some((Response::Rollback, 0)),
             _ => None,
         }
     }
@@ -356,6 +366,29 @@ fn a_rollback_restores_fields_and_drops_sent_messages() {
     assert_eq!(text("GET", "/total"), (200, "2".into()));
     assert_eq!(text("GET", "/log"), (200, "add 2".into()));
     REPORTS.with_borrow(|r| assert_eq!(*r, ["Shop/Front rolled back Capability(http): unlucky"]));
+}
+
+#[test]
+fn what_runs_is_reported_once_by_its_diagram_id() {
+    use crate::program::report::REACHED;
+    start();
+    text("POST", "/add/2");
+    REACHED.with_borrow(|r| assert_eq!(*r, ["Shop/Front/fn:add"]));
+    text("POST", "/add/13");
+    REACHED.with_borrow(|r| {
+        assert_eq!(
+            *r,
+            [
+                "Shop/Front/fn:add",
+                "Shop/Front/fn:add/3/b0",
+                "Shop/Front/failure:capability:http"
+            ]
+        )
+    });
+    // A component's function marks nothing outside its own handlers.
+    crate::coverage::branch::<Log>(0);
+    text("POST", "/add/3");
+    REACHED.with_borrow(|r| assert_eq!(r.len(), 3));
 }
 
 #[test]

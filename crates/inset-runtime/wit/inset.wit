@@ -139,6 +139,12 @@ interface report {
     /// The program carries on.
     restarted: func(component: string, failure: string, message: string, restarted: string);
 
+    /// The elements of the diagram reached since the last report, by their
+    /// IDs: functions entered, branches taken, error paths of `?` and arms
+    /// of `failure` blocks. Each is reported once per instance, so a test can
+    /// tell which requirement reached what.
+    reached: func(elements: list<string>);
+
     /// How a fresh instance carries on after a panic.
     record recovery {
         /// The state to start it from.

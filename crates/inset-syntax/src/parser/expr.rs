@@ -355,12 +355,17 @@ impl Parser<'_> {
     }
 
     pub(super) fn parse_stmt(&mut self) -> PResult<Stmt> {
+        let defensive = self.parse_defensive("a statement")?;
+        let mut stmt = self.parse_bare_stmt()?;
+        match &mut stmt {
+            Stmt::Let { defensive: d, .. } | Stmt::Expr { defensive: d, .. } => *d = defensive,
+        }
+        Ok(stmt)
+    }
+
+    fn parse_bare_stmt(&mut self) -> PResult<Stmt> {
         match self.kind() {
             T::Keyword(Kw::Let) => return self.parse_let(),
-            T::Punct(P::Pound) => {
-                let span = self.span();
-                return Err(self.unsupported("an attribute on a statement", span));
-            }
             T::Doc(_) => {
                 let span = self.span();
                 return Err(self.report(
@@ -406,7 +411,11 @@ impl Parser<'_> {
             self.expect(P::Semi, "the statement")?;
             true
         };
-        Ok(Stmt::Expr { expr, semi })
+        Ok(Stmt::Expr {
+            expr,
+            semi,
+            defensive: None,
+        })
     }
 
     pub(super) fn parse_let(&mut self) -> PResult<Stmt> {
@@ -431,6 +440,7 @@ impl Parser<'_> {
             ty,
             init,
             else_block,
+            defensive: None,
             span: start.to(end),
         })
     }
@@ -951,6 +961,7 @@ impl Parser<'_> {
         let open = self.bump().span;
         let mut arms = Vec::new();
         while !self.at(P::RBrace) && *self.kind() != T::Eof {
+            let defensive = self.parse_defensive("a `match` arm")?;
             let pattern = self.parse_pattern_top()?;
             let guard = if self.eat_kw(Kw::If) {
                 Some(self.parse_expr()?)
@@ -976,10 +987,14 @@ impl Parser<'_> {
                     | ExprKind::While { .. }
             );
             arms.push(MatchArm {
-                span: pattern.span.to(body.span),
+                span: defensive
+                    .as_ref()
+                    .map_or(pattern.span, |d| d.span)
+                    .to(body.span),
                 pattern,
                 guard,
                 body,
+                defensive,
             });
             if !self.eat(P::Comma) && !block_like && !self.at(P::RBrace) {
                 self.expect(P::Comma, "the arm")?;

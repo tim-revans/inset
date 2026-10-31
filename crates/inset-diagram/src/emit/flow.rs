@@ -65,14 +65,28 @@ impl Emitter<'_> {
             Some(_) => Value::Returned,
             None => Value::Discarded,
         };
-        self.block(&cx, id, &function.body, value)
+        self.block(&cx, id, &function.body, value, false)
     }
 
-    fn block(&mut self, cx: &Context<'_>, prefix: &str, block: &Block, value: Value) -> Vec<Step> {
+    /// A block's steps, with IDs under `prefix`. In a `branch` block, a
+    /// `#[defensive]` on the first statement marks the branch, and elsewhere
+    /// it marks the statement's error path.
+    fn block(
+        &mut self,
+        cx: &Context<'_>,
+        prefix: &str,
+        block: &Block,
+        value: Value,
+        branch: bool,
+    ) -> Vec<Step> {
         let mut steps = Vec::new();
         let count = block.stmts.len();
         for (i, stmt) in block.stmts.iter().enumerate() {
             let id = format!("{prefix}/{}", steps.len());
+            self.excused = stmt
+                .defensive()
+                .filter(|_| !(branch && i == 0))
+                .map(|d| d.reason.value.clone());
             let span = match stmt {
                 Stmt::Let { span, .. } => *span,
                 Stmt::Expr { expr, .. } => expr.span,
@@ -99,8 +113,14 @@ impl Emitter<'_> {
                         Branch {
                             id: format!("{id}/b1"),
                             label: "else".into(),
-                            steps: self.block(cx, &format!("{id}/b1"), otherwise, Value::Discarded),
-                            defensive: None,
+                            steps: self.block(
+                                cx,
+                                &format!("{id}/b1"),
+                                otherwise,
+                                Value::Discarded,
+                                true,
+                            ),
+                            defensive: marked(otherwise),
                         },
                     ];
                     Some(Step::Decision {
@@ -142,7 +162,7 @@ impl Emitter<'_> {
                     let uses = self.uses(cx, init.as_ref());
                     Some(self.action(cx, id, *span, uses))
                 }
-                Stmt::Expr { expr, semi } => {
+                Stmt::Expr { expr, semi, .. } => {
                     let last = i + 1 == count && !semi;
                     let value = if last { value } else { Value::Discarded };
                     self.statement(cx, id, expr, last, value)
@@ -231,7 +251,7 @@ impl Emitter<'_> {
             Exit {
                 id: format!("{id}/err"),
                 text: cx.exit.unwrap_or("None").into(),
-                defensive: None,
+                defensive: self.excused.take(),
             }
         });
         let text = self.text(span);
@@ -273,12 +293,19 @@ impl Emitter<'_> {
         self.locate(&id, head);
         self.locate(&yes, then_block.span);
         self.locate(&no, else_branch.as_ref().map_or(head, |e| e.span));
+        let no_marked = match else_branch.as_deref() {
+            Some(Expr {
+                kind: ExprKind::Block(block),
+                ..
+            }) => marked(block),
+            _ => None,
+        };
         let no_steps = match else_branch.as_deref() {
             None => Vec::new(),
             Some(Expr {
                 kind: ExprKind::Block(block),
                 ..
-            }) => self.block(cx, &no, block, value),
+            }) => self.block(cx, &no, block, value, true),
             Some(nested @ Expr { kind, span }) => {
                 let ExprKind::If { then_block, .. } = kind else {
                     unreachable!("`else` is followed by a block or an `if`");
@@ -292,16 +319,16 @@ impl Emitter<'_> {
             links: uses.links,
             branches: vec![
                 Branch {
-                    steps: self.block(cx, &yes, then_block, value),
+                    steps: self.block(cx, &yes, then_block, value, true),
                     id: yes,
                     label: "yes".into(),
-                    defensive: None,
+                    defensive: marked(then_block),
                 },
                 Branch {
                     id: no,
                     label: "no".into(),
                     steps: no_steps,
-                    defensive: None,
+                    defensive: no_marked,
                 },
             ],
             id,
@@ -338,7 +365,7 @@ impl Emitter<'_> {
                 label: self.text(Span::new(arm.pattern.span.start, label_end.end)),
                 id: branch,
                 steps,
-                defensive: None,
+                defensive: arm.defensive.as_ref().map(|d| d.reason.value.clone()),
             });
         }
         Step::Decision {
@@ -353,7 +380,7 @@ impl Emitter<'_> {
     /// block's final value.
     fn arm(&mut self, cx: &Context<'_>, prefix: &str, body: &Expr, value: Value) -> Vec<Step> {
         if let ExprKind::Block(block) = &body.kind {
-            return self.block(cx, prefix, block, value);
+            return self.block(cx, prefix, block, value, false);
         }
         let id = format!("{prefix}/0");
         let step = self.statement(cx, id, body, true, value);
@@ -387,7 +414,7 @@ impl Emitter<'_> {
             links: uses.links,
             concurrent: false,
             body: Branch {
-                steps: self.block(cx, &body_id, body, Value::Discarded),
+                steps: self.block(cx, &body_id, body, Value::Discarded, false),
                 id: body_id,
                 label: label.into(),
                 defensive: None,
@@ -769,4 +796,10 @@ impl Emitter<'_> {
         }
         Some(format!("{field}->{grant}"))
     }
+}
+
+/// The reason a `#[defensive]` on a branch block's first statement gives.
+fn marked(block: &Block) -> Option<String> {
+    let first = block.stmts.first()?;
+    Some(first.defensive()?.reason.value.clone())
 }

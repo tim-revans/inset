@@ -13,7 +13,7 @@ A reviewer starts at the outside and drills in:
 | Component view | The app, what it is granted, the components it starts, and what is outside: HTTP clients on the left, stored data on the right | `inset diagram <dir>` |
 | Inside a component | The same picture with one component expanded, its children drawn inside it, and the messages between them | `--expand <component id>` |
 | Flowchart | One function's body: its steps, decisions, loops and forks | `--flowchart <function id>` |
-| Coverage | The same pictures, with what no requirement reached marked | *(Draft: comes with the coverage overlay, with its own colours chosen against this palette)* |
+| Coverage | The same pictures, with what no requirement reached marked | `--coverage`, after `inset test --coverage` (see [Coverage](#coverage)) |
 
 A component with children is drawn collapsed unless the view expands it, with `[+]` and the names of its children. A collapsed component still shows its own routes, messages and failure section. An arrow that ends inside a collapsed component ends at its box, and an arrow with both ends inside it is not drawn. So collapsing hides how a component is built, never what it does at its edge.
 
@@ -31,7 +31,7 @@ And they leave things out:
 
 - No UML class diagrams. Data types are shown only as the types on the labels.
 - No sequence diagrams. Messages are arrows on the component view, and their order is in the flowcharts.
-- No icons or shapes that need a legend. A box is a component, a double box an external component, a dashed pill something outside the program.
+- No icons or shapes that need a legend. A box is a component, a double box an external component, a dashed pill something outside the program. The coverage marks are the one exception, and a picture that shows them carries their key.
 - No layout chosen by hand. Boxes are placed in source order, so the same source always gives the same picture.
 
 The drawing conventions:
@@ -66,9 +66,36 @@ By default a picture carries both palettes and follows the reader's setting: lig
 
 Each colour was chosen by measurement against its palette's background. Every pair of role colours stays apart under simulated protanopia and deuteranopia, and with normal vision. Every role colour has at least 3:1 contrast with the background, and every text colour at least 4.5:1 on every box it sits on. Colour only repeats what the shape already says: an external component keeps its double box, `send` keeps its dashed line, and a failure arm keeps its text. So a reader who cannot tell two colours apart loses nothing. The full set of values is in `crates/inset-diagram/src/theme.rs`.
 
+Coverage has three colours of its own, measured in the same way against the roles above and each other, and carried only by a picture that shows coverage:
+
+| Coverage | Dark | Light |
+| --- | --- | --- |
+| Covered: a requirement reached it | `#2fd4b4` | `#0b7d74` |
+| Uncovered: no requirement reached it | `#e8e337` | `#8f6b09` |
+| Excused by `#[defensive]` | `#7f8a7a` | `#4a4858` |
+
 *Why follow the reader, falling back to dark:* developers mostly work in dark editors, and requirements reviewers often prefer light pages, so each reader gets the palette their system already asks for. Where a renderer cannot tell, dark is the safer guess for the developers who read most of the pictures.
 
 An SVG shown as an image usually follows the reader's operating system or browser setting rather than a website's own theme switch, so on GitHub the committed pictures may not change with GitHub's own light or dark choice.
+
+## Coverage
+
+`inset test --coverage` records which requirements reached each element that coverage counts (see [`syntax.md`](syntax.md#requirements-and-coverage)): entering a function, each branch, each error path of a `?`, and each arm of a `failure` block. `inset diagram --coverage` draws any view with it, and the editor's diagram panel has a **Coverage** box that does the same with the last run of the requirements.
+
+| Status | Means | Drawn as |
+| --- | --- | --- |
+| Covered | A requirement reached it | In the covered colour |
+| Uncovered | No requirement reached it | In the uncovered colour, thick, and a row's band shaded |
+| Excused | Marked `#[defensive]`, or inside a branch that is, and not reached | In the excused colour, dotted, with the reason on the branch's label |
+| Defensive, yet reached | Marked `#[defensive]`, but a requirement reached it, which fails `inset test` | As uncovered, and dotted |
+
+On a flowchart, each branch's edge and label, each `?` error path with its `return`, and the function's start take the colour of their status. On the component view, each row that holds something coverage counts gets a mark in the box's left margin: `✓` covered, `✗` uncovered, `~` excused, and `!` defensive yet reached. A function's row takes the worst of everything in the function, so a function that runs but has a branch no requirement reached is marked `✗`. A component's heading takes the worst of everything in it and in its children, so a collapsed component that hides uncovered code is marked before the reader opens it. Rows marked `✗` or `!` are shaded across the box. A key to the marks is written under the picture.
+
+*Why the worst, not a count:* the reviewer's question at the component level is where to look, and one uncovered branch is enough reason to look. A count needs room the layout does not have.
+
+*Why the marks take no room:* the marks sit in the margin and the colours change only strokes and fills, so turning coverage on in a viewer moves nothing but the key below the picture, and the reader keeps their place.
+
+The coverage is written to `<dir>/target/inset/coverage.json`, as the `coverage` field below. Coverage that names an element the diagram no longer has is from an older version of the program, and `inset diagram --coverage` refuses it rather than draw a stale picture.
 
 ## Diagram data and views
 
@@ -128,7 +155,7 @@ Every branch is an element with its own ID: each branch of a decision, a loop's 
 - `algorithms` holds the functions declared at the top level of a module.
 - `edges` holds what connects elements across the tree: `capability` (a field to its grant, with the operations used), `message` (a function to a message handler, with each argument's boundary notation, and whether it is a `send`) and `emit` (a function to its own component's outlet). An outlet's connection is a `connect` handoff in the `start` of the component that owns the outlet. The compiler lists the capability edges first, then the message edges, then the emit edges.
 - Each function's `body` is its flowchart, as nested `action`, `decision`, `loop`, `fork` and `return` steps.
-- `coverage`, when present, maps each element ID reached to the requirements that reached it. *(Draft: filled in by the coverage overlay.)*
+- `coverage`, when present, maps each element ID reached to the sentences of the requirements that reached it, in the order of the requirements. `inset diagram --json --coverage` fills it in from the last `inset test --coverage`.
 
 A list or optional field that is empty is left out of the JSON. Data is written in source order, so the same source always gives the same file.
 

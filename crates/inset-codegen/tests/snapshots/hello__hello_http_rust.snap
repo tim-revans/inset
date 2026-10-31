@@ -53,12 +53,15 @@ impl Greeter {
 
     /// Replies with a greeting for the name in the path.
     fn hello(name: String) -> String {
+        ::inset_runtime::coverage::branch::<Self>(0);
         format!("Hello, {name}!")
     }
 }
 
 impl ::inset_runtime::Component for Greeter {
     const NAME: &'static str = "Greeter";
+
+    const BRANCHES: &'static [&'static str] = &["fn:hello"];
 
     type Saved = ();
 

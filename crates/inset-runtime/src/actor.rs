@@ -27,6 +27,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll, Waker};
 
+use crate::coverage::Reached;
 use crate::executor;
 use crate::failure::{Failure, Response, Stopped};
 use crate::http::{HttpServer, Reply, Request, Route};
@@ -54,6 +55,12 @@ pub trait Component: Sized + 'static {
     /// Whether any failure is rolled back, so each handler must save the fields first.
     const ROLLS_BACK: bool = false;
 
+    /// The elements coverage counts in the component, by their IDs relative
+    /// to a running component's: entering each function, each branch, each
+    /// error path of a `?`, and each arm of the `failure` block. The emitted
+    /// code marks them by their index here (see [`crate::coverage`]).
+    const BRANCHES: &'static [&'static str] = &[];
+
     /// The fields that hold state, as opposed to capabilities, outlets and handles.
     type Saved: Stored;
 
@@ -75,9 +82,10 @@ pub trait Component: Sized + 'static {
         unreachable!("{} has no messages", Self::NAME)
     }
 
-    /// The response to a failure, from the `failure` block. `None` passes it
+    /// The response to a failure, from the `failure` block, with the index
+    /// of the arm that gives it in [`Component::BRANCHES`]. `None` passes it
     /// to the parent.
-    fn respond(_failure: &Failure) -> Option<Response> {
+    fn respond(_failure: &Failure) -> Option<(Response, usize)> {
         None
     }
 
@@ -175,6 +183,7 @@ impl Scope {
             parent: self.owner.clone(),
             children: scope.children.take(),
             initial,
+            reached: Rc::new(Reached::of::<C>()),
             reset: Cell::new(false),
             component: RefCell::new(component),
             mailbox: RefCell::default(),
@@ -378,6 +387,8 @@ pub(crate) struct Actor<C: Component> {
     children: Vec<Rc<dyn Running>>,
     /// The state fields as the component started, which a restart restores.
     initial: serde_json::Value,
+    /// What coverage counts in the component, and which of it has run.
+    reached: Rc<Reached>,
     /// Set by a restart, and done before the next envelope.
     reset: Cell<bool>,
     component: RefCell<C>,
@@ -478,12 +489,14 @@ pub(crate) fn resolve(
     actor: Rc<dyn Running>,
     failure: &Failure,
 ) -> Option<(Response, Rc<dyn Running>)> {
-    if let Some(response) = actor.responds(failure) {
+    if let Some((response, arm)) = actor.responds(failure) {
+        actor.mark(arm);
         return Some((response, actor));
     }
     let mut child = actor;
     while let Some(parent) = child.parent() {
-        if let Some(response) = parent.responds(&Failure::Child(child.name())) {
+        if let Some((response, arm)) = parent.responds(&Failure::Child(child.name())) {
+            parent.mark(arm);
             return Some((response, child));
         }
         child = parent;
@@ -498,8 +511,8 @@ fn ancestors_roll_back<C: Component>(actor: &Actor<C>) -> bool {
     let mut parent = actor.parent.get().cloned();
     while let Some(p) = parent {
         match p.responds(&Failure::Child(name)) {
-            Some(Response::Rollback) => return true,
-            Some(Response::Restart) => return false,
+            Some((Response::Rollback, _)) => return true,
+            Some((Response::Restart, _)) => return false,
             None => {
                 name = p.name();
                 parent = p.parent();
@@ -530,7 +543,10 @@ async fn run<C: Component>(actor: Rc<Actor<C>>) {
         })
         .await;
 
-        let scope = Rc::new(HandlerScope::default());
+        let scope = Rc::new(HandlerScope {
+            reached: Some(actor.reached.clone()),
+            ..HandlerScope::default()
+        });
         if actor.saves() {
             *actor.saved.borrow_mut() = Some(actor.component.borrow().save());
         }
@@ -593,9 +609,15 @@ pub(crate) struct HandlerScope {
     written: RefCell<Vec<Rc<dyn Transaction>>>,
     /// The field of the component whose reply the handler is waiting for.
     awaiting: RefCell<Option<&'static str>>,
+    /// The coverage flags of the component the handler belongs to.
+    reached: Option<Rc<Reached>>,
 }
 
 impl HandlerScope {
+    pub(crate) fn reached(&self) -> Option<&Reached> {
+        self.reached.as_deref()
+    }
+
     fn hold(&self, delivery: Deliver) {
         self.held.borrow_mut().push(delivery);
     }
@@ -723,7 +745,12 @@ pub(crate) trait Running {
     fn serve(&self, field: &str, request: &Request) -> Result<ReplyReceiver<Reply>, Reply>;
     /// The running handler's scope, if a handler is running.
     fn running(&self) -> Option<Rc<HandlerScope>>;
-    fn responds(&self, failure: &Failure) -> Option<Response>;
+    /// The response to a failure, and the index of the arm that gives it.
+    fn responds(&self, failure: &Failure) -> Option<(Response, usize)>;
+    /// Marks an element of the component reached, by its index.
+    fn mark(&self, index: usize);
+    /// The elements reached since the last call, by their full IDs.
+    fn take_reached(&self, out: &mut Vec<String>);
     /// Resets the component and its children to how they started, each
     /// before it takes its next envelope.
     fn restart(&self);
@@ -762,8 +789,16 @@ impl<C: Component> Running for Actor<C> {
         self.running.borrow().clone()
     }
 
-    fn responds(&self, failure: &Failure) -> Option<Response> {
+    fn responds(&self, failure: &Failure) -> Option<(Response, usize)> {
         C::respond(failure)
+    }
+
+    fn mark(&self, index: usize) {
+        self.reached.mark(index);
+    }
+
+    fn take_reached(&self, out: &mut Vec<String>) {
+        self.reached.take(Some(&self.id), out);
     }
 
     fn restart(&self) {

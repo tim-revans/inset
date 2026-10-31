@@ -33,6 +33,12 @@
 //! would not build, such as a child lent to a sibling, which no example
 //! needs yet.
 //!
+//! **Coverage.** The emitted code marks each function, branch, `?` error
+//! path and `failure` arm it reaches, by its diagram ID, so `inset test` can
+//! tell which requirement reached what. `coverage.rs` walks each body as the
+//! diagram's flowchart does, so the IDs agree, and a test checks that they
+//! do for every example and test program.
+//!
 //! **Building.** The generated project depends on `inset-runtime` by path,
 //! at the copy this crate was built next to, until the runtime is published.
 //! It starts from the workspace's `Cargo.lock` and `rust-toolchain.toml`, so
@@ -46,6 +52,7 @@
 //! build as the other's, so the package is cleaned before each build there.
 
 mod body;
+mod coverage;
 mod items;
 mod project;
 
@@ -56,6 +63,7 @@ use inset_syntax::ast::{Component, ItemKind};
 use inset_syntax::{Diagnostic, Span};
 use quote::quote;
 
+pub use coverage::Elements;
 pub use project::{BuildError, Built, build, cargo_toml};
 
 /// The Rust for a program.
@@ -65,6 +73,8 @@ pub struct Generated {
     pub package: String,
     /// `src/lib.rs`.
     pub source: String,
+    /// What coverage counts, as the emitted code marks it.
+    pub elements: Elements,
 }
 
 /// Checks the program and emits its Rust. The reports are the checker's,
@@ -82,7 +92,7 @@ pub fn generate(program: &Program) -> Result<Generated, Vec<Report>> {
         })
         .expect("a checked program has an app");
 
-    let mut emitter = Emitter::new(&resolved);
+    let mut emitter = Emitter::new(&resolved, &app);
     emitter.web = program
         .web
         .iter()
@@ -98,16 +108,26 @@ pub fn generate(program: &Program) -> Result<Generated, Vec<Report>> {
             .collect());
     }
     let header = format!(" The Rust that `inset build` generated for the app `{app}`.");
+    let algorithms = emitter.has_algorithms.then(|| {
+        let ids = &emitter.elements.algorithms;
+        quote! {
+            #[doc = " The elements coverage counts in the top-level algorithms, by their diagram IDs."]
+            const ALGORITHM_BRANCHES: &[&str] = &[#(#ids),*];
+        }
+    });
     let tokens = quote! {
         #![doc = #header]
         #![doc = " It is written again on every build, so a change to it would be lost."]
 
         #items
+
+        #algorithms
     };
     let file: syn::File = syn::parse2(tokens).expect("the emitted tokens are a Rust file");
     Ok(Generated {
         package: package_name(&app),
         source: spaced(&prettyplease::unparse(&file)),
+        elements: emitter.elements,
     })
 }
 
@@ -160,10 +180,24 @@ struct Emitter<'a> {
     /// The paths of the front end's files, from `web/`.
     web: Vec<String>,
     diagnostics: Vec<Diagnostic>,
+    /// The app's name, which starts every diagram ID.
+    app: String,
+    /// The path of the module being emitted, from the root.
+    module_path: Vec<String>,
+    /// Whether any module has a top-level algorithm.
+    has_algorithms: bool,
+    /// Whose elements the function being emitted marks.
+    owner: coverage::Owner,
+    /// The elements of the component being emitted.
+    branches: Vec<String>,
+    /// Every element listed so far.
+    elements: Elements,
+    /// The index of the error path of the `?` in the step being emitted.
+    exit: Option<usize>,
 }
 
 impl<'a> Emitter<'a> {
-    fn new(resolved: &'a Resolved) -> Emitter<'a> {
+    fn new(resolved: &'a Resolved, app: &str) -> Emitter<'a> {
         let components = resolved
             .modules
             .list
@@ -174,11 +208,24 @@ impl<'a> Emitter<'a> {
                 _ => None,
             })
             .collect();
+        let has_algorithms = resolved
+            .modules
+            .list
+            .iter()
+            .flat_map(|module| &module.ast.items)
+            .any(|item| matches!(item.kind, ItemKind::Function(_)));
         Emitter {
             refs: &resolved.refs,
             components,
             web: Vec::new(),
             diagnostics: Vec::new(),
+            app: app.to_string(),
+            module_path: Vec::new(),
+            has_algorithms,
+            owner: coverage::Owner::Algorithms,
+            branches: Vec::new(),
+            elements: Elements::default(),
+            exit: None,
         }
     }
 

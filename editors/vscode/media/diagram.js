@@ -8,6 +8,7 @@
   const vscode = acquireVsCodeApi();
   const view = /** @type {HTMLSelectElement} */ (document.getElementById("view"));
   const expandAll = /** @type {HTMLInputElement} */ (document.getElementById("expand-all"));
+  const coverage = /** @type {HTMLInputElement} */ (document.getElementById("coverage"));
   const message = /** @type {HTMLElement} */ (document.getElementById("message"));
   const problems = /** @type {HTMLElement} */ (document.getElementById("problems"));
   const picture = /** @type {HTMLElement} */ (document.getElementById("picture"));
@@ -15,10 +16,16 @@
   let functions = [];
 
   function sendView() {
-    vscode.postMessage({ type: "view", flowchart: view.value, expandAll: expandAll.checked });
+    vscode.postMessage({
+      type: "view",
+      flowchart: view.value,
+      expandAll: expandAll.checked,
+      coverage: coverage.checked,
+    });
   }
   view.addEventListener("change", sendView);
   expandAll.addEventListener("change", sendView);
+  coverage.addEventListener("change", sendView);
 
   /** The innermost element with an ID that leads to its source. */
   function target(/** @type {EventTarget | null} */ node) {
@@ -62,6 +69,7 @@
     view.value = data.flowchart ?? "";
     expandAll.checked = data.expandAll;
     expandAll.disabled = Boolean(data.flowchart);
+    coverage.checked = data.coverage;
 
     problems.replaceChildren();
     data.problems.forEach((/** @type {string} */ text, /** @type {number} */ index) => {

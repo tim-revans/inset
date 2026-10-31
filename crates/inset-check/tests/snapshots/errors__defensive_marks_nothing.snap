@@ -1,0 +1,30 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `#[defensive]` marks no branch here
+    ╭─[ src/main.inset:16:9 ]
+    │
+ 16 │         #[defensive("the total is always there")]
+    │         ────────────────────┬────────────────────  
+    │                             ╰────────────────────── this statement is not a branch, and has no `?`
+    │ 
+    │ Help: put it on the first line of the `if`, `else` or `let ... else` block that no requirement can reach, on a `match` arm, or on a statement whose `?` no requirement can make fail
+────╯
+Error: `#[defensive]` cannot go inside a closure
+    ╭─[ src/main.inset:19:13 ]
+    │
+ 19 │             #[defensive("never zero")]
+    │             ─────────────┬────────────  
+    │                          ╰────────────── coverage does not count the branches of a closure
+    │ 
+    │ Help: mark the step that calls the closure instead, if it has a `?`
+────╯
+Error: a whole function cannot be marked defensive
+    ╭─[ src/main.inset:30:5 ]
+    │
+ 30 │     #[defensive("nothing adds")]
+    │     ──────────────┬─────────────  
+    │                   ╰─────────────── this would excuse every branch in the function
+    │ 
+    │ Help: mark each branch no requirement can reach: a `match` arm, a `failure` arm, the first line of an `if`, `else` or `let ... else` block, or a statement with `?`. Code no requirement can reach at all is unused, and should be deleted
+────╯

@@ -100,6 +100,8 @@ pub struct View {
     pub theme: Theme,
     /// Leave the background off, so the picture sits on whatever is behind it.
     pub transparent: bool,
+    /// Mark what the requirements reached, from the diagram's `coverage`.
+    pub coverage: bool,
 }
 
 /// The view options `inset diagram` and `inset-diagram render` take.
@@ -110,6 +112,8 @@ pub const VIEW_OPTIONS: &str =
   --hide <label>            leave a kind of label off (repeatable)
   --theme <auto|dark|light> the palette; auto, the default, follows the reader's setting
   --transparent             leave the background off
+  --coverage                mark what the requirements reached, from the last
+                            `inset test --coverage`
   -o <file>                 write the SVG to a file instead of standard output";
 
 impl View {
@@ -132,6 +136,7 @@ impl View {
                 }
                 "--theme" => view.theme = value()?.parse()?,
                 "--transparent" => view.transparent = true,
+                "--coverage" => view.coverage = true,
                 "-o" => out = Some(value()?),
                 _ => return Err(format!("unknown option `{arg}`")),
             }

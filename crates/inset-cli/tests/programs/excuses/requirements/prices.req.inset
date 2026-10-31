@@ -1,0 +1,12 @@
+requirement "A stored price is the item's price"
+    given prices is empty
+    when Prices receives PUT /prices/bolt-m6 with "250"
+    then Prices replies OK with "250"
+    when Prices receives GET /prices/bolt-m6
+    then Prices replies OK with "250"
+
+requirement "A price of nothing is refused"
+    given prices is empty
+    when Prices receives PUT /prices/bolt-m6 with "0"
+    then Prices replies BadRequest
+    and prices is empty

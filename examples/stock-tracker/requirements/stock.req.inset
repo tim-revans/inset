@@ -86,6 +86,11 @@ requirement "Stock levels are listed in SKU order"
             StockLevel { sku: "nut-m6", on_hand: 5, reorder_level: 10, low: true },
         ]
 
+requirement "Nothing is listed when no item is stocked"
+    given items is empty
+    when StockTracker receives GET /items
+    then StockTracker replies OK with vec![]
+
 requirement "Only items at or below their reorder level are listed as low stock"
     given items["nut-m6"] is Item { on_hand: 10, reorder_level: 10, target_level: 50 }
     and items["bolt-m6"] is Item { on_hand: 40, reorder_level: 10, target_level: 50 }

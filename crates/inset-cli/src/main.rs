@@ -19,16 +19,20 @@
 //! until it stops. Relative paths in grants resolve against the directory
 //! `inset run` is run from.
 //!
-//! `inset test <dir> [--json]` builds the program and runs each of its
-//! requirements against the component, in the host with a fake behind every
-//! grant, as `requirements.rs` describes. It prints each requirement's
-//! sentence with whether it passed, and the step that failed and why, or
-//! with `--json` the same report as JSON for tools. It fails if any
-//! requirement fails.
+//! `inset test <dir> [--json] [--coverage]` builds the program and runs each
+//! of its requirements against the component, in the host with a fake
+//! behind every grant, as `requirements.rs` describes. It prints each
+//! requirement's sentence with whether it passed, and the step that failed
+//! and why, or with `--json` the same report as JSON for tools. It fails if
+//! any requirement fails, or if a requirement reaches code marked
+//! `#[defensive]`. With `--coverage` it also writes which requirements
+//! reached each element of the diagram to `<dir>/target/inset/coverage.json`,
+//! and the text report ends with what no requirement reached.
 //!
 //! `inset diagram <dir> [--json] [view options]` checks the program and
 //! draws its diagram as SVG, with the view options of
 //! `docs/language/diagrams.md`, or with `--json` prints the diagram data.
+//! `--coverage` adds the coverage the last `inset test --coverage` wrote.
 //!
 //! `inset parse <file>` prints a file's syntax tree, for debugging the
 //! parser. The dialect follows from the file name: `*.req.inset` is
@@ -56,7 +60,7 @@ const USAGE: &str = "usage: inset check <dir>
        inset build <dir>
        inset contract <dir> [--openapi | --typescript] [-o file]
        inset run <dir> [--set name=value]...
-       inset test <dir> [--json]
+       inset test <dir> [--json] [--coverage]
        inset diagram <dir> [--json] [view options]
        inset parse <file>
        inset lsp";
@@ -83,8 +87,15 @@ fn main() -> ExitCode {
         },
         ["contract", dir, options @ ..] => contract(dir, options),
         ["run", dir, sets @ ..] => run(dir, sets),
-        ["test", dir] => test(dir, false),
-        ["test", dir, "--json"] => test(dir, true),
+        ["test", dir, options @ ..]
+            if options.iter().all(|o| ["--json", "--coverage"].contains(o)) =>
+        {
+            test(
+                dir,
+                options.contains(&"--json"),
+                options.contains(&"--coverage"),
+            )
+        }
         ["diagram", dir, options @ ..] => diagram(dir, options),
         ["parse", path] => parse(path),
         ["lsp"] => lsp(),
@@ -271,7 +282,7 @@ fn run(dir: &str, sets: &[&str]) -> ExitCode {
     }
 }
 
-fn test(dir: &str, json: bool) -> ExitCode {
+fn test(dir: &str, json: bool, coverage: bool) -> ExitCode {
     let tested = load(dir).and_then(|program| {
         let component = build_program(dir, &program)?;
         requirements::run(&program, &component).map_err(|e| {
@@ -283,14 +294,27 @@ fn test(dir: &str, json: bool) -> ExitCode {
         Ok(report) => report,
         Err(code) => return code,
     };
+    if coverage {
+        let path = inset_diagram::coverage::file(Path::new(dir));
+        let mut text =
+            serde_json::to_string_pretty(&report.coverage).expect("coverage always serialises");
+        text.push('\n');
+        if let Err(e) = std::fs::write(&path, text) {
+            eprintln!("inset: cannot write {}: {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+    }
     if json {
         let mut out = serde_json::to_string_pretty(&report).expect("a report always serialises");
         out.push('\n');
         print!("{out}");
     } else {
         print!("{}", requirements::render(&report));
+        if coverage {
+            print!("{}", requirements::render_coverage(&report));
+        }
     }
-    if report.failed == 0 {
+    if report.failed == 0 && report.defensive.is_empty() {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
@@ -315,13 +339,19 @@ fn diagram(dir: &str, options: &[&str]) -> ExitCode {
         Ok(program) => program,
         Err(code) => return code,
     };
-    let diagram = match inset_diagram::emit(&program) {
+    let mut diagram = match inset_diagram::emit(&program) {
         Ok(diagram) => diagram,
         Err(reports) => {
             print_reports(&program, &reports);
             return ExitCode::FAILURE;
         }
     };
+    if view.coverage
+        && let Err(e) = inset_diagram::coverage::load(&mut diagram, Path::new(dir))
+    {
+        eprintln!("inset: {e}");
+        return ExitCode::FAILURE;
+    }
     let drawn = match json {
         true => Ok(inset_diagram::to_json(&diagram)),
         false => inset_diagram::render(&diagram, &view),

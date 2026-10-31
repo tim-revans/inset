@@ -1,0 +1,11 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "component C {\n    fn f(n: u32) -> u32 {\n        #[message]\n        n\n    }\n}\n"
+---
+Error: this attribute does not go on a statement
+   ╭─[ main.inset:3:9 ]
+   │
+ 3 │         #[message]
+   │         ─────┬────  
+   │              ╰────── only `#[defensive]` goes here
+───╯

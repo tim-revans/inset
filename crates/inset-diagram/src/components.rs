@@ -11,6 +11,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::coverage::{self, Status};
 use crate::model::*;
 use crate::svg::{Canvas, LH, Seg, chars, width, wrap};
 use crate::validate::{Index, last_name};
@@ -108,7 +109,11 @@ struct Arrow {
     label: Vec<Seg>,
 }
 
-pub(crate) fn render(diagram: &Diagram, view: &View) -> String {
+pub(crate) fn render(
+    diagram: &Diagram,
+    view: &View,
+    statuses: Option<&BTreeMap<Id, Status>>,
+) -> String {
     let index = Index::new(diagram);
     let app = &diagram.app;
     let mut nodes = vec![Node {
@@ -216,7 +221,7 @@ pub(crate) fn render(diagram: &Diagram, view: &View) -> String {
 
     let mut canvas = Canvas::new(view);
     for node in &nodes {
-        draw_box(&mut canvas, node);
+        draw_box(&mut canvas, node, statuses);
     }
     for arrow in &arrows {
         draw_arrow(&mut canvas, &nodes, arrow);
@@ -350,6 +355,11 @@ pub(crate) fn render(diagram: &Diagram, view: &View) -> String {
         );
     }
 
+    let mut total_w = total_w;
+    if statuses.is_some() {
+        total_h += coverage::legend(&mut canvas, nodes[0].x, total_h - 8.0);
+        total_w = total_w.max(nodes[0].x + coverage::legend_w() + 16.0);
+    }
     canvas.finish(total_w, total_h)
 }
 
@@ -815,7 +825,7 @@ fn place(nodes: &mut [Node], node: usize, x: f64, y: f64) {
     }
 }
 
-fn draw_box(canvas: &mut Canvas, node: &Node) {
+fn draw_box(canvas: &mut Canvas, node: &Node, statuses: Option<&BTreeMap<Id, Status>>) {
     let class = if node.parent.is_none() {
         "app"
     } else if node.external {
@@ -838,6 +848,24 @@ fn draw_box(canvas: &mut Canvas, node: &Node) {
         match &row.anchor {
             Some(anchor) => {
                 canvas.open(anchor, row.doc.as_deref());
+                // What coverage counts in the row's function, `failure` arm or
+                // component, marked in the box's padding so nothing moves.
+                let status = statuses.and_then(|s| coverage::tally(s, anchor).worst());
+                if let Some(status) = status {
+                    if status.stands_out() {
+                        canvas.rect(
+                            (node.x + 1.0, y - LH / 2.0, node.w - 2.0, LH),
+                            0.0,
+                            "band",
+                            None,
+                        );
+                    }
+                    canvas.text(
+                        node.x + 2.0,
+                        y + 4.0,
+                        &[Seg::new(status.mark(), status.class())],
+                    );
+                }
                 canvas.text(node.rows_x(), y + 4.0, &row.segs);
                 if row.port {
                     canvas.circle(node.x, y, 4.0, "port", None);

@@ -76,16 +76,19 @@ impl Front {
     }
 
     async fn count(&self, n: u32) -> String {
+        ::inset_runtime::coverage::branch::<Self>(2);
         ::inset_runtime::send(self.log.record(n));
         let total = self.tally.total().await;
         format!("{total}")
     }
 
     async fn name(&self, name: String) -> String {
+        ::inset_runtime::coverage::branch::<Self>(3);
         self.log.note(&name).await
     }
 
     fn logged(&mut self, n: u32) {
+        ::inset_runtime::coverage::branch::<Self>(4);
         self.seen += n;
     }
 }
@@ -146,6 +149,14 @@ impl ::inset_runtime::Component for Front {
 
     const ROLLS_BACK: bool = true;
 
+    const BRANCHES: &'static [&'static str] = &[
+        "failure:child:tally",
+        "failure:message:tally",
+        "fn:count",
+        "fn:name",
+        "fn:logged",
+    ];
+
     type Saved = ::inset_runtime::Saved;
 
     fn save(&self) -> ::inset_runtime::Saved {
@@ -177,13 +188,15 @@ impl ::inset_runtime::Component for Front {
         })
     }
 
-    fn respond(failure: &::inset_runtime::Failure) -> Option<::inset_runtime::Response> {
+    fn respond(
+        failure: &::inset_runtime::Failure,
+    ) -> Option<(::inset_runtime::Response, usize)> {
         match failure {
             ::inset_runtime::Failure::Child("tally") => {
-                Some(::inset_runtime::Response::Restart)
+                Some((::inset_runtime::Response::Restart, 0))
             }
             ::inset_runtime::Failure::Message("tally") => {
-                Some(::inset_runtime::Response::Rollback)
+                Some((::inset_runtime::Response::Rollback, 1))
             }
             _ => None,
         }
@@ -233,10 +246,12 @@ impl Tally {
     }
 
     fn add(&mut self, n: u32) {
+        ::inset_runtime::coverage::branch::<Self>(0);
         self.total += n;
     }
 
     fn total(&self) -> u32 {
+        ::inset_runtime::coverage::branch::<Self>(1);
         self.total
     }
 }
@@ -301,6 +316,8 @@ impl __TallyMessages {
 impl ::inset_runtime::Component for Tally {
     const NAME: &'static str = "Tally";
 
+    const BRANCHES: &'static [&'static str] = &["fn:add", "fn:total"];
+
     type Saved = ::inset_runtime::Saved;
 
     fn save(&self) -> ::inset_runtime::Saved {
@@ -362,6 +379,7 @@ impl Log {
     }
 
     async fn record(&mut self, n: u32) {
+        ::inset_runtime::coverage::branch::<Self>(0);
         self.entries.push(n);
         self.clock.tick().await;
         ::inset_runtime::send(self.counted.emit(n));
@@ -369,6 +387,7 @@ impl Log {
     }
 
     fn note(&self, name: &str) -> String {
+        ::inset_runtime::coverage::branch::<Self>(1);
         format!("noted {name}")
     }
 }
@@ -438,6 +457,8 @@ impl __LogMessages {
 impl ::inset_runtime::Component for Log {
     const NAME: &'static str = "Log";
 
+    const BRANCHES: &'static [&'static str] = &["fn:record", "fn:note"];
+
     type Saved = ::inset_runtime::Saved;
 
     fn save(&self) -> ::inset_runtime::Saved {
@@ -484,6 +505,7 @@ impl Clock {
     }
 
     fn tick(&mut self) {
+        ::inset_runtime::coverage::branch::<Self>(0);
         self.ticks += 1;
     }
 }
@@ -532,6 +554,8 @@ impl __ClockMessages {
 
 impl ::inset_runtime::Component for Clock {
     const NAME: &'static str = "Clock";
+
+    const BRANCHES: &'static [&'static str] = &["fn:tick"];
 
     type Saved = ::inset_runtime::Saved;
 

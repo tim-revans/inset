@@ -332,3 +332,8 @@ fn value_for_a_text_body() {
 fn unknown_query_parameter() {
     errors("unknown_query_parameter");
 }
+
+#[test]
+fn defensive_marks_nothing() {
+    errors("defensive_marks_nothing");
+}

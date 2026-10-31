@@ -37,6 +37,7 @@
 //!   which grant reaches each route;
 //! - `body`: names and types in function bodies, closures, messages and
 //!   capability calls;
+//! - `defensive`: where `#[defensive]` may mark a branch;
 //! - `requirements`: requirement steps against the app's routes and grants,
 //!   and the plan the test runner follows;
 //! - `values`: values and checks in requirement facts, typed against the
@@ -47,6 +48,7 @@
 mod api;
 mod body;
 mod data;
+mod defensive;
 mod front;
 mod index;
 mod items;

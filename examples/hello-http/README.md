@@ -39,4 +39,4 @@ It covers the brief's Hello HTTP row: one component, one route, one requirement 
 - The grant is the only place a capability enters the program, so the reviewer sees every external access at the app boundary.
 - The setting is listed with its default, so the reviewer sees what can change at run time.
 - The request arrow from HTTP clients ends at the route it reaches, and the route's row shows the handler's reply type.
-- The requirement test covers the route and its reply, so the coverage overlay should leave nothing uncovered.
+- The requirement test covers the route and its reply, so the coverage overlay leaves nothing uncovered.

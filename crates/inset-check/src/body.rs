@@ -41,6 +41,16 @@ impl Checker<'_> {
         for sig in &self.algorithms {
             checked.push(Body::function(self, None, sig));
         }
+        let mut marks = Vec::new();
+        for sig in self
+            .components
+            .iter()
+            .flat_map(|c| &c.functions)
+            .chain(&self.algorithms)
+        {
+            crate::defensive::check(&sig.ast.body, &mut marks);
+        }
+        self.diagnostics.extend(marks);
         for body in checked {
             self.diagnostics.extend(body.diagnostics);
             self.locals.extend(body.locals);
@@ -107,7 +117,9 @@ impl<'c, 'a> Body<'c, 'a> {
         }
         let ty = body.block(&sig.ast.body);
         let tail = match sig.ast.body.stmts.last() {
-            Some(Stmt::Expr { expr, semi: false }) => Some(expr),
+            Some(Stmt::Expr {
+                expr, semi: false, ..
+            }) => Some(expr),
             _ => None,
         };
         if !fits(&sig.ret, &ty) {
@@ -519,7 +531,7 @@ impl<'c, 'a> Body<'c, 'a> {
                     self.bind(pattern, ty);
                     Ty::unit()
                 }
-                Stmt::Expr { expr, semi } => {
+                Stmt::Expr { expr, semi, .. } => {
                     let ty = self.expr(expr);
                     if !semi && i + 1 == count {
                         ty

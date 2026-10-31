@@ -4,7 +4,7 @@ expression: stdout(&json)
 ---
 {
   "app": "StockTracker",
-  "passed": 11,
+  "passed": 12,
   "failed": 1,
   "requirements": [
     {
@@ -127,9 +127,15 @@ expression: stdout(&json)
       "result": "pass"
     },
     {
-      "sentence": "Only items at or below their reorder level are listed as low stock",
+      "sentence": "Nothing is listed when no item is stocked",
       "file": "requirements/stock.req.inset",
       "line": 89,
+      "result": "pass"
+    },
+    {
+      "sentence": "Only items at or below their reorder level are listed as low stock",
+      "file": "requirements/stock.req.inset",
+      "line": 94,
       "result": "pass"
     }
   ]

@@ -79,27 +79,55 @@ mod library {
 
         /// Lends a copy of a book, and replies with how many copies are left.
         fn lend(title: String) -> Result<String, LendError> {
-            let book = find(&title)?;
+            ::inset_runtime::coverage::branch::<Self>(0);
+            let book = ::inset_runtime::coverage::exit::<Self, _>(find(&title), 1)?;
             if book.copies == 0 {
+                ::inset_runtime::coverage::branch::<Self>(2);
                 return Err(
                     LendError::AllOut(format!("every copy of {} is out", book.title)),
                 );
+            } else {
+                ::inset_runtime::coverage::branch::<Self>(3);
             }
             Ok(format!("{} left", book.copies - 1))
         }
 
         /// Lists the titles of a genre, in shelf order.
         fn genre(name: String) -> Option<String> {
+            ::inset_runtime::coverage::branch::<Self>(4);
             let genre = match name.as_str() {
-                "fiction" => Genre::Fiction,
-                "science" => Genre::Science,
-                "history" => Genre::History,
-                _ => return None,
+                "fiction" => {
+                    ::inset_runtime::coverage::branch::<Self>(5);
+                    Genre::Fiction
+                }
+                "science" => {
+                    ::inset_runtime::coverage::branch::<Self>(6);
+                    Genre::Science
+                }
+                "history" => {
+                    ::inset_runtime::coverage::branch::<Self>(7);
+                    Genre::History
+                }
+                _ => {
+                    ::inset_runtime::coverage::branch::<Self>(8);
+                    return None;
+                }
             };
             let mut titles = Vec::new();
-            for book in shelf() {
-                if book.genre == genre {
-                    titles.push(book.title);
+            {
+                let mut __inset_ran = false;
+                for book in shelf() {
+                    __inset_ran = true;
+                    ::inset_runtime::coverage::branch::<Self>(9);
+                    if book.genre == genre {
+                        ::inset_runtime::coverage::branch::<Self>(10);
+                        titles.push(book.title);
+                    } else {
+                        ::inset_runtime::coverage::branch::<Self>(11);
+                    }
+                }
+                if !__inset_ran {
+                    ::inset_runtime::coverage::branch::<Self>(12);
                 }
             }
             Some(titles.join(", "))
@@ -108,6 +136,22 @@ mod library {
 
     impl ::inset_runtime::Component for Desk {
         const NAME: &'static str = "Desk";
+
+        const BRANCHES: &'static [&'static str] = &[
+            "fn:lend",
+            "fn:lend/0/err",
+            "fn:lend/1/b0",
+            "fn:lend/1/b1",
+            "fn:genre",
+            "fn:genre/0/b0",
+            "fn:genre/0/b1",
+            "fn:genre/0/b2",
+            "fn:genre/0/b3",
+            "fn:genre/2/body",
+            "fn:genre/2/body/0/b0",
+            "fn:genre/2/body/0/b1",
+            "fn:genre/2/skip",
+        ];
 
         type Saved = ();
 
@@ -155,6 +199,7 @@ mod library {
 
     /// Every book on the shelf.
     fn shelf() -> Vec<Book> {
+        ::inset_runtime::coverage::algorithm(0);
         vec![
             Book { title : "Dune".to_string(), copies : 2, genre : Genre::Fiction }, Book
             { title : "Cosmos".to_string(), copies : 1, genre : Genre::Science }, Book {
@@ -165,12 +210,27 @@ mod library {
 
     /// The book with this title.
     fn find(title: &str) -> Result<Book, LendError> {
+        ::inset_runtime::coverage::algorithm(1);
         if title.len() < 3 {
+            ::inset_runtime::coverage::algorithm(2);
             return Err(LendError::TooShort);
+        } else {
+            ::inset_runtime::coverage::algorithm(3);
         }
-        for book in shelf() {
-            if book.title == title {
-                return Ok(book);
+        {
+            let mut __inset_ran = false;
+            for book in shelf() {
+                __inset_ran = true;
+                ::inset_runtime::coverage::algorithm(4);
+                if book.title == title {
+                    ::inset_runtime::coverage::algorithm(5);
+                    return Ok(book);
+                } else {
+                    ::inset_runtime::coverage::algorithm(6);
+                }
+            }
+            if !__inset_ran {
+                ::inset_runtime::coverage::algorithm(7);
             }
         }
         Err(LendError::Unknown)
@@ -200,6 +260,8 @@ impl ::inset_runtime::App for Shelf {
             fields: &[("port", ::inset_runtime::GrantValue::Setting("port"))],
         },
     ];
+
+    const BRANCHES: &'static [&'static str] = ALGORITHM_BRANCHES;
 
     fn start(
         scope: &::inset_runtime::Scope,
@@ -281,3 +343,15 @@ impl ::inset_runtime::Stored for Genre {
         }
     }
 }
+
+/// The elements coverage counts in the top-level algorithms, by their diagram IDs.
+const ALGORITHM_BRANCHES: &[&str] = &[
+    "Shelf/mod:library/fn:shelf",
+    "Shelf/mod:library/fn:find",
+    "Shelf/mod:library/fn:find/0/b0",
+    "Shelf/mod:library/fn:find/0/b1",
+    "Shelf/mod:library/fn:find/1/body",
+    "Shelf/mod:library/fn:find/1/body/0/b0",
+    "Shelf/mod:library/fn:find/1/body/0/b1",
+    "Shelf/mod:library/fn:find/1/skip",
+];

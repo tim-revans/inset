@@ -57,7 +57,7 @@ It covers the brief's Stock tracker row: several actors, a database capability, 
 
 `inset test examples/stock-tracker` runs the requirements, with each row of the examples table on a line of its own. `inset run examples/stock-tracker` serves the program and its page at `http://localhost:8080/`, and keeps `stock.db` in the directory it is run from. `cargo xtask e2e stock-tracker` stocks an item through `PUT /items/{sku}` and checks the replies over HTTP. `cargo xtask contract` checks `web/app.js` against the TypeScript types, and checks that renaming `on_hand` in the Inset source makes that check fail.
 
-No requirement names a component or an algorithm, yet every branch of the code is reached by some requirement, so the coverage overlay should leave nothing uncovered.
+No requirement names a component or an algorithm, yet every branch of the code is reached by some requirement, so `inset test examples/stock-tracker --coverage` reports nothing uncovered, and `inset diagram examples/stock-tracker --coverage` marks every row `✓`. The coverage overlay found one gap when it was first drawn: no requirement listed stock with nothing stocked, so the loop in `levels` never ran its body zero times. "Nothing is listed when no item is stocked" closes it.
 
 ## Expected diagrams
 

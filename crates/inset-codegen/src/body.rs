@@ -197,7 +197,7 @@ impl Emitter<'_> {
         quote!({ #(#stmts)* })
     }
 
-    fn stmt(&mut self, stmt: &Stmt) -> TokenStream {
+    pub(crate) fn stmt(&mut self, stmt: &Stmt) -> TokenStream {
         match stmt {
             Stmt::Let {
                 pattern: p,
@@ -221,7 +221,7 @@ impl Emitter<'_> {
                 });
                 quote!(let #p #t #init #else_block;)
             }
-            Stmt::Expr { expr, semi } => {
+            Stmt::Expr { expr, semi, .. } => {
                 let expr = self.expr(expr);
                 if *semi { quote!(#expr;) } else { expr }
             }
@@ -288,7 +288,7 @@ impl Emitter<'_> {
             }
             ExprKind::Try(base) => {
                 let base = self.expr(base);
-                quote!(#base?)
+                self.tried(base)
             }
             ExprKind::Unary { op, operand } => {
                 let operand = self.expr(operand);
@@ -462,7 +462,11 @@ impl Emitter<'_> {
             let t = self.ty(t);
             quote!(-> #t)
         });
+        // A `?` in a closure returns from the closure, not the function,
+        // so the flowchart does not draw it as the step's error path.
+        let exit = self.exit.take();
         let body = self.expr(&closure.body);
+        self.exit = exit;
         quote!(#is_move |#(#params),*| #ret #body)
     }
 }
