@@ -12,6 +12,7 @@ http-body-util = "0.1.3"
 hyper = { version = "1.12.0", features = ["server", "http1"] }
 hyper-util = { version = "0.1.19", features = ["tokio"] }
 rand = { version = "0.10.1", default-features = false, features = ["std_rng"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 tokio = { version = "1.54.1", features = ["rt", "net", "macros", "sync"] }
 wasmtime = { version = "49.0.5", default-features = false, features = ["cranelift", "component-model", "cache", "parallel-compilation", "std", "runtime", "addr2line", "demangle"] }
 wasmtime-wasi = { version = "49.0.5", default-features = false, features = ["p2"] }

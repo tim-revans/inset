@@ -1,0 +1,21 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:6:36-6:44
+the other side is a `u32`, and this is `dec!(...)`
+expected a `u32`
+help: write an integer, such as `40`
+
+requirements/main.req.inset:7:9-7:31
+a check is a `bool`, and this is a `Decimal`
+this is not a condition
+help: compare it with something, such as `== 0`
+
+requirements/main.req.inset:8:9-8:19
+this check reads no capability
+a check is a condition on what a capability holds
+help: read an entry by its key, such as `items["bolt-m6"].on_hand > 0`
+
+requirements/main.req.inset:9:26-9:32
+an `Item` has no field `weight`
+not a field

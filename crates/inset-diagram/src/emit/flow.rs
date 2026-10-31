@@ -510,7 +510,14 @@ impl Emitter<'_> {
             ExprKind::For { .. } | ExprKind::While { .. } => {
                 self.unsupported("a loop inside an expression", expr.span, "this loop");
             }
-            ExprKind::Await(_) => self.unsupported("`.await`", expr.span, "awaited here"),
+            // A capability call is a step linked to the capability's edge.
+            // An awaited message needs a message arrow, which is not drawn yet.
+            ExprKind::Await(inner) if self.calls_a_capability(cx, inner) => {
+                self.walk(cx, inner, uses, in_closure);
+            }
+            ExprKind::Await(_) => {
+                self.unsupported("`.await` on a message", expr.span, "awaited here");
+            }
             ExprKind::Send(_) => self.unsupported("`send`", expr.span, "sent here"),
             ExprKind::Move(_) => {
                 self.unsupported("`move` across a boundary", expr.span, "moved here");
@@ -594,6 +601,22 @@ impl Emitter<'_> {
                 self.algorithms.get(target).cloned()
             }
         }
+    }
+
+    /// Whether an expression calls a method of a capability field.
+    fn calls_a_capability(&self, cx: &Context<'_>, expr: &Expr) -> bool {
+        let ExprKind::MethodCall { receiver, .. } = &expr.kind else {
+            return false;
+        };
+        let ExprKind::Field { base, name } = &receiver.kind else {
+            return false;
+        };
+        let is_self = matches!(&base.kind, ExprKind::Path(p) if matches!(p.segments.as_slice(), [s] if s.ident.name == "self"));
+        is_self
+            && cx.scope.is_some_and(|scope| {
+                self.operations
+                    .contains_key(&format!("{}/field:{}", scope.component, name.name))
+            })
     }
 
     /// The edge a call of `method` on `receiver` uses, when the receiver is

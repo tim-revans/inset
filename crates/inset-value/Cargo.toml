@@ -1,0 +1,15 @@
+[package]
+name = "inset-value"
+version = "0.0.0"
+description = "Inset values outside a program: how a table stores them, and how requirement tests write, read and compare them"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+rust_decimal = { version = "1.43", default-features = false, features = ["std"] }
+serde_json = "1"
+
+[lints]
+workspace = true

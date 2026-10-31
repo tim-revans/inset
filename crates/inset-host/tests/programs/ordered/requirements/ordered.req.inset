@@ -1,0 +1,21 @@
+requirement "Numbers are listed smallest first, negative numbers before the rest"
+    given numbers[7] is "seven"
+    and numbers[-1] is "minus one"
+    and numbers[0] is "zero"
+    and numbers[-300] is "minus three hundred"
+    when Ordered receives GET /numbers
+    then Ordered replies OK with "-300 -1 0 7"
+
+requirement "Words are listed in the order of their characters"
+    given words["b"] is 1
+    and words["ab"] is 1
+    and words["B"] is 1
+    and words["a"] is 1
+    when Ordered receives GET /words
+    then Ordered replies OK with "B a ab b"
+
+requirement "A stored number keeps its name"
+    given numbers is empty
+    when Ordered receives PUT /numbers/-5 with "minus five"
+    then Ordered replies OK with "stored"
+    and numbers[-5] is "minus five"

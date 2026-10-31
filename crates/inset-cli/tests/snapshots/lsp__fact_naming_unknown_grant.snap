@@ -1,0 +1,12 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:10:9-10:14
+`Store` has no capability `stock`
+not a grant of the app
+help: the grants of `Store` are `http` and `items`
+
+requirements/main.req.inset:13:9-13:13
+`http` is an `HttpServer`, and only a `Table` holds entries
+not a table
+help: an `HttpServer`'s requests and replies are the `when` and `then` steps

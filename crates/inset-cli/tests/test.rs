@@ -134,3 +134,42 @@ fn a_program_with_errors_is_not_tested() {
         stderr(&out)
     );
 }
+
+#[test]
+fn facts_set_up_and_check_what_tables_hold() {
+    for (program, name) in [
+        ("crates/inset-host/tests/programs/stock-room", "stock-room"),
+        ("crates/inset-host/tests/programs/ordered", "ordered"),
+    ] {
+        let dir = copy(program, name);
+        let out = run(&mut inset(&["test"], &dir));
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(out.status.success(), "{}{}", stdout(&out), stderr(&out));
+        insta::assert_snapshot!(format!("{}_text", name.replace('-', "_")), stdout(&out));
+    }
+}
+
+/// A copy of the stock room whose handlers store the wrong thing, while
+/// replying as they should, so only the facts and checks after the replies
+/// find it out.
+#[test]
+fn a_fact_that_fails_shows_both_values() {
+    let dir = copy("crates/inset-host/tests/programs/stock-room", "broken-room");
+    let main = dir.join("src/main.inset");
+    let source = std::fs::read_to_string(&main).unwrap();
+    let broken = source
+        .replace(
+            "Item { on_hand: 0, price, place",
+            "Item { on_hand: 1, price, place",
+        )
+        .replace("Place::Shelf(shelf);", "Place::Shelf(shelf + 1);")
+        .replace("self.items.remove(&sku)", "self.items.get(&sku)");
+    assert_ne!(source, broken);
+    std::fs::write(&main, broken).unwrap();
+    let text = run(&mut inset(&["test"], &dir));
+    let json = run(&mut inset(&["test", "--json"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(text.status.code(), Some(1), "{}", stderr(&text));
+    insta::assert_snapshot!("broken_room_text", stdout(&text));
+    insta::assert_snapshot!("broken_room_json", stdout(&json));
+}

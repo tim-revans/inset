@@ -18,6 +18,7 @@ inset-diagram = { path = "../inset-diagram" }
 inset-host = { path = "../inset-host" }
 inset-lsp = { path = "../inset-lsp" }
 inset-syntax = { path = "../inset-syntax" }
+inset-value = { path = "../inset-value" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

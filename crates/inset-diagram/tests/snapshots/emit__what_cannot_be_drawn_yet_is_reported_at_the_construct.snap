@@ -11,7 +11,7 @@ Error: `send` cannot be drawn yet
     │ 
     │ Help: `inset check` accepts this, but the diagram generator does not draw it yet
 ────╯
-Error: `.await` cannot be drawn yet
+Error: `.await` on a message cannot be drawn yet
     ╭─[ src/main.inset:15:21 ]
     │
  15 │         let total = self.tally.total().await;

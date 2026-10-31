@@ -1,0 +1,21 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `Store` has no capability `stock`
+    ╭─[ requirements/main.req.inset:10:9 ]
+    │
+ 10 │     and stock fails
+    │         ──┬──  
+    │           ╰──── not a grant of the app
+    │ 
+    │ Help: the grants of `Store` are `http` and `items`
+────╯
+Error: `http` is an `HttpServer`, and only a `Table` holds entries
+    ╭─[ requirements/main.req.inset:13:9 ]
+    │
+ 13 │     and http is empty
+    │         ──┬─  
+    │           ╰─── not a table
+    │ 
+    │ Help: an `HttpServer`'s requests and replies are the `when` and `then` steps
+────╯

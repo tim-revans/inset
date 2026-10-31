@@ -107,6 +107,7 @@ fn every_drawn_element_has_a_source() {
     for dir in [
         "examples/hello-http",
         "crates/inset-diagram/tests/programs/shapes",
+        "crates/inset-host/tests/programs/stock-room",
     ] {
         let program = Program::load(&repo().join(dir)).expect("load program");
         let emitted = emit_with_sources(&program).expect("drawn");
@@ -180,6 +181,37 @@ fn match_and_loop_flowcharts_are_pinned() {
             path.display()
         );
     }
+}
+
+/// The element with this ID, anywhere in the diagram's data.
+fn find<'v>(value: &'v serde_json::Value, id: &str) -> Option<&'v serde_json::Value> {
+    if value["id"] == id {
+        return Some(value);
+    }
+    match value {
+        serde_json::Value::Object(map) => map.values().find_map(|v| find(v, id)),
+        serde_json::Value::Array(items) => items.iter().find_map(|v| find(v, id)),
+        _ => None,
+    }
+}
+
+/// Each awaited table call is a step linked to the table's capability
+/// edge, which lists every method the component calls.
+#[test]
+fn table_calls_are_steps_on_the_capability_edge() {
+    let program = Program::load(&repo().join("crates/inset-host/tests/programs/stock-room"))
+        .expect("load stock room");
+    let diagram = drawn(&program);
+    assert_eq!(validate(&diagram), Vec::<String>::new());
+    draw_every_view(&diagram);
+    let json: serde_json::Value = serde_json::from_str(&to_json(&diagram)).unwrap();
+    let edge = find(&json, "StockRoom/Room/field:items->StockRoom/grant:items").expect("an edge");
+    assert_eq!(
+        edge["operations"],
+        serde_json::json!(["entries", "get", "insert", "remove"])
+    );
+    let receive = find(&json, "StockRoom/Room/fn:receive").expect("a handler");
+    insta::assert_snapshot!(serde_json::to_string_pretty(&receive["body"]).unwrap());
 }
 
 /// Messages, an outlet, `send`, `.await`, and the shapes of body that

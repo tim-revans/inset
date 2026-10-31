@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:5:9-5:62
+`Item` is compared here, and does not derive `PartialEq` and `Debug`
+compared as an `Item`
+help: a type compared in a requirement derives `PartialEq` and `Debug`, so a failed test can show both values: add `PartialEq` and `Debug` to the `#[derive]` of `Item`

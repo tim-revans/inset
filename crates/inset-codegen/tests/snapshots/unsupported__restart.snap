@@ -1,0 +1,13 @@
+---
+source: crates/inset-codegen/tests/unsupported.rs
+expression: errors(RESTARTING)
+---
+Error: `restart` cannot be compiled yet
+    ╭─[ src/main.inset:16:9 ]
+    │
+ 16 │         Panic => restart,
+    │         ────────┬───────  
+    │                 ╰───────── this response
+    │ 
+    │ Help: `inset check` accepts this, but the compiler does not emit Rust for it yet
+────╯

@@ -1,0 +1,17 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&out)
+---
+pass  The quantity on hand of a stocked item is shown
+pass  An item that is not stocked is not found
+pass  A new item is stocked at its price, in the back room, with none on hand
+pass  Received stock is added to the quantity on hand
+pass  Stock moves from one item to another
+pass  Moving more stock than an item holds is refused and changes nothing
+pass  An item moved to a shelf is kept there
+pass  A discontinued item is no longer stocked
+pass  Items are listed in SKU order, with what their stock is worth
+pass  A database failure fails the request and changes nothing
+pass  A transfer whose total is too large to count fails and changes nothing
+
+11 requirements passed

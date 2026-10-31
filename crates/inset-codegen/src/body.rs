@@ -12,7 +12,7 @@ use quote::quote;
 use crate::Emitter;
 
 /// The types Inset's standard library adds, which the runtime provides.
-const RUNTIME_TYPES: [&str; 4] = ["HttpServer", "Table", "Handle", "Outlet"];
+const RUNTIME_TYPES: [&str; 5] = ["HttpServer", "Table", "Handle", "Outlet", "Decimal"];
 
 /// Words Rust reserves that Inset does not, which are written as raw identifiers.
 const RESERVED: [&str; 14] = [
@@ -176,28 +176,8 @@ fn lit(l: &Lit) -> TokenStream {
 }
 
 impl Emitter {
-    /// A type, reporting the ones that cannot be compiled yet.
     pub(crate) fn ty(&mut self, t: &Type) -> TokenStream {
-        self.check_type(t);
         ty(t)
-    }
-
-    fn check_type(&mut self, t: &Type) {
-        match &t.kind {
-            TypeKind::Path(p) => {
-                for segment in &p.segments {
-                    if segment.ident.name == "Decimal" {
-                        self.unsupported("`Decimal`", segment.ident.span, "this type");
-                    }
-                    for generic in &segment.generics {
-                        self.check_type(generic);
-                    }
-                }
-            }
-            TypeKind::Ref { inner, .. } | TypeKind::Slice(inner) => self.check_type(inner),
-            TypeKind::Tuple(elems) => elems.iter().for_each(|e| self.check_type(e)),
-            TypeKind::Infer => {}
-        }
     }
 
     pub(crate) fn block(&mut self, block: &Block) -> TokenStream {
@@ -244,14 +224,16 @@ impl Emitter {
         match &e.kind {
             ExprKind::Lit(l) => lit(l),
             ExprKind::Path(p) => {
-                if p.segments[0].ident.name == "Decimal" {
-                    self.unsupported("`Decimal`", p.segments[0].ident.span, "this type");
+                let path = path(p, true);
+                if p.segments.len() > 1 && p.segments[0].ident.name == "Decimal" {
+                    quote!(::inset_runtime::#path)
+                } else {
+                    path
                 }
-                path(p, true)
             }
             ExprKind::Macro { name, args } => {
                 if matches!(name.segments.as_slice(), [only] if only.ident.name == "dec") {
-                    self.unsupported("`dec!`", name.span, "this macro");
+                    return decimal(args);
                 }
                 let args = self.exprs(args);
                 let is_vec = matches!(name.segments.as_slice(), [only] if only.ident.name == "vec");
@@ -296,7 +278,6 @@ impl Emitter {
                 quote!(#base[#index])
             }
             ExprKind::Await(base) => {
-                self.unsupported("`.await`", e.span, "awaited here");
                 let base = self.expr(base);
                 quote!(#base.await)
             }
@@ -478,6 +459,45 @@ impl Emitter {
         let body = self.expr(&closure.body);
         quote!(#is_move |#(#params),*| #ret #body)
     }
+}
+
+/// `dec!(1.20)` as the `Decimal` it is: its digits and its scale. The
+/// checker has made sure the argument is one number that fits.
+fn decimal(args: &[Expr]) -> TokenStream {
+    let (negative, lit) = match args {
+        [
+            Expr {
+                kind: ExprKind::Lit(lit),
+                ..
+            },
+        ] => (false, lit),
+        [
+            Expr {
+                kind:
+                    ExprKind::Unary {
+                        op: UnaryOp::Neg,
+                        operand,
+                    },
+                ..
+            },
+        ] => match &operand.kind {
+            ExprKind::Lit(lit) => (true, lit),
+            _ => unreachable!("the checker allows only a number in `dec!`"),
+        },
+        _ => unreachable!("the checker allows only a number in `dec!`"),
+    };
+    let text = match &lit.kind {
+        LitKind::Int(text) | LitKind::Float(text) => text.replace('_', ""),
+        _ => unreachable!("the checker allows only a number in `dec!`"),
+    };
+    let (whole, fraction) = text.split_once('.').unwrap_or((&text, ""));
+    let mantissa: u128 = format!("{whole}{fraction}")
+        .parse()
+        .expect("the checker allows only a number that fits");
+    let mantissa = Literal::u128_unsuffixed(mantissa);
+    let sign = negative.then(|| quote!(-));
+    let scale = Literal::u32_unsuffixed(fraction.len() as u32);
+    quote!(::inset_runtime::Decimal::from_i128_with_scale(#sign #mantissa, #scale))
 }
 
 fn binary(op: BinaryOp) -> TokenStream {

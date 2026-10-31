@@ -31,8 +31,8 @@ fn a_handler_that_completes_changes_everything() {
     assert_eq!(text(&mut running, "POST", "/count/a"), (200, "a 2".into()));
     assert_eq!(text(&mut running, "GET", "/count/a"), (200, "2".into()));
     assert_eq!(
-        running.table("counts").unwrap().get("\"a\""),
-        Some("2".into())
+        running.table("counts").unwrap().get(b"a"),
+        Ok(Some(b"2".to_vec()))
     );
     assert_eq!(
         state(&mut running),
@@ -75,7 +75,7 @@ fn a_panic_rolls_back_and_the_program_carries_on() {
         state(&mut running),
         ("1".into(), "a 1".into(), String::new())
     );
-    assert_eq!(running.table("counts").unwrap().get("\"panic\""), None);
+    assert_eq!(running.table("counts").unwrap().get(b"panic"), Ok(None));
     assert_eq!(text(&mut running, "POST", "/count/a"), (200, "a 2".into()));
     let [panic] = running.reports() else {
         panic!("one report: {:?}", running.reports())

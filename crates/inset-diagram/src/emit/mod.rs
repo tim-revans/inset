@@ -11,12 +11,13 @@
 //! route, message handler and algorithm, capability edges with the
 //! operations called on each capability, and a flowchart for every function
 //! whose body uses statements, `let ... else`, `if`, `if let`, `match`,
-//! `for`, `while`, `return`, and `?` in a function that returns an `Option`
-//! or a `Result`. Algorithms in every module are drawn, each owned by the
-//! app and its module's path. Anything else that `inset check` accepts gets
-//! a diagnostic saying it cannot be drawn yet, at the construct, rather
-//! than a diagram that leaves it out. Message and emit edges, which need
-//! `send` and `.await`, follow with the Stock tracker.
+//! `for`, `while`, `return`, `?` in a function that returns an `Option`
+//! or a `Result`, and awaited capability calls, each a step linked to the
+//! capability's edge. Algorithms in every module are drawn, each owned by
+//! the app and its module's path. Anything else that `inset check` accepts
+//! gets a diagnostic saying it cannot be drawn yet, at the construct,
+//! rather than a diagram that leaves it out. Message and emit edges, which
+//! need `send` and an awaited message, follow with the Stock tracker.
 
 mod flow;
 

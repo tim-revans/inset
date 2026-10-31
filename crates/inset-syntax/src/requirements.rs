@@ -8,6 +8,7 @@
 
 use crate::ast::*;
 use crate::lexer::{self, TokenKind};
+use crate::parser::StepFact;
 use crate::{Diagnostic, Ident, Span};
 
 const STEP_INDENT: usize = 4;
@@ -175,8 +176,21 @@ impl<'a> ReqParser<'a> {
         self.diagnostics.append(&mut cursor.diagnostics);
         let mut steps: Vec<Step> = Vec::new();
         let mut any_step_lines = false;
+        let mut in_examples = false;
         while let Some(line) = self.next_deeper(0) {
             any_step_lines = true;
+            if line.text.split_whitespace().next() == Some("examples") {
+                self.unsupported(
+                    "`examples`",
+                    Span::new(line.text_start(), line.text_start() + 8),
+                );
+                in_examples = true;
+                continue;
+            }
+            if in_examples && line.text.starts_with('|') {
+                // A row of the examples table, reported with `examples`.
+                continue;
+            }
             if line.indent != STEP_INDENT {
                 self.error(
                     Diagnostic::new(
@@ -190,8 +204,10 @@ impl<'a> ReqParser<'a> {
                 continue;
             }
             let previous = steps.last().map(|s| &s.kind);
-            if let Some(step) = self.parse_step(line, previous) {
-                steps.push(step);
+            let reported = self.diagnostics.len();
+            match self.parse_step(line, previous) {
+                Some(step) => steps.push(step),
+                None => self.placeholders(line, reported),
             }
         }
         let sentence = sentence?;
@@ -208,6 +224,25 @@ impl<'a> ReqParser<'a> {
             sentence,
             steps,
         })
+    }
+
+    /// Reports a step that failed to parse because it has a placeholder,
+    /// such as `<on hand>`, as a placeholder, instead of the errors found
+    /// since `reported`.
+    fn placeholders(&mut self, line: Line<'a>, reported: usize) {
+        let Some((start, end)) = placeholder(line.text) else {
+            return;
+        };
+        self.diagnostics.truncate(reported);
+        let start = line.text_start() + start;
+        self.error(
+            Diagnostic::new(
+                "placeholders are not supported yet",
+                Span::new(start, line.text_start() + end),
+                "the parser does not handle this yet",
+            )
+            .with_help("a placeholder takes its value from an `examples` table or a `for all`"),
+        );
     }
 
     /// Parses the step starting on `line`, with its continuation lines and
@@ -228,6 +263,10 @@ impl<'a> ReqParser<'a> {
         let span = Span::new(line.text_start(), end);
         let mut cursor = Cursor::new(self.source, span);
         let step = self.parse_step_words(&mut cursor, previous, &mut text_block, block_failed);
+        if step.is_none() {
+            // A text block after a step that failed is part of what failed.
+            text_block = None;
+        }
         self.diagnostics.append(&mut cursor.diagnostics);
         if let Some(block) = text_block {
             self.error(
@@ -261,12 +300,16 @@ impl<'a> ReqParser<'a> {
         block_failed: bool,
     ) -> Option<(StepKeyword, StepKind)> {
         let (word, word_span) = cursor.word()?;
-        let (keyword, request) = match word.as_str() {
-            "when" => (StepKeyword::When, true),
-            "then" => (StepKeyword::Then, false),
+        let (keyword, kind) = match word.as_str() {
+            "given" => (StepKeyword::Given, Kind::Given),
+            "when" => (StepKeyword::When, Kind::When),
+            "then" => (StepKeyword::Then, Kind::Then),
             "and" => match previous {
-                Some(StepKind::Request { .. }) => (StepKeyword::And, true),
-                Some(StepKind::Reply { .. }) => (StepKeyword::And, false),
+                Some(StepKind::Request { .. }) => (StepKeyword::And, Kind::When),
+                Some(StepKind::Fact { given: true, .. }) => (StepKeyword::And, Kind::Given),
+                Some(StepKind::Reply { .. } | StepKind::Fact { .. } | StepKind::Check(_)) => {
+                    (StepKeyword::And, Kind::Then)
+                }
                 None => {
                     self.error(
                         Diagnostic::new(
@@ -279,10 +322,6 @@ impl<'a> ReqParser<'a> {
                     return None;
                 }
             },
-            "given" | "examples" => {
-                self.unsupported(&format!("`{word}`"), word_span);
-                return None;
-            }
             "for" => {
                 self.unsupported("`for all`", word_span);
                 return None;
@@ -295,6 +334,15 @@ impl<'a> ReqParser<'a> {
                 ));
                 return None;
             }
+        };
+        // A `then` step about a reply names the app and says `replies`.
+        // Any other is a fact or a check.
+        let replies = cursor.peek_second_word().is_some_and(|w| w == "replies");
+        let request = match kind {
+            Kind::Given => return self.fact(cursor, false).map(|kind| (keyword, kind)),
+            Kind::Then if !replies => return self.fact(cursor, true).map(|kind| (keyword, kind)),
+            Kind::When => true,
+            Kind::Then => false,
         };
         let app = self.app_name(cursor)?;
         let kind = if request {
@@ -311,16 +359,6 @@ impl<'a> ReqParser<'a> {
                 body,
             }
         } else {
-            match cursor.peek_word() {
-                Some(word) if word == "replies" => {}
-                _ => {
-                    self.unsupported(
-                        "a fact or check in a `then` step",
-                        word_span.to(cursor.span_of_rest()),
-                    );
-                    return None;
-                }
-            }
             cursor.word();
             let status = match cursor.word() {
                 Some((word, span)) if is_upper_camel(&word) => Ident::new(word, span),
@@ -356,6 +394,34 @@ impl<'a> ReqParser<'a> {
             return None;
         }
         Some((keyword, kind))
+    }
+
+    /// The rest of a `given` or `then` step: a fact, or after `then`, a check.
+    fn fact(&mut self, cursor: &mut Cursor<'a>, allow_check: bool) -> Option<StepKind> {
+        let span = cursor.span_of_rest();
+        if span.is_empty() {
+            let what = if allow_check {
+                "a fact or a condition"
+            } else {
+                "a fact"
+            };
+            self.error(Diagnostic::new(
+                format!("expected {what}"),
+                span,
+                "the step says nothing here",
+            ));
+            return None;
+        }
+        cursor.pos = span.end;
+        let (parsed, mut diagnostics) = crate::parse_step_fact(self.source, span, allow_check);
+        self.diagnostics.append(&mut diagnostics);
+        match parsed? {
+            StepFact::Fact(fact) => Some(StepKind::Fact {
+                given: !allow_check,
+                fact: *fact,
+            }),
+            StepFact::Check(expr) => Some(StepKind::Check(expr)),
+        }
     }
 
     fn unsupported(&mut self, what: &str, span: Span) {
@@ -666,6 +732,15 @@ impl<'a> Cursor<'a> {
         Span::new(self.pos, self.pos + text.len())
     }
 
+    /// The word after the next one.
+    fn peek_second_word(&mut self) -> Option<String> {
+        let saved = self.pos;
+        self.word();
+        let word = self.word().map(|(w, _)| w);
+        self.pos = saved;
+        word
+    }
+
     fn peek_word(&mut self) -> Option<String> {
         let saved = self.pos;
         let word = self.word().map(|(w, _)| w);
@@ -725,6 +800,36 @@ impl<'a> Cursor<'a> {
             span: Span::new(start, self.pos),
         }))
     }
+}
+
+/// What a step does, whether written with its own word or with `and`.
+#[derive(Clone, Copy)]
+enum Kind {
+    Given,
+    When,
+    Then,
+}
+
+/// Where the first placeholder in a step is, such as `<on hand>`: a name
+/// in `<` `>` that starts with a letter, made of letters, digits, spaces,
+/// `_` and `-`, so an operator such as `a < b && c > d` is not one.
+fn placeholder(text: &str) -> Option<(usize, usize)> {
+    let mut from = 0;
+    while let Some(open) = text[from..].find('<').map(|i| from + i) {
+        let rest = &text[open + 1..];
+        if let Some(close) = rest.find('>') {
+            let inner = &rest[..close];
+            let named = inner.starts_with(|c: char| c.is_alphabetic())
+                && inner
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || matches!(c, ' ' | '_' | '-'));
+            if named {
+                return Some((open, open + close + 2));
+            }
+        }
+        from = open + 1;
+    }
+    None
 }
 
 fn is_snake(word: &str) -> bool {

@@ -29,6 +29,40 @@ mod library {
         }
     }
 
+    impl ::inset_runtime::Stored for LendError {
+        fn to_json(&self) -> ::inset_runtime::Json {
+            match self {
+                Self::Unknown => ::inset_runtime::data::variant("Unknown", Vec::new()),
+                Self::AllOut(field0) => {
+                    ::inset_runtime::data::variant(
+                        "AllOut",
+                        Vec::from([::inset_runtime::Stored::to_json(field0)]),
+                    )
+                }
+                Self::TooShort => ::inset_runtime::data::variant("TooShort", Vec::new()),
+            }
+        }
+
+        fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+            let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
+            match variant {
+                "Unknown" => {
+                    ::inset_runtime::data::arity("Unknown", fields, 0)?;
+                    Ok(Self::Unknown)
+                }
+                "AllOut" => {
+                    ::inset_runtime::data::arity("AllOut", fields, 1usize)?;
+                    Ok(Self::AllOut(::inset_runtime::Stored::from_json(&fields[0])?))
+                }
+                "TooShort" => {
+                    ::inset_runtime::data::arity("TooShort", fields, 0)?;
+                    Ok(Self::TooShort)
+                }
+                other => ::inset_runtime::data::unknown_variant("LendError", other),
+            }
+        }
+    }
+
     /// The lending desk.
     pub struct Desk {
         pub http: ::inset_runtime::HttpServer,
@@ -177,10 +211,60 @@ struct Book {
     genre: Genre,
 }
 
+impl ::inset_runtime::Stored for Book {
+    fn to_json(&self) -> ::inset_runtime::Json {
+        ::inset_runtime::data::object(
+            Vec::from([
+                ("title", ::inset_runtime::Stored::to_json(&self.title)),
+                ("copies", ::inset_runtime::Stored::to_json(&self.copies)),
+                ("genre", ::inset_runtime::Stored::to_json(&self.genre)),
+            ]),
+        )
+    }
+
+    fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+        let fields = ::inset_runtime::data::fields("Book", json)?;
+        Ok(Book {
+            title: fields.get("title")?,
+            copies: fields.get("copies")?,
+            genre: fields.get("genre")?,
+        })
+    }
+}
+
 /// What a book is about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Genre {
     Fiction,
     Science,
     History,
+}
+
+impl ::inset_runtime::Stored for Genre {
+    fn to_json(&self) -> ::inset_runtime::Json {
+        match self {
+            Self::Fiction => ::inset_runtime::data::variant("Fiction", Vec::new()),
+            Self::Science => ::inset_runtime::data::variant("Science", Vec::new()),
+            Self::History => ::inset_runtime::data::variant("History", Vec::new()),
+        }
+    }
+
+    fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+        let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
+        match variant {
+            "Fiction" => {
+                ::inset_runtime::data::arity("Fiction", fields, 0)?;
+                Ok(Self::Fiction)
+            }
+            "Science" => {
+                ::inset_runtime::data::arity("Science", fields, 0)?;
+                Ok(Self::Science)
+            }
+            "History" => {
+                ::inset_runtime::data::arity("History", fields, 0)?;
+                Ok(Self::History)
+            }
+            other => ::inset_runtime::data::unknown_variant("Genre", other),
+        }
+    }
 }

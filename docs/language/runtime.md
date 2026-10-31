@@ -2,7 +2,7 @@
 
 How a built Inset program runs: the Rust the compiler emits, the runtime library linked into it, and the WebAssembly host that runs it with only the capabilities it is granted.
 
-`inset build` compiles a program's Inset source to Rust with [`crates/inset-codegen/`](../../crates/inset-codegen/), and builds that Rust to a WebAssembly component. `inset run` builds it and runs it in the host. Hello HTTP's generated Rust is pinned by a snapshot test, [`crates/inset-codegen/tests/snapshots/hello__hello_http_rust.snap`](../../crates/inset-codegen/tests/snapshots/hello__hello_http_rust.snap), rather than kept with the example, because nobody reviewing a program reads its Rust. The compiler covers only what Hello HTTP uses so far, so [`crates/inset-host/tests/fixtures/spike/`](../../crates/inset-host/tests/fixtures/spike/) is written by hand, in the shape the compiler will emit, with messages, a table and every kind of rollback. The decisions below come from building and measuring both. `cargo xtask e2e hello` builds Hello HTTP from its source, serves it with `inset run`, and asks it for a greeting over a real socket.
+`inset build` compiles a program's Inset source to Rust with [`crates/inset-codegen/`](../../crates/inset-codegen/), and builds that Rust to a WebAssembly component. `inset run` builds it and runs it in the host. Hello HTTP's generated Rust is pinned by a snapshot test, [`crates/inset-codegen/tests/snapshots/hello__hello_http_rust.snap`](../../crates/inset-codegen/tests/snapshots/hello__hello_http_rust.snap), rather than kept with the example, because nobody reviewing a program reads its Rust. The compiler does not yet emit children, messages or outlets, so [`crates/inset-host/tests/fixtures/spike/`](../../crates/inset-host/tests/fixtures/spike/) is written by hand, in the shape the compiler will emit, with messages, a table and every kind of rollback. The decisions below come from building and measuring both. `cargo xtask e2e hello` builds Hello HTTP from its source, serves it with `inset run`, and asks it for a greeting over a real socket.
 
 ## Pieces
 
@@ -10,7 +10,8 @@ How a built Inset program runs: the Rust the compiler emits, the runtime library
 | --- | --- |
 | [`crates/inset-runtime/wit/inset.wit`](../../crates/inset-runtime/wit/inset.wit) | The interface between a program and the host: the `program` world |
 | [`crates/inset-runtime`](../../crates/inset-runtime/) | The library every program links: components as actors, the executor, capabilities, failures |
-| [`crates/inset-host`](../../crates/inset-host/) | The Wasmtime host: loads a program, resolves its settings and grants, serves its HTTP servers, or puts fakes behind its grants for tests |
+| [`crates/inset-value`](../../crates/inset-value/) | The stored form of values, which the runtime and the test runner share (see [Tables](#tables)) |
+| [`crates/inset-host`](../../crates/inset-host/) | The Wasmtime host: loads a program, resolves its settings and grants, serves its HTTP servers, keeps its tables in SQLite, or puts fakes behind its grants for tests |
 
 A built program is one WebAssembly component. It exports `describe`, which returns its manifest of settings and grants, `start`, and `handle`, which takes one HTTP request through a named `HttpServer` grant. It imports Inset's capabilities and a `report` interface, through which it tells the host about rollbacks.
 
@@ -28,12 +29,15 @@ Each Inset item becomes Rust items in source order, each with its doc comment. E
 - **A component** becomes a struct of its fields, implementing `Component`. The trait carries what the runtime needs to know: `save` and `restore` for the fields that hold state, `respond` for the `failure` block, `label` to name capability fields, and `servers` and `route` for route handlers. Handlers and algorithms stay as they were written, in an `impl` block of their own.
 - **A child** is started with `scope.start_as("name", |scope| Child { ... })`, which returns its `Handle`. The closure gets the child's scope, for the child's own children.
 - **Messages** become one method each on a trait implemented for `Handle<C>`. A method returns a `Message`, which `.await` sends and waits for, and `send(...)` sends without waiting. A lent parameter is cloned in that method, so the receiver's handler gets `&T` to a copy (see [Lending](#lending)).
-- **A struct or an enum** is emitted as written, with its derives. An enum with `#[status(...)]` on its variants also implements `Status`, which replies with each variant's status: an empty body for a unit variant, and the `String` a variant holds as a text body. A route that returns `Result<String, E>` replies through it.
-- **A component's fields** take the component's own visibility, because whoever can name the component can start it, and must supply its fields.
+- **A struct or an enum** is emitted as written, with its derives. It also implements `Stored`, which writes it in its stored form and reads it back (see [Tables](#tables)). An enum with `#[status(...)]` on its variants also implements `Status`, which replies with each variant's status: an empty body for a unit variant, and the `String` a variant holds as a text body. A route that returns `Result<String, E>` replies through it.
+- **A component's fields** take the component's own visibility, because whoever can name the component can start it, and must supply its fields. The fields that hold state, which are those that hold no capability, are saved and restored in their stored form, so a field's type needs no `Clone`.
+- **A `failure` block** becomes `respond`, with one arm for each of its arms, and makes the component save its state before each handler.
+- **A `Table` grant** is opened with `grants.table("name")?` and moved into the component that holds it, which names the field for failure reports in `label`.
+- **`Decimal`** is `rust_decimal`'s, which the runtime re-exports. `dec!(1.20)` is emitted as the number it is, `Decimal::from_i128_with_scale(120, 2)`, so the generated crate needs no macro crate of its own.
 - **Routes** become `route`, which matches the request against each route attribute in order, converts the path parameters, and returns the handler to call. A parameter that does not convert means the route does not match, so the request gets `404 Not Found`, as `syntax.md` says. A body that does not convert gets `400 Bad Request`.
 - `inset_runtime::export!(App)` exports the program.
 
-The compiler emits the app, components with `HttpServer` fields, routes, algorithms, structs, enums and modules so far. Children, messages, state and `failure` blocks are shown by the spike fixture, and the compiler reports each as not compiled yet.
+The compiler emits the app, components with capabilities and state, routes, `async` handlers, `failure` blocks that roll back, algorithms, structs, enums and modules so far. Children, messages, outlets and `restart` are shown by the spike fixture, and the compiler reports each as not compiled yet.
 
 The emitted Rust names everything from the runtime by its full path, such as `::inset_runtime::Route`, rather than importing a prelude, so a component may have any name, `Route` included, without clashing with the runtime. It is printed by `prettyplease`, which drops comments, so unlike the hand-written fixture it does not repeat each Inset statement above what it became. Each piece is still recognisable from its source: a setting's name, type and default, a grant's fields, and `scope.start(...)` for each `start`.
 
@@ -93,6 +97,27 @@ Rust's standard library on `wasm32-wasip2` imports WASI's files, sockets, clocks
 
 `HttpServer` grants listen on the loopback interface only, at `127.0.0.1`.
 
+## Tables
+
+A `Table<K, V>` grant is a table in an SQLite database file. The host opens the file and the table, creating either if it does not exist, and the program knows the table only by its grant's name.
+
+**The stored form.** The program gives the host each key and value already encoded, and the host stores them without looking inside. The form is defined once, in [`crates/inset-value`](../../crates/inset-value/), and used by both the runtime and `inset test`, which sets up and reads fake tables from requirement facts without running the program's code.
+
+| Part | Stored as | Why |
+| --- | --- | --- |
+| A value | JSON text: a struct as an object of its fields, an enum's unit variant as its name and a tuple variant as `{"Name": [fields]}`, a `Decimal` as a string that keeps its scale, such as `"0.10"` | A person or another tool can read the table, and a `Decimal` keeps exactly what was stored |
+| A key | Bytes in an order-preserving form: integers big-endian with a signed one's sign bit flipped, and a `String` that is the whole key as its UTF-8 bytes | Comparing two stored keys byte by byte gives Rust's order of the keys, so SQLite returns `entries` in key order |
+
+The compiler emits the conversion for each struct and enum, as an implementation of the runtime's `Stored` trait. It never uses serde's derives, so a serde attribute that shapes a JSON body, such as `rename_all`, cannot change what a table holds.
+
+Each table has two columns, `key BLOB PRIMARY KEY` and `value TEXT`. SQLite compares `BLOB`s byte by byte, so its rows are in key order.
+
+**Opening a table.** As the program starts, the runtime reads every entry of each table it is granted, and refuses to start if a key or a value does not decode as the table's types. The host then names the file and the table, as in `cannot use the table "items" in /srv/stock.db for the grant "items: Table<String, Item>": the value stored under "bolt-m6" does not fit: missing field "place" of "Item"`. A table another program wrote, or an older version of this one, is found out at once instead of at the first request that reads the entry.
+
+**Writes.** The host holds a handler's writes in memory, and reads see them, until the program commits them when the handler completes. A commit writes them in one SQLite transaction. A rollback discards them. A commit that SQLite refuses, such as on a full disk, stops the program, and the host reports the table and SQLite's error when the request returns.
+
+**Fakes.** In a requirement test, each table is a map in memory with the same transactions. A `given` fact sets an entry or empties the table, a `then` fact reads the committed entries, and `name fails` makes every call the program makes to the table fail.
+
 ## Settings and grants
 
 The host reads the manifest, applies each `--set name=value`, and rejects a setting the app does not declare or a value that does not fit its type, such as `--set port=65536` for a `u16`. It then resolves each grant's fields: a literal, or the value of a setting.
@@ -103,16 +128,18 @@ A relative file path in a grant is resolved against the directory `inset run` wa
 
 A failure is rolled back in one of two ways, depending on whether WebAssembly can carry on after it.
 
+**The rollback rule.** A handler's effects take hold together when it completes, or not at all. Before a handler of a component with a `failure` block runs, the runtime saves the component's state fields in their stored form. When the handler completes, the runtime commits its table writes, delivers the messages it sent with `send`, and then delivers its reply. When it is rolled back, the runtime restores the saved fields, the host discards the table writes it was holding, and the messages are dropped. So no field, table entry or message changed by a rolled-back handler is seen by anything that runs after it.
+
 **A failed capability call or message** does not panic. The call records the failure in the running handler's scope and never completes. The component's task then drops the handler's future, which is how Rust cancels async work, and applies the component's response:
 
-- `rollback` restores the fields from the copy `save` made before the handler started, rolls back the transaction of every table it wrote, and drops the messages it sent. The caller's await fails with `Message(field)`, or the HTTP request gets `500 Internal Server Error`. The program carries on, and the host reports the rollback.
+- `rollback` follows the rule above. The caller's await fails with `Message(field)`, or the HTTP request gets `500 Internal Server Error`. The program carries on, and the host reports the rollback.
 - With no response, the program stops, and the host reports the component, the failure condition and its message.
 
 Only a component with a `failure` block pays for this, with a copy of its state fields before each handler.
 
 **A panic or an overflow** cannot be caught. `wasm32-wasip2` aborts on a panic, because unwinding is not available on stable Rust there, and in the component model a trap leaves the instance unusable. So the runtime's panic hook, which runs before the trap, decides whether the program survives:
 
-1. If no message is waiting in any mailbox, and every running handler either panicked or is awaiting one that did, and each responds to its failure with `rollback`, the hook writes every component's state as JSON, using the copy from before the handler for each running one, and hands it to the host.
+1. If no message is waiting in any mailbox, and every running handler either panicked or is awaiting one that did, and each responds to its failure with `rollback`, the hook writes every component's state in its stored form, using the copy from before the handler for each running one, and hands it to the host.
 2. The host rolls back every table's uncommitted writes, starts a fresh instance, and calls `start` with that state, which restores each component by its diagram ID. The request gets `500 Internal Server Error`.
 3. Otherwise the program stops, and the host reports where the panic happened.
 
@@ -123,8 +150,9 @@ This costs nothing until a panic: a fresh instance starts in about 50 µs, plus 
 ### Left for later
 
 - A message waiting in a mailbox when a panic happens stops the program, because messages are closures and cannot be written out. Emitting each component's messages as an enum would let the state carry them.
-- The runtime writes component state with serde's JSON. The compiler will derive the serde traits for each component's state, which Inset source never sees, and a table's keys need an encoding that keeps their order, for `entries`.
-- `restart`, and the conditions `Child(name)` and `_`, are not implemented yet.
+- Each table commits in a transaction of its own, so a handler that writes two tables commits them one after the other. A crash between the two commits would keep the first table's writes and lose the second's. One transaction across every table a handler writes in the same database file would close the gap.
+- Reading every entry of a table as the program starts costs time in proportion to the table. That suits the local tools Inset builds now, and a large table would want the check made once and recorded.
+- `restart`, and the condition `Child(name)`, are not implemented yet.
 
 ## Lending
 

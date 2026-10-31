@@ -16,17 +16,20 @@
 //! clash with it. Rust's own errors in the emitted code are compiler bugs:
 //! the checks in `inset-check` must reject the program first.
 //!
-//! **What is covered.** The constructs Hello HTTP uses: settings,
-//! `HttpServer` grants, `start` statements in the app that move grants into
-//! components, components whose fields are all `HttpServer`s, route
-//! handlers, algorithms, and the Rust inside function bodies. Also modules,
+//! **What is covered.** Settings, `HttpServer` and `Table` grants, `start`
+//! statements in the app that move grants into components or hand them new
+//! values, components holding capabilities and state, route handlers,
+//! `async` handlers that await capability calls, `failure` blocks that roll
+//! back, algorithms, and the Rust inside function bodies. Also modules,
 //! each emitted as a Rust module of the same name, so paths and privacy
 //! mean the same in both, and structs and enums, with an error enum's
-//! `#[status]` attributes becoming the runtime's `Status`. Anything else
-//! that `inset check` accepts gets a diagnostic saying it cannot be compiled
-//! yet, at the construct, rather than Rust that would not build. Messages,
-//! children, state, tables and `failure` blocks follow with the Stock
-//! tracker.
+//! `#[status]` attributes becoming the runtime's `Status`, and every data
+//! type implementing the runtime's `Stored`, so a table can hold it and a
+//! component's state can be saved. `dec!` is emitted as the `Decimal` it
+//! stands for. Anything else that `inset check` accepts gets a diagnostic
+//! saying it cannot be compiled yet, at the construct, rather than Rust that
+//! would not build. Messages, children, outlets and `restart` follow with
+//! the Stock tracker.
 //!
 //! **Building.** The generated project depends on `inset-runtime` by path,
 //! at the copy this crate was built next to, until the runtime is published.
@@ -148,8 +151,7 @@ impl Emitter {
     fn unsupported(&mut self, what: &str, span: Span, label: &str) {
         self.diagnostics.push(
             Diagnostic::new(format!("{what} cannot be compiled yet"), span, label).with_help(
-                "`inset check` accepts this, but the compiler emits Rust only for what \
-                 Hello HTTP uses so far",
+                "`inset check` accepts this, but the compiler does not emit Rust for it yet",
             ),
         );
     }

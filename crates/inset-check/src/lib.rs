@@ -4,8 +4,9 @@
 //! [`check`] parses every file of a [`Program`] with `inset-syntax` and then
 //! checks what parsed: names resolve, types fit, each component uses only the
 //! capabilities it was handed, values cross component boundaries only as
-//! syntax.md allows, and every requirement step resolves to a real route.
-//! Each problem is a [`Report`]: a diagnostic in one file. The checks run on
+//! syntax.md allows, and every requirement step resolves to a real route or
+//! grant, with each value in it typed. [`plan`] hands the test runner the
+//! requirements in that resolved form. Each problem is a [`Report`]: a diagnostic in one file. The checks run on
 //! whatever parsed, so a parse error does not hide the semantic errors
 //! elsewhere, which the language server relies on.
 //!
@@ -36,7 +37,10 @@
 //!   which grant reaches each route;
 //! - `body`: names and types in function bodies, closures, messages and
 //!   capability calls;
-//! - `requirements`: requirement steps against the app's routes.
+//! - `requirements`: requirement steps against the app's routes and grants,
+//!   and the plan the test runner follows;
+//! - `values`: values and checks in requirement facts, typed against the
+//!   program.
 //!
 //! Diagnostic wording is pinned by `insta` snapshot tests in `tests/`.
 
@@ -50,6 +54,7 @@ mod program;
 mod requirements;
 pub mod status;
 mod types;
+mod values;
 mod wiring;
 
 use std::collections::HashMap;
@@ -61,6 +66,7 @@ pub use index::{Index, Reference, Symbol, SymbolKind};
 pub use modules::{Module, Modules};
 use names::Names;
 pub use program::{MAIN, Program, SourceFile};
+pub use requirements::{Plan, Planned, PlannedFact, PlannedRequirement, PlannedStep};
 use types::Ty;
 
 /// A diagnostic in one file of a program.
@@ -103,7 +109,13 @@ pub fn resolve(program: &Program) -> Result<Resolved, Vec<Report>> {
     let refs = {
         let mut checker = Checker::new(&modules);
         checker.check();
-        finish(program, &modules, &mut checker, &mut reports);
+        finish(
+            program,
+            &modules,
+            &mut checker,
+            &mut reports,
+            &mut Vec::new(),
+        );
         let mut refs: HashMap<Span, Span> = checker.refs.iter().copied().collect();
         refs.extend(checker.names.refs.borrow().iter().copied());
         refs
@@ -120,9 +132,42 @@ pub fn analyze(program: &Program) -> Analysis {
     let index = {
         let mut checker = Checker::new(&modules);
         checker.check();
-        finish(program, &modules, &mut checker, &mut reports)
+        finish(
+            program,
+            &modules,
+            &mut checker,
+            &mut reports,
+            &mut Vec::new(),
+        )
     };
     Analysis { reports, index }
+}
+
+/// Checks the program, and returns its requirements as the test runner
+/// runs them, with every step resolved and every value typed, or its
+/// reports if it does not check clean.
+pub fn plan(program: &Program) -> Result<Plan, Vec<Report>> {
+    let (modules, mut reports) = Modules::load(program);
+    let mut checker = Checker::new(&modules);
+    checker.check();
+    let mut requirements = Vec::new();
+    finish(
+        program,
+        &modules,
+        &mut checker,
+        &mut reports,
+        &mut requirements,
+    );
+    if !reports.is_empty() {
+        return Err(reports);
+    }
+    Ok(Plan {
+        app: checker
+            .app
+            .map_or_else(String::new, |a| a.name.name.clone()),
+        types: values::types(&checker),
+        requirements,
+    })
 }
 
 /// Checks the requirements against a checked program, and gathers the reports.
@@ -131,6 +176,7 @@ fn finish(
     modules: &Modules,
     checker: &mut Checker,
     reports: &mut Vec<Report>,
+    plans: &mut Vec<PlannedRequirement>,
 ) -> Index {
     let mut requirement_files = Vec::new();
     for (index, file) in program.files.iter().enumerate() {
@@ -170,6 +216,7 @@ fn finish(
         program,
         &requirement_files,
         &mut refs,
+        plans,
     ));
     reports.sort_by_key(|r| (r.file, r.diagnostic.span.start));
     reports.dedup();
@@ -190,6 +237,8 @@ fn misplaced(path: &str, what: &str, here: &str, there: &str) -> Diagnostic {
 pub(crate) struct Checker<'a> {
     pub names: Names<'a>,
     pub app: Option<&'a ast::App>,
+    /// The types of the app's grants, in the order they are declared.
+    pub grant_tys: Vec<Ty>,
     /// In the order of [`Names::components`].
     pub components: Vec<Comp<'a>>,
     /// The algorithms at the top level of each module, in the order of
@@ -298,6 +347,7 @@ impl<'a> Checker<'a> {
         let names = Names::build(modules, &mut diagnostics);
         Checker {
             app: names.app.as_ref().map(|a| a.ast),
+            grant_tys: Vec::new(),
             names,
             components: Vec::new(),
             algorithms: Vec::new(),

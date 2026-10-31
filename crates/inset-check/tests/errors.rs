@@ -4,7 +4,10 @@
 
 mod cases;
 
-use cases::{COUNTING, COUNTING_REQ, HELLO, HELLO_REQ, SHELF, SHELF_LIBRARY, SHELF_REQ, edit};
+use cases::{
+    COUNTING, COUNTING_REQ, HELLO, HELLO_REQ, SHELF, SHELF_LIBRARY, SHELF_REQ, STORE, STORE_REQ,
+    edit,
+};
 use inset_check::{Program, SourceFile, check};
 
 /// Checks the program made of these files and renders its diagnostics.
@@ -66,6 +69,7 @@ fn bases_check_clean() {
         ]),
         ""
     );
+    assert_eq!(rendered(STORE, STORE_REQ), "");
 }
 
 // ---- The cases Stage 6 of the plan names ------------------------------------
@@ -232,4 +236,36 @@ fn derive_not_allowed() {
 #[test]
 fn match_leaves_out_a_case() {
     errors("match_leaves_out_a_case");
+}
+
+// ---- Requirement facts and checks --------------------------------------------
+
+#[test]
+fn fact_naming_unknown_grant() {
+    errors("fact_naming_unknown_grant");
+}
+
+#[test]
+fn fact_of_wrong_type() {
+    errors("fact_of_wrong_type");
+}
+
+#[test]
+fn fails_after_then() {
+    errors("fails_after_then");
+}
+
+#[test]
+fn check_of_wrong_type() {
+    errors("check_of_wrong_type");
+}
+
+#[test]
+fn compared_without_debug() {
+    errors("compared_without_debug");
+}
+
+#[test]
+fn table_key_not_orderable() {
+    errors("table_key_not_orderable");
 }

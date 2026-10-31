@@ -1,0 +1,11 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:4:18-4:34
+a table cannot be keyed by `f64`
+keys are stored in an order a database can sort
+help: key a table by an integer type, `bool`, `char`, `String`, or a tuple of them
+
+src/main.inset:29:27-29:30
+expected a `f64`, found a `String`
+this argument of `insert` is a `f64`

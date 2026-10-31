@@ -9,6 +9,7 @@ license.workspace = true
 
 [dependencies]
 inset-syntax = { path = "../inset-syntax" }
+inset-value = { path = "../inset-value" }
 
 [dev-dependencies]
 insta = "1.49"

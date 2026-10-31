@@ -6,7 +6,10 @@
 //! skips to where the next entry starts and carries on.
 
 mod expr;
+mod fact;
 mod items;
+
+pub(crate) use fact::StepFact;
 
 use crate::lexer::{Keyword as Kw, Punct as P, Token, TokenKind as T};
 use crate::{Diagnostic, Span};

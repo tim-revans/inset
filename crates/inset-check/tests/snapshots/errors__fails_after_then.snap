@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `fails` follows `given`
+    ╭─[ requirements/main.req.inset:13:9 ]
+    │
+ 13 │     and items fails
+    │         ─────┬─────  
+    │              ╰─────── a `then` step checks what happened, and this sets up a failure
+    │ 
+    │ Help: move it to a `given` step before the request it fails: `and items fails`
+────╯

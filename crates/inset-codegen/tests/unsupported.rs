@@ -53,8 +53,8 @@ component Log {
 }
 "#;
 
-/// A table grant and a `failure` block.
-const STORED: &str = r#"app Stored {
+/// A `failure` block that restarts.
+const RESTARTING: &str = r#"app Restarting {
     setting port: u16 = 8080;
     grant http: HttpServer { port };
     grant names: Table<String, String> { file: "names.db", name: "names" };
@@ -68,6 +68,8 @@ component Names {
     failure {
         /// A lost write is retried by the client.
         Capability(names) => rollback,
+        /// A bug leaves nothing behind that a fresh start would not clear.
+        Panic => restart,
     }
 
     #[get("/names/{key}", via = http)]
@@ -96,6 +98,6 @@ fn messages_outlets_and_children() {
 }
 
 #[test]
-fn tables_and_failure_blocks() {
-    insta::assert_snapshot!(errors(STORED));
+fn restart() {
+    insta::assert_snapshot!(errors(RESTARTING));
 }

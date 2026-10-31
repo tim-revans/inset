@@ -1,0 +1,143 @@
+// Storage, compiled: a component that keeps its items in a table, uses
+// every table method, and rolls back a request whose table call fails or
+// whose arithmetic overflows, restoring its own state with the table.
+
+/// Keeps a stock room's items.
+app StockRoom {
+    /// The port to serve on.
+    setting port: u16 = 8080;
+    grant http: HttpServer { port };
+    grant items: Table<String, Item> { file: "stock-room.db", name: "items" };
+    start Room { http: move http, items: move items, writes: 0 };
+}
+
+/// An item, stored under its SKU.
+#[derive(Clone, Debug, PartialEq)]
+struct Item {
+    /// How many are on hand.
+    on_hand: u32,
+    /// What one costs.
+    price: Decimal,
+    /// Where the item is kept.
+    place: Place,
+}
+
+/// Where an item is kept.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Place {
+    /// On the numbered shelf.
+    Shelf(u8),
+    /// In the back room.
+    Back,
+}
+
+/// Why stock was not taken.
+#[derive(Debug)]
+enum TakeError {
+    /// No item has the SKU.
+    #[status(NotFound)]
+    Unknown,
+    /// Fewer are on hand than were asked for. Says how many are.
+    #[status(Conflict)]
+    Short(String),
+}
+
+/// Answers requests about the items in the stock room.
+component Room {
+    http: HttpServer,
+    items: Table<String, Item>,
+    /// How many requests to change an item the room has handled.
+    writes: u32,
+
+    failure {
+        /// A database error fails only the request it happened in.
+        Capability(items) => rollback,
+        /// A quantity too large to count fails only the request that made it.
+        Overflow => rollback,
+    }
+
+    /// Replies with how many of the item are on hand.
+    #[get("/items/{sku}", via = http)]
+    async fn stock(&self, sku: String) -> Option<String> {
+        let item = self.items.get(&sku).await?;
+        Some(item.on_hand.to_string())
+    }
+
+    /// Stocks a new item at a price, in the back room, with none on hand.
+    #[put("/items/{sku}", via = http, body = price)]
+    async fn add(&mut self, sku: String, price: Decimal) -> String {
+        self.writes += 1;
+        self.items.insert(sku, Item { on_hand: 0, price, place: Place::Back }).await;
+        "stocked".to_string()
+    }
+
+    /// Adds stock that has arrived, and replies with how many are on hand.
+    #[post("/items/{sku}/receipts", via = http, body = quantity)]
+    async fn receive(&mut self, sku: String, quantity: u32) -> Option<String> {
+        self.writes += 1;
+        let mut item = self.items.get(&sku).await?;
+        item.on_hand += quantity;
+        self.items.insert(sku, item.clone()).await;
+        Some(item.on_hand.to_string())
+    }
+
+    /// Moves stock from one item to another, and replies with how many each holds.
+    #[post("/items/{from}/transfers/{to}", via = http, body = quantity)]
+    async fn transfer(&mut self, from: String, to: String, quantity: u32) -> Result<String, TakeError> {
+        self.writes += 1;
+        let Some(mut source) = self.items.get(&from).await else {
+            return Err(TakeError::Unknown);
+        };
+        let Some(mut target) = self.items.get(&to).await else {
+            return Err(TakeError::Unknown);
+        };
+        if source.on_hand < quantity {
+            return Err(TakeError::Short(format!("only {} on hand", source.on_hand)));
+        }
+        source.on_hand -= quantity;
+        self.items.insert(from, source.clone()).await;
+        target.on_hand += quantity;
+        self.items.insert(to, target.clone()).await;
+        Ok(format!("{} {}", source.on_hand, target.on_hand))
+    }
+
+    /// Moves an item to a shelf.
+    #[post("/items/{sku}/shelf", via = http, body = shelf)]
+    async fn shelve(&mut self, sku: String, shelf: u8) -> Option<String> {
+        self.writes += 1;
+        let mut item = self.items.get(&sku).await?;
+        item.place = Place::Shelf(shelf);
+        self.items.insert(sku, item).await;
+        Some(format!("shelf {shelf}"))
+    }
+
+    /// Stops stocking an item, and replies with how many were on hand.
+    #[delete("/items/{sku}", via = http)]
+    async fn discontinue(&mut self, sku: String) -> Option<String> {
+        self.writes += 1;
+        let item = self.items.remove(&sku).await?;
+        Some(item.on_hand.to_string())
+    }
+
+    /// Lists every item in SKU order, one per line: its SKU, how many are
+    /// on hand, and what they are worth.
+    #[get("/items", via = http)]
+    async fn list(&self) -> String {
+        let mut text = String::new();
+        for (sku, item) in self.items.entries().await {
+            text.push_str(&format!("{sku} {} {}\n", item.on_hand, Self::worth(&item)));
+        }
+        text
+    }
+
+    /// How many requests to change an item the room has handled.
+    #[get("/writes", via = http)]
+    fn writes(&self) -> String {
+        self.writes.to_string()
+    }
+
+    /// What the stock of an item is worth.
+    fn worth(item: &Item) -> Decimal {
+        item.price * Decimal::from(item.on_hand)
+    }
+}

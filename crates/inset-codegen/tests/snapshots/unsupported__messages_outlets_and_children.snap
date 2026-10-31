@@ -9,7 +9,7 @@ Error: `start` in a component cannot be compiled yet
     │     ────────────────┬───────────────  
     │                     ╰───────────────── starts a child
     │ 
-    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+    │ Help: `inset check` accepts this, but the compiler does not emit Rust for it yet
 ────╯
 Error: `start` in a component cannot be compiled yet
     ╭─[ src/main.inset:11:5 ]
@@ -18,16 +18,7 @@ Error: `start` in a component cannot be compiled yet
     │     ────────────────────────────────┬───────────────────────────────  
     │                                     ╰───────────────────────────────── starts a child
     │ 
-    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
-────╯
-Error: an `async fn` cannot be compiled yet
-    ╭─[ src/main.inset:14:14 ]
-    │
- 14 │     async fn count(&self, n: u32) -> String {
-    │              ──┬──  
-    │                ╰──── this function
-    │ 
-    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+    │ Help: `inset check` accepts this, but the compiler does not emit Rust for it yet
 ────╯
 Error: `send` cannot be compiled yet
     ╭─[ src/main.inset:15:9 ]
@@ -36,25 +27,7 @@ Error: `send` cannot be compiled yet
     │         ───────────┬───────────  
     │                    ╰───────────── sent here
     │ 
-    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
-────╯
-Error: `.await` cannot be compiled yet
-    ╭─[ src/main.inset:16:21 ]
-    │
- 16 │         let total = self.tally.total().await;
-    │                     ────────────┬───────────  
-    │                                 ╰───────────── awaited here
-    │ 
-    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
-────╯
-Error: a field that is not an `HttpServer` cannot be compiled yet
-    ╭─[ src/main.inset:22:12 ]
-    │
- 22 │     total: u32,
-    │            ─┬─  
-    │             ╰─── this field's type
-    │ 
-    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+    │ Help: `inset check` accepts this, but the compiler does not emit Rust for it yet
 ────╯
 Error: a message handler cannot be compiled yet
     ╭─[ src/main.inset:24:5 ]
@@ -63,7 +36,7 @@ Error: a message handler cannot be compiled yet
     │     ─────┬────  
     │          ╰────── this attribute
     │ 
-    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+    │ Help: `inset check` accepts this, but the compiler does not emit Rust for it yet
 ────╯
 Error: a message handler cannot be compiled yet
     ╭─[ src/main.inset:29:5 ]
@@ -72,25 +45,16 @@ Error: a message handler cannot be compiled yet
     │     ─────┬────  
     │          ╰────── this attribute
     │ 
-    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+    │ Help: `inset check` accepts this, but the compiler does not emit Rust for it yet
 ────╯
-Error: a field that is not an `HttpServer` cannot be compiled yet
-    ╭─[ src/main.inset:36:14 ]
-    │
- 36 │     entries: Vec<u32>,
-    │              ────┬───  
-    │                  ╰───── this field's type
-    │ 
-    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
-────╯
-Error: a field that is not an `HttpServer` cannot be compiled yet
+Error: a `Outlet` field cannot be compiled yet
     ╭─[ src/main.inset:37:14 ]
     │
  37 │     counted: Outlet<u32>,
     │              ─────┬─────  
     │                   ╰─────── this field's type
     │ 
-    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+    │ Help: `inset check` accepts this, but the compiler does not emit Rust for it yet
 ────╯
 Error: a message handler cannot be compiled yet
     ╭─[ src/main.inset:39:5 ]
@@ -99,7 +63,7 @@ Error: a message handler cannot be compiled yet
     │     ─────┬────  
     │          ╰────── this attribute
     │ 
-    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+    │ Help: `inset check` accepts this, but the compiler does not emit Rust for it yet
 ────╯
 Error: `send` cannot be compiled yet
     ╭─[ src/main.inset:42:9 ]
@@ -108,5 +72,5 @@ Error: `send` cannot be compiled yet
     │         ────────────┬────────────  
     │                     ╰────────────── sent here
     │ 
-    │ Help: `inset check` accepts this, but the compiler emits Rust only for what Hello HTTP uses so far
+    │ Help: `inset check` accepts this, but the compiler does not emit Rust for it yet
 ────╯

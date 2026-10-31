@@ -1,0 +1,37 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: the other side is a `u32`, and this is `dec!(...)`
+   ╭─[ requirements/main.req.inset:6:36 ]
+   │
+ 6 │     and items["bolt-m6"].on_hand > dec!(20)
+   │                                    ────┬───  
+   │                                        ╰───── expected a `u32`
+   │ 
+   │ Help: write an integer, such as `40`
+───╯
+Error: a check is a `bool`, and this is a `Decimal`
+   ╭─[ requirements/main.req.inset:7:9 ]
+   │
+ 7 │     and items["bolt-m6"].price
+   │         ───────────┬──────────  
+   │                    ╰──────────── this is not a condition
+   │ 
+   │ Help: compare it with something, such as `== 0`
+───╯
+Error: this check reads no capability
+   ╭─[ requirements/main.req.inset:8:9 ]
+   │
+ 8 │     and 1 + 1 == 2
+   │         ─────┬────  
+   │              ╰────── a check is a condition on what a capability holds
+   │ 
+   │ Help: read an entry by its key, such as `items["bolt-m6"].on_hand > 0`
+───╯
+Error: an `Item` has no field `weight`
+   ╭─[ requirements/main.req.inset:9:26 ]
+   │
+ 9 │     and items["bolt-m6"].weight == 0
+   │                          ───┬──  
+   │                             ╰──── not a field
+───╯

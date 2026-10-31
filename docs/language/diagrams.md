@@ -114,7 +114,7 @@ Every function with a body has a flowchart: route handlers and message handlers 
 | Fork | `fork for` | A bar, the body below, a `join` bar, and `none` on the right for an empty collection |
 | Return | `return`, or the function's final value | A pill. A function that returns nothing ends in `end` |
 
-An iterator chain such as `map(...).collect()` is one step, because its closure cannot send, await or call a capability. A call to another function is one step too: the reviewer opens that function's flowchart to see inside.
+An iterator chain such as `map(...).collect()` is one step, because its closure cannot send, await or call a capability. A call to another function is one step too: the reviewer opens that function's flowchart to see inside. An awaited capability call, such as `self.items.get(&sku).await`, is a step linked to the capability's edge, so a viewer can lead from the step to what it touches.
 
 Every branch is an element with its own ID: each branch of a decision, a loop's body and its skip, and each exit. These are exactly what coverage counts, so the overlay can mark the edge that a reviewer sees.
 

@@ -14,6 +14,13 @@
 //! a requirement test is repeatable. An import the host does not link at all,
 //! such as `wasi:http/outgoing-handler`, fails at instantiation.
 //!
+//! **Tables.** A `Table` grant is a table in an SQLite database file, opened
+//! by the host, which the program knows only by its grant's name. The host
+//! refuses to start a program when a table holds an entry that is not of the
+//! table's key and value types, naming the file and the table. Writes are
+//! held until the handler that made them completes, and a commit writes them
+//! in one SQLite transaction (`table.rs`).
+//!
 //! **Fakes.** [`Mode::Fake`] puts a fake behind every grant, which is how
 //! requirement tests run: requests go straight to the program through
 //! [`Running::request`] instead of a socket, and each table is held in memory,
@@ -38,14 +45,17 @@ use wasmtime_wasi::clocks::{HostMonotonicClock, HostWallClock};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 mod server;
+mod table;
 
 pub use server::serve;
+pub use table::{Entries, Table};
 
 mod bindings {
     wasmtime::component::bindgen!({
         path: "../inset-runtime/wit",
         world: "program",
         with: { "inset:host/capabilities.table": super::OpenTable },
+        imports: { default: trappable },
         additional_derives: [PartialEq, Eq],
     });
 }
@@ -130,18 +140,27 @@ impl Program {
         let mut tables = BTreeMap::new();
         for grant in &self.manifest.grants {
             let granted = resolve_grant(grant, &settings, &options.working_dir)?;
-            if let Granted::Table { .. } = granted {
-                if options.mode == Mode::Real {
-                    return Err(Error(format!(
-                        "grant `{}`: stored tables are not supported yet, only fakes",
-                        grant.name
-                    )));
-                }
-                tables.insert(grant.name.clone(), Arc::default());
+            if let Granted::Table { file, name } = &granted {
+                let table = match options.mode {
+                    Mode::Fake => Table::fake(),
+                    Mode::Real => Table::open(file, name).map_err(|e| {
+                        Error(format!(
+                            "cannot open the table `{name}` in {} for the grant `{}`: {e}",
+                            file.display(),
+                            grant.name
+                        ))
+                    })?,
+                };
+                tables.insert(grant.name.clone(), Arc::new(Mutex::new(table)));
             }
             grants.insert(grant.name.clone(), granted);
         }
-        let (store, instance) = self.instantiate(&tables, Vec::new(), None)?;
+        let (store, instance) =
+            self.instantiate(&tables, Vec::new(), None)
+                .map_err(|e| match e {
+                    Started::Failed(e) => e,
+                    Started::Stopped(stopped) => self.refused(&stopped, &grants),
+                })?;
         Ok(Running {
             program: self,
             store,
@@ -154,22 +173,58 @@ impl Program {
 
     fn instantiate(
         &self,
-        tables: &BTreeMap<String, Arc<Mutex<FakeTable>>>,
+        tables: &BTreeMap<String, Arc<Mutex<Table>>>,
         reports: Vec<Report>,
         restore: Option<&[u8]>,
-    ) -> Result<(Store<State>, bindings::Program), Error> {
+    ) -> Result<(Store<State>, bindings::Program), Started> {
         let mut state = State::new(tables.clone());
         state.reports = reports;
         let mut store = Store::new(&self.engine, state);
-        let instance = self.pre.instantiate(&mut store)?;
-        if let Err(stopped) = instance.inset_host_app().call_start(&mut store, restore)? {
-            return Err(Error(format!(
-                "the program stopped as it started: {}",
-                describe(&stopped)
-            )));
+        let failed = |e: wasmtime::Error| Started::Failed(e.into());
+        let instance = self.pre.instantiate(&mut store).map_err(failed)?;
+        if let Err(stopped) = instance
+            .inset_host_app()
+            .call_start(&mut store, restore)
+            .map_err(failed)?
+        {
+            return Err(Started::Stopped(stopped));
         }
         Ok((store, instance))
     }
+
+    /// Why the program refused to start. A table that holds an entry of
+    /// the wrong type is named by its file and table.
+    fn refused(&self, stopped: &Stopped, grants: &BTreeMap<String, Granted>) -> Error {
+        let table = stopped
+            .component
+            .strip_prefix("grant:")
+            .and_then(|grant| Some((grant, grants.get(grant)?)));
+        match table {
+            Some((grant, Granted::Table { file, name })) => {
+                let capability = self
+                    .manifest
+                    .grants
+                    .iter()
+                    .find(|g| g.name == grant)
+                    .map_or("Table", |g| g.capability.as_str());
+                Error(format!(
+                    "cannot use the table `{name}` in {} for the grant `{grant}: {capability}`: {}",
+                    file.display(),
+                    stopped.message
+                ))
+            }
+            _ => Error(format!(
+                "the program stopped as it started: {}",
+                describe(stopped)
+            )),
+        }
+    }
+}
+
+/// Why an instance did not start.
+enum Started {
+    Failed(Error),
+    Stopped(Stopped),
 }
 
 /// How to start a program.
@@ -304,7 +359,7 @@ pub struct Running<'p> {
     store: Store<State>,
     instance: bindings::Program,
     grants: BTreeMap<String, Granted>,
-    tables: BTreeMap<String, Arc<Mutex<FakeTable>>>,
+    tables: BTreeMap<String, Arc<Mutex<Table>>>,
     stopped: Option<Stopped>,
 }
 
@@ -313,8 +368,8 @@ impl Running<'_> {
         &self.grants
     }
 
-    /// The fake behind a table grant.
-    pub fn table(&self, grant: &str) -> Option<MutexGuard<'_, FakeTable>> {
+    /// The table behind a grant.
+    pub fn table(&self, grant: &str) -> Option<MutexGuard<'_, Table>> {
         Some(lock(self.tables.get(grant)?))
     }
 
@@ -333,10 +388,23 @@ impl Running<'_> {
             .instance
             .inset_host_app()
             .call_handle(&mut self.store, server, request);
-        let outcome = match result {
+        let mut outcome = match result {
             Ok(outcome) => outcome,
             Err(trap) => self.recover(trap),
         };
+        for (grant, table) in &self.tables {
+            if let Some(error) = lock(table).commit_error.take() {
+                let at = match lock(table).location() {
+                    Some((file, name)) => format!(" `{name}` in {}", file.display()),
+                    None => String::new(),
+                };
+                outcome = Err(Stopped {
+                    component: format!("grant:{grant}"),
+                    failure: "Commit".into(),
+                    message: format!("cannot write to the table{at}: {error}"),
+                });
+            }
+        }
         if let Err(stopped) = &outcome {
             self.stopped = Some(stopped.clone());
         }
@@ -382,11 +450,17 @@ impl Running<'_> {
                     body: Vec::new(),
                 })
             }
-            Err(e) => Err(Stopped {
-                component: trapping.component,
-                failure: trapping.failure,
-                message: format!("{}; then it could not start again: {e}", trapping.message),
-            }),
+            Err(e) => {
+                let e = match e {
+                    Started::Failed(e) => e.to_string(),
+                    Started::Stopped(stopped) => describe(&stopped),
+                };
+                Err(Stopped {
+                    component: trapping.component,
+                    failure: trapping.failure,
+                    message: format!("{}; then it could not start again: {e}", trapping.message),
+                })
+            }
         }
     }
 }
@@ -417,51 +491,12 @@ pub fn describe(stopped: &Stopped) -> String {
     )
 }
 
-/// A table held in memory. Writes wait in a transaction until the handler
-/// that made them completes.
-#[derive(Debug, Default)]
-pub struct FakeTable {
-    committed: BTreeMap<Vec<u8>, Vec<u8>>,
-    pending: BTreeMap<Vec<u8>, Vec<u8>>,
-    /// Every call fails, as in the requirement fact `name fails`.
-    pub fails: bool,
-}
-
-impl FakeTable {
-    /// Sets an entry, as `given name[key] is value` does. Keys and values
-    /// are the program's encoding, JSON.
-    pub fn set(&mut self, key: &str, value: &str) {
-        self.committed.insert(key.into(), value.into());
-    }
-
-    /// The committed entry under `key`, as `then name[key] is value` reads it.
-    pub fn get(&self, key: &str) -> Option<String> {
-        let value = self.committed.get(key.as_bytes())?;
-        Some(String::from_utf8_lossy(value).into_owned())
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.committed.is_empty()
-    }
-
-    fn roll_back(&mut self) {
-        self.pending.clear();
-    }
-
-    fn check(&self) -> Result<(), String> {
-        match self.fails {
-            true => Err("the table failed, as the test asked".into()),
-            false => Ok(()),
-        }
-    }
-}
-
-fn lock(table: &Mutex<FakeTable>) -> MutexGuard<'_, FakeTable> {
+fn lock(table: &Mutex<Table>) -> MutexGuard<'_, Table> {
     table.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// A table the program opened, as a resource in its instance.
-pub struct OpenTable(Arc<Mutex<FakeTable>>);
+pub struct OpenTable(Arc<Mutex<Table>>);
 
 /// What a panic hook handed over before the instance trapped.
 struct Trapping {
@@ -475,13 +510,13 @@ struct Trapping {
 struct State {
     wasi: WasiCtx,
     resources: ResourceTable,
-    tables: BTreeMap<String, Arc<Mutex<FakeTable>>>,
+    tables: BTreeMap<String, Arc<Mutex<Table>>>,
     reports: Vec<Report>,
     trapping: Option<Trapping>,
 }
 
 impl State {
-    fn new(tables: BTreeMap<String, Arc<Mutex<FakeTable>>>) -> State {
+    fn new(tables: BTreeMap<String, Arc<Mutex<Table>>>) -> State {
         let wasi = WasiCtx::builder()
             .wall_clock(FixedClock)
             .monotonic_clock(FixedClock)
@@ -535,34 +570,32 @@ impl HostMonotonicClock for FixedClock {
 }
 
 impl capabilities::Host for State {
-    fn open_table(&mut self, grant: String) -> Result<Resource<OpenTable>, String> {
+    fn open_table(
+        &mut self,
+        grant: String,
+    ) -> wasmtime::Result<Result<Resource<OpenTable>, String>> {
         let Some(table) = self.tables.get(&grant) else {
-            return Err(format!("no table was granted as `{grant}`"));
+            return Ok(Err(format!("no table was granted as `{grant}`")));
         };
         let open = OpenTable(table.clone());
-        self.resources.push(open).map_err(|e| e.to_string())
+        Ok(self.resources.push(open).map_err(|e| e.to_string()))
     }
 }
 
 impl State {
-    fn open(&self, table: &Resource<OpenTable>) -> MutexGuard<'_, FakeTable> {
-        let open = self
-            .resources
-            .get(table)
-            .expect("the program holds the table it uses");
-        lock(&open.0)
+    fn open(&self, table: &Resource<OpenTable>) -> wasmtime::Result<MutexGuard<'_, Table>> {
+        let open = self.resources.get(table)?;
+        Ok(lock(&open.0))
     }
 }
 
 impl capabilities::HostTable for State {
-    fn get(&mut self, table: Resource<OpenTable>, key: Vec<u8>) -> Result<Option<Vec<u8>>, String> {
-        let table = self.open(&table);
-        table.check()?;
-        Ok(table
-            .pending
-            .get(&key)
-            .or_else(|| table.committed.get(&key))
-            .cloned())
+    fn get(
+        &mut self,
+        table: Resource<OpenTable>,
+        key: Vec<u8>,
+    ) -> wasmtime::Result<Result<Option<Vec<u8>>, String>> {
+        Ok(self.open(&table)?.read(&key))
     }
 
     fn insert(
@@ -570,21 +603,30 @@ impl capabilities::HostTable for State {
         table: Resource<OpenTable>,
         key: Vec<u8>,
         value: Vec<u8>,
-    ) -> Result<(), String> {
-        let mut table = self.open(&table);
-        table.check()?;
-        table.pending.insert(key, value);
+    ) -> wasmtime::Result<Result<(), String>> {
+        Ok(self.open(&table)?.insert(key, value))
+    }
+
+    fn remove(
+        &mut self,
+        table: Resource<OpenTable>,
+        key: Vec<u8>,
+    ) -> wasmtime::Result<Result<Option<Vec<u8>>, String>> {
+        Ok(self.open(&table)?.remove(key))
+    }
+
+    fn entries(&mut self, table: Resource<OpenTable>) -> wasmtime::Result<Result<Entries, String>> {
+        Ok(self.open(&table)?.all())
+    }
+
+    fn commit(&mut self, table: Resource<OpenTable>) -> wasmtime::Result<()> {
+        self.open(&table)?.commit();
         Ok(())
     }
 
-    fn commit(&mut self, table: Resource<OpenTable>) {
-        let mut table = self.open(&table);
-        let pending = std::mem::take(&mut table.pending);
-        table.committed.extend(pending);
-    }
-
-    fn rollback(&mut self, table: Resource<OpenTable>) {
-        self.open(&table).roll_back();
+    fn rollback(&mut self, table: Resource<OpenTable>) -> wasmtime::Result<()> {
+        self.open(&table)?.roll_back();
+        Ok(())
     }
 
     fn drop(&mut self, table: Resource<OpenTable>) -> wasmtime::Result<()> {
@@ -594,12 +636,18 @@ impl capabilities::HostTable for State {
 }
 
 impl report::Host for State {
-    fn rolled_back(&mut self, component: String, failure: String, message: String) {
+    fn rolled_back(
+        &mut self,
+        component: String,
+        failure: String,
+        message: String,
+    ) -> wasmtime::Result<()> {
         self.reports.push(Report {
             component,
             failure,
             message,
         });
+        Ok(())
     }
 
     fn trapping(
@@ -608,12 +656,13 @@ impl report::Host for State {
         failure: String,
         message: String,
         recovery: Option<Vec<u8>>,
-    ) {
+    ) -> wasmtime::Result<()> {
         self.trapping = Some(Trapping {
             component,
             failure,
             message,
             recovery,
         });
+        Ok(())
     }
 }

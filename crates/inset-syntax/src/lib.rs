@@ -23,10 +23,13 @@
 //! attributes, `struct`, `enum`, `mod` and `use`, and Rust's operators,
 //! calls, closures, ranges, `let`, `if`, `if let`, `match`, `for` and
 //! `while`. It also reads `move` in a message's arguments and `via` in a
-//! `when` step, which the checks in `inset-check` need. Other constructs in
-//! the spec, such as `fork`, `extern component` and requirement facts, are
-//! reported as "not supported yet" at the keyword, so an author learns it
-//! is the compiler's limit and not their mistake. They are added as the
+//! `when` step, which the checks in `inset-check` need. In requirements it
+//! reads `given`, `when` and `then` steps, with the facts and checks about
+//! capabilities, whose values and conditions are Rust expressions read by
+//! the code dialect's parser. Other constructs in the spec, such as `fork`,
+//! `extern component`, `examples` tables and placeholders, are reported as
+//! "not supported yet" where they are written, so an author learns it is
+//! the compiler's limit and not their mistake. They are added as the
 //! examples that use them are compiled.
 //!
 //! Spans are byte offsets into one file's source, or, from
@@ -86,6 +89,29 @@ pub fn parse_code_at(source: &str, base: usize) -> Parsed<ast::Module> {
     );
     diagnostics.sort_by_key(|d| d.span.start);
     Parsed { ast, diagnostics }
+}
+
+/// Parses the fact or check in a requirement step, which spans `span` of
+/// a requirements file's `source`, with the code dialect's parser.
+fn parse_step_fact(
+    source: &str,
+    span: Span,
+    allow_check: bool,
+) -> (Option<parser::StepFact>, Vec<Diagnostic>) {
+    let text = &source[span.start..span.end];
+    let mut lexed = lexer::lex(text);
+    for token in &mut lexed.tokens {
+        token.span = token.span.shifted(span.start);
+    }
+    let mut diagnostics: Vec<Diagnostic> = lexed
+        .diagnostics
+        .into_iter()
+        .map(|d| d.shifted(span.start))
+        .collect();
+    let mut parser = parser::Parser::new(text, span.start, lexed.tokens);
+    let parsed = parser.parse_step_fact(allow_check).ok();
+    diagnostics.extend(parser.diagnostics.into_iter().map(|(_, d)| d));
+    (parsed, diagnostics)
 }
 
 /// Parses one file of the requirements dialect.

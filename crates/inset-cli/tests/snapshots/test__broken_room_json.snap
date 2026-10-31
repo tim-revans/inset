@@ -1,0 +1,94 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&json)
+---
+{
+  "app": "StockRoom",
+  "passed": 8,
+  "failed": 3,
+  "requirements": [
+    {
+      "sentence": "The quantity on hand of a stocked item is shown",
+      "file": "requirements/room.req.inset",
+      "line": 1,
+      "result": "pass"
+    },
+    {
+      "sentence": "An item that is not stocked is not found",
+      "file": "requirements/room.req.inset",
+      "line": 6,
+      "result": "pass"
+    },
+    {
+      "sentence": "A new item is stocked at its price, in the back room, with none on hand",
+      "file": "requirements/room.req.inset",
+      "line": 14,
+      "result": "fail",
+      "failure": {
+        "line": 18,
+        "step": "and items[\"bolt-m6\"] is Item { on_hand: 0, price: 0.10, place: Place::Back }",
+        "message": "but items[\"bolt-m6\"] is another value\n  expected: Item { on_hand: 0, price: 0.10, place: Back }\n  actual:   Item { on_hand: 1, price: 0.10, place: Back }",
+        "expected": "Item { on_hand: 0, price: 0.10, place: Back }",
+        "actual": "Item { on_hand: 1, price: 0.10, place: Back }"
+      }
+    },
+    {
+      "sentence": "Received stock is added to the quantity on hand",
+      "file": "requirements/room.req.inset",
+      "line": 20,
+      "result": "pass"
+    },
+    {
+      "sentence": "Stock moves from one item to another",
+      "file": "requirements/room.req.inset",
+      "line": 27,
+      "result": "pass"
+    },
+    {
+      "sentence": "Moving more stock than an item holds is refused and changes nothing",
+      "file": "requirements/room.req.inset",
+      "line": 35,
+      "result": "pass"
+    },
+    {
+      "sentence": "An item moved to a shelf is kept there",
+      "file": "requirements/room.req.inset",
+      "line": 42,
+      "result": "fail",
+      "failure": {
+        "line": 46,
+        "step": "and items[\"bolt-m6\"].place == Place::Shelf(4)",
+        "message": "but it is false\n  left:  Shelf(5)\n  right: Shelf(4)"
+      }
+    },
+    {
+      "sentence": "A discontinued item is no longer stocked",
+      "file": "requirements/room.req.inset",
+      "line": 48,
+      "result": "fail",
+      "failure": {
+        "line": 52,
+        "step": "and items is empty",
+        "message": "but `items` holds 1 entry\n  items[\"bolt-m6\"] is Item { on_hand: 3, price: 0.10, place: Back }"
+      }
+    },
+    {
+      "sentence": "Items are listed in SKU order, with what their stock is worth",
+      "file": "requirements/room.req.inset",
+      "line": 54,
+      "result": "pass"
+    },
+    {
+      "sentence": "A database failure fails the request and changes nothing",
+      "file": "requirements/room.req.inset",
+      "line": 66,
+      "result": "pass"
+    },
+    {
+      "sentence": "A transfer whose total is too large to count fails and changes nothing",
+      "file": "requirements/room.req.inset",
+      "line": 75,
+      "result": "pass"
+    }
+  ]
+}

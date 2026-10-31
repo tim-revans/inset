@@ -1871,7 +1871,43 @@ impl<'c, 'a> Body<'c, 'a> {
                 }
                 Ty::Bool
             }
-            _ => Ty::Decimal,
+            _ => {
+                self.decimal_literal(span, args);
+                Ty::Decimal
+            }
+        }
+    }
+
+    /// Checks that `dec!` holds one number that a `Decimal` can hold
+    /// exactly, as `rust_decimal`'s macro requires.
+    fn decimal_literal(&mut self, span: Span, args: &[Expr]) {
+        let text = match args {
+            [arg] => match &arg.kind {
+                ExprKind::Lit(lit) => Some((lit, arg.span)),
+                ExprKind::Unary {
+                    op: UnaryOp::Neg,
+                    operand,
+                } => match &operand.kind {
+                    ExprKind::Lit(lit) => Some((lit, arg.span)),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        };
+        let number = text.and_then(|(lit, span)| match &lit.kind {
+            LitKind::Int(text) | LitKind::Float(text) => Some((text, span)),
+            _ => None,
+        });
+        let Some((text, at)) = number else {
+            self.error(
+                Diagnostic::new("`dec!` takes one number", span, "not one number")
+                    .with_help("write the number in it, such as `dec!(0.10)`"),
+            );
+            return;
+        };
+        if let Err(diagnostic) = crate::values::decimal(text) {
+            self.error(diagnostic(at));
         }
     }
 

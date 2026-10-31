@@ -1,0 +1,80 @@
+requirement "The quantity on hand of a stocked item is shown"
+    given items["bolt-m6"] is Item { on_hand: 40, price: 0.10, place: Place::Shelf(3) }
+    when StockRoom receives GET /items/bolt-m6
+    then StockRoom replies OK with "40"
+
+requirement "An item that is not stocked is not found"
+    given items is empty
+    when StockRoom receives GET /items/bolt-m6
+    then StockRoom replies NotFound
+    when StockRoom receives POST /items/bolt-m6/receipts with "20"
+    then StockRoom replies NotFound
+    and items is empty
+
+requirement "A new item is stocked at its price, in the back room, with none on hand"
+    given items is empty
+    when StockRoom receives PUT /items/bolt-m6 with "0.10"
+    then StockRoom replies OK with "stocked"
+    and items["bolt-m6"] is Item { on_hand: 0, price: 0.10, place: Place::Back }
+
+requirement "Received stock is added to the quantity on hand"
+    given items["bolt-m6"] is Item { on_hand: 3, price: 0.10, place: Place::Back }
+    when StockRoom receives POST /items/bolt-m6/receipts with "20"
+    then StockRoom replies OK with "23"
+    and items["bolt-m6"].on_hand == 23
+    and items["bolt-m6"].price == dec!(0.10)
+
+requirement "Stock moves from one item to another"
+    given items["bolt-m6"] is Item { on_hand: 10, price: 0.10, place: Place::Back }
+    and items["nut-m6"] is Item { on_hand: 1, price: 0.05, place: Place::Shelf(2) }
+    when StockRoom receives POST /items/bolt-m6/transfers/nut-m6 with "4"
+    then StockRoom replies OK with "6 5"
+    and items["bolt-m6"].on_hand + items["nut-m6"].on_hand == 11
+    and items["nut-m6"].on_hand > items["bolt-m6"].on_hand - 2
+
+requirement "Moving more stock than an item holds is refused and changes nothing"
+    given items["bolt-m6"] is Item { on_hand: 3, price: 0.10, place: Place::Back }
+    and items["nut-m6"] is Item { on_hand: 1, price: 0.05, place: Place::Back }
+    when StockRoom receives POST /items/bolt-m6/transfers/nut-m6 with "5"
+    then StockRoom replies Conflict with "only 3 on hand"
+    and items["bolt-m6"] is Item { on_hand: 3, price: 0.10, place: Place::Back }
+
+requirement "An item moved to a shelf is kept there"
+    given items["bolt-m6"] is Item { on_hand: 3, price: 0.10, place: Place::Back }
+    when StockRoom receives POST /items/bolt-m6/shelf with "4"
+    then StockRoom replies OK with "shelf 4"
+    and items["bolt-m6"].place == Place::Shelf(4)
+
+requirement "A discontinued item is no longer stocked"
+    given items["bolt-m6"] is Item { on_hand: 3, price: 0.10, place: Place::Back }
+    when StockRoom receives DELETE /items/bolt-m6
+    then StockRoom replies OK with "3"
+    and items is empty
+
+requirement "Items are listed in SKU order, with what their stock is worth"
+    given items["washer-m6"] is Item { on_hand: 100, price: 0.02, place: Place::Back }
+    and items["bolt-m6"] is Item { on_hand: 40, price: 0.10, place: Place::Shelf(3) }
+    and items["nut-m6"] is Item { on_hand: 2, price: 0.05, place: Place::Back }
+    when StockRoom receives GET /items
+    then StockRoom replies OK with
+        """
+        bolt-m6 40 4.00
+        nut-m6 2 0.10
+        washer-m6 100 2.00
+        """
+
+requirement "A database failure fails the request and changes nothing"
+    given items["bolt-m6"] is Item { on_hand: 3, price: 0.10, place: Place::Back }
+    and items fails
+    when StockRoom receives POST /items/bolt-m6/receipts with "20"
+    then StockRoom replies InternalServerError
+    and items["bolt-m6"] is Item { on_hand: 3, price: 0.10, place: Place::Back }
+    when StockRoom receives GET /writes
+    then StockRoom replies OK with "0"
+
+requirement "A transfer whose total is too large to count fails and changes nothing"
+    given items["bolt-m6"] is Item { on_hand: 3, price: 0.10, place: Place::Back }
+    and items["nut-m6"] is Item { on_hand: 4294967295, price: 0.05, place: Place::Back }
+    when StockRoom receives POST /items/bolt-m6/transfers/nut-m6 with "1"
+    then StockRoom replies InternalServerError
+    and items["bolt-m6"] is Item { on_hand: 3, price: 0.10, place: Place::Back }

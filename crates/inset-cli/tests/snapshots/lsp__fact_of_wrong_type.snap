@@ -1,0 +1,17 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:2:17-2:18
+the key of `items` is a `String`, and this is an integer
+expected a `String`
+help: write text in quotes, such as "bolt-m6"
+
+requirements/main.req.inset:2:39-2:42
+the field `on_hand` is a `u32`, and this is text
+expected a `u32`
+help: write an integer, such as `40`
+
+requirements/main.req.inset:5:56-5:67
+`dec!` takes one number
+not one number
+help: write the number in it, such as `dec!(0.10)`

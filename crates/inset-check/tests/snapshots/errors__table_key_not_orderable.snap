@@ -1,0 +1,19 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: a table cannot be keyed by `f64`
+   ╭─[ src/main.inset:4:18 ]
+   │
+ 4 │     grant items: Table<f64, Item> { file: "store.db", name: "items" };
+   │                  ────────┬───────  
+   │                          ╰───────── keys are stored in an order a database can sort
+   │ 
+   │ Help: key a table by an integer type, `bool`, `char`, `String`, or a tuple of them
+───╯
+Error: expected a `f64`, found a `String`
+    ╭─[ src/main.inset:29:27 ]
+    │
+ 29 │         self.items.insert(sku, item.clone()).await;
+    │                           ─┬─  
+    │                            ╰─── this argument of `insert` is a `f64`
+────╯

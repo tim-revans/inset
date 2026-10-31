@@ -17,13 +17,11 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll, Waker};
 
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-
 use crate::executor;
 use crate::failure::{Failure, Response, Stopped};
 use crate::http::{HttpServer, Reply, Request, Route};
 use crate::program;
+use crate::stored::Stored;
 
 /// A boxed future that need not be `Send`: the program has one thread.
 pub type LocalBoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
@@ -45,7 +43,7 @@ pub trait Component: Sized + 'static {
     const ROLLS_BACK: bool = false;
 
     /// The fields that hold state, as opposed to capabilities, outlets and handles.
-    type Saved: Serialize + DeserializeOwned;
+    type Saved: Stored;
 
     fn save(&self) -> Self::Saved;
 
@@ -489,13 +487,13 @@ impl<C: Component> Running for Actor<C> {
         let saved = match self.component.try_borrow() {
             Ok(component) => component.save(),
             // A handler is running, and holds the fields.
-            Err(_) => return serde_json::to_value(self.saved.borrow().as_ref()?).ok(),
+            Err(_) => return Some(self.saved.borrow().as_ref()?.to_json()),
         };
-        serde_json::to_value(saved).ok()
+        Some(saved.to_json())
     }
 
     fn restore(&self, state: serde_json::Value) -> Result<(), String> {
-        let saved = serde_json::from_value(state).map_err(|e| format!("{}: {e}", self.id))?;
+        let saved = C::Saved::from_json(&state).map_err(|e| format!("{}: {e}", self.id))?;
         self.component.borrow_mut().restore(saved);
         Ok(())
     }

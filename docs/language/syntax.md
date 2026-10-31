@@ -1,6 +1,6 @@
 # Inset syntax
 
-The living reference for Inset's syntax. It is a draft: the parser in [`crates/inset-syntax/`](../../crates/inset-syntax/) and the checker in [`crates/inset-check/`](../../crates/inset-check/) cover what Hello HTTP uses, with closures, `failure` blocks, outlets and messages around it, and the code of the Stock tracker: modules, structs and enums, error enums, `match` and loops. They report the rest as not supported yet. The syntax changes as each example program is compiled.
+The living reference for Inset's syntax. It is a draft: the parser in [`crates/inset-syntax/`](../../crates/inset-syntax/) and the checker in [`crates/inset-check/`](../../crates/inset-check/) cover what Hello HTTP uses, with closures, `failure` blocks, outlets and messages around it, the code of the Stock tracker (modules, structs and enums, error enums, `match` and loops), and requirements that set up and check what a table holds. They report the rest as not supported yet. The syntax changes as each example program is compiled.
 
 Each construct is marked with its status:
 
@@ -200,10 +200,14 @@ A program cannot declare its own capability types. A capability is something the
 | --- | --- |
 | `get(&self, key: &Q) -> Option<V>` | Reads the value stored under `key`. As with `HashMap::get`, `key` may be any borrowed form of `K`, such as a `&str` for a `String` key |
 | `insert(&mut self, key: K, value: V)` | Stores `value` under `key`, replacing any value already there |
-| `remove(&mut self, key: &K) -> Option<V>` | Removes and returns the value under `key` *(Draft)* |
-| `entries(&self) -> Vec<(K, V)>` | Every key and value, in key order *(Draft)* |
+| `remove(&mut self, key: &Q) -> Option<V>` | Removes and returns the value under `key`, which may be any borrowed form of `K`, as for `get` |
+| `entries(&self) -> Vec<(K, V)>` | Every key and value, in the order Rust's `Ord` gives the keys, as a `BTreeMap` would |
 
-`K` and `V` must be data types: they cannot hold capabilities or component handles.
+- `K` and `V` must be data types: they cannot hold capabilities or component handles.
+- A key is an integer type, `bool`, `char`, `String`, or a tuple of these. A value owns its data, so it holds no references, `&str` or slices.
+- A handler's writes take effect when it completes, all together, or not at all if it is rolled back (see [Failures](#failures)).
+
+*Why keys are limited:* the host stores keys in a form whose bytes sort in the keys' order, so the database returns `entries` in order without knowing the key's type (see [`runtime.md`](runtime.md#tables)). The types above have such a form that is simple to define. Others, such as a `Decimal` or a struct, can be added when a program needs them as keys.
 
 *Why capabilities are never lent:* a lent capability would give two components the same database, and the diagram would show two edges to it with no way to say which writes what. With one holder, any component that needs the data asks the holder by message, so the holder is the single place to review all access to that system. In the Stock tracker, only `Inventory` touches `items`.
 
@@ -460,7 +464,7 @@ struct Item {
 - A derive needs what Rust needs: `Copy` needs `Clone`, `Eq` and `PartialOrd` need `PartialEq`, and `Ord` needs `PartialOrd` and `Eq`. Each field must have the trait too, so a struct holding a `String` cannot derive `Copy`, and one holding an `f64` cannot derive `Eq`. The compiler reports these, rather than leaving them to rustc.
 - *(Not supported yet.)* Generic structs and enums, tuple and unit structs, variants with named fields, and deriving `Default` for an enum.
 - A type compared in a requirement step must derive `PartialEq` and `Debug`, so that a failed test can show both values.
-- The compiler decides how a stored type is written to a `Table`. No derive is needed for it, because the stored form is never seen outside the program. A JSON body is seen outside, so its form is stated with serde, as in Rust.
+- The compiler decides how a stored type is written to a `Table` (see [`runtime.md`](runtime.md#tables)). No derive is needed for it, because the stored form belongs to the program. A JSON body is seen outside, so its form is stated with serde, as in Rust, and serde's attributes never change what is stored.
 
 ### Algorithms
 
@@ -598,7 +602,7 @@ The compiler resolves every step against the program, so a step that names an un
 - `App` is the name of the program's app, so the steps read as sentences about the program.
 - Steps run in order. A requirement may have several `when` steps, each followed by the `then` steps that check it, as in "A new reorder for an item replaces its earlier one". A `then ... replies` step checks the reply to the most recent `when`.
 - Each requirement runs against a freshly started program, with its settings at their defaults and every fake empty. No requirement depends on another having run first.
-- A requirement fails at the first step that does not hold. `inset test` reports the requirement's sentence, the failing step, and what happened instead: the actual reply, or the failure that stopped the program.
+- A requirement fails at the first step that does not hold. `inset test` reports the requirement's sentence, the failing step, and what happened instead: the actual reply, the failure that stopped the program, or what a capability holds. A fact that does not hold shows the expected value and the value found, as `assert_eq!` does, each written as Rust's `{:?}` writes it. A check that compares two values shows both of them.
 - A fake capability starts empty, so `given items is empty` states the default. It is written when the empty state is part of the requirement.
 - The path is written without quotes, as it would appear in a browser's address bar.
 - Statuses are written with their standard names from the HTTP specification (RFC 9110) in `UpperCamelCase`, such as `OK`, `NotFound`, `Conflict`, `BadRequest` and `InternalServerError`.
@@ -616,12 +620,22 @@ A fact states what a fake capability holds. The capability is named by its `gran
 | --- | --- | --- |
 | `Table<K, V>` | `name[key] is value` | The table holds `value` under `key` |
 | `Table<K, V>` | `name is empty` | The table holds nothing |
-| Any | `name fails` | Every call to the capability fails, after `given` only |
+| `Table<K, V>` | `name fails` | Every call to the table fails, after `given` only |
 | `HttpServer` | None | Its requests and replies are the `when` and `then` steps |
 
 The same fact sets up state after `given`, and checks it after `then`. Facts after `then` are how a requirement observes what the program did, such as `and items["bolt-m6"] is Item { on_hand: 35, ... }`. Replies and capabilities are everything a program can do that anyone outside it could observe.
 
+- After `then`, `name[key] is value` compares the stored value with `value` as the type's `PartialEq` does, so a `Decimal` of `0.1` equals one of `0.10`, as in `rust_decimal`. The type must derive `PartialEq` and `Debug` (see [Types](#types)).
+- `name fails` is a fact about what the program calls, so it follows `given`, before the request it fails. A failure is not something a program can be checked to have done.
+- `and` repeats the kind of the step before it, so `and items fails` after a `given` step sets up a failure too.
+
+*Why only a table can fail:* `fails` makes the program's calls to a capability fail. A program never calls its `HttpServer`: requests arrive through it, and a requirement sends them itself.
+
 A **check** is a Rust condition, for a `then` step whose expected value is not known exactly, as in a property. In a check, `name[key]` is the value the table holds under `key`, and the test fails if it holds none: `and products["bolt-m6"].gross >= <net>`.
+
+- A check reads at least one entry, and is a `bool`.
+- It may use entries and their fields, `.len()` and `.is_empty()`, the comparison and arithmetic operators, `&&`, `||` and `!`, and values. *(Not supported yet: any other Rust in a check, such as method calls on a `Decimal`.)*
+- A value on one side of an operator takes the type of the other side, as in a fact: `items["bolt-m6"].price >= 0.10` compares two `Decimal`s.
 
 *Why facts look like indexing:* `items["bolt-m6"]` is how a Rust programmer reads one entry of a map, and `is` reads as a statement of fact both when setting up and when checking.
 
@@ -630,6 +644,7 @@ A **check** is a Rust condition, for a `then` step whose expected value is not k
 Values in facts are written as Rust literals and constructors: `40`, `"M6 bolt"`, `Item { on_hand: 40, ... }`.
 
 - A value takes the type the program expects in that place. `"M6 bolt"` is a `String` in a `String` field, and `0.10` is a `Decimal` in a `Decimal` field.
+- A value is a literal, `dec!(...)`, a struct that gives every field, an enum's variant, `Some`, `None`, `Ok` or `Err` with a value, a tuple, or a list as `vec![...]`. Names resolve as they would in `src/main.inset`, so a variant is written with its enum, as in `Place::Shelf(3)`. *(Not supported yet: maps and sets.)*
 - An HTTP body is text. It is written as a string literal, or as a text block.
 - *(Draft)* A JSON body is written as a value of the route's type, such as `with Product { sku: "bolt-m6", net: dec!(0.10) }`. The test converts it to JSON with the type's serde form, and a reply is compared as a value after it is read back, so the order of keys and spacing do not matter. A string literal or text block is still sent as written, for when the exact JSON is the requirement.
 - *(Draft)* A query parameter is part of the path, as in an address bar: `when StockTracker receives GET /items?limit=10`. A request header is a line of its own after the `when` step: `and header If-Match is "3"`.

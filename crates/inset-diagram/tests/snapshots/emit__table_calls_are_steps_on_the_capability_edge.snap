@@ -1,0 +1,41 @@
+---
+source: crates/inset-diagram/tests/emit.rs
+expression: "serde_json::to_string_pretty(&receive[\"body\"]).unwrap()"
+---
+[
+  {
+    "id": "StockRoom/Room/fn:receive/0",
+    "kind": "action",
+    "text": "self.writes += 1"
+  },
+  {
+    "exit": {
+      "id": "StockRoom/Room/fn:receive/1/err",
+      "text": "None"
+    },
+    "id": "StockRoom/Room/fn:receive/1",
+    "kind": "action",
+    "links": [
+      "StockRoom/Room/field:items->StockRoom/grant:items"
+    ],
+    "text": "let mut item = self.items.get(&sku).await?"
+  },
+  {
+    "id": "StockRoom/Room/fn:receive/2",
+    "kind": "action",
+    "text": "item.on_hand += quantity"
+  },
+  {
+    "id": "StockRoom/Room/fn:receive/3",
+    "kind": "action",
+    "links": [
+      "StockRoom/Room/field:items->StockRoom/grant:items"
+    ],
+    "text": "self.items.insert(sku, item.clone()).await"
+  },
+  {
+    "id": "StockRoom/Room/fn:receive/4",
+    "kind": "return",
+    "text": "Some(item.on_hand.to_string())"
+  }
+]

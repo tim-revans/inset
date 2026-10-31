@@ -1,0 +1,9 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&out)
+---
+pass  Numbers are listed smallest first, negative numbers before the rest
+pass  Words are listed in the order of their characters
+pass  A stored number keeps its name
+
+3 requirements passed

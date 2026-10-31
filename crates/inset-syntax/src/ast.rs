@@ -662,6 +662,7 @@ pub struct Step {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StepKeyword {
+    Given,
     When,
     Then,
     And,
@@ -684,6 +685,29 @@ pub enum StepKind {
         status: Ident,
         body: Option<Text>,
     },
+    /// `given fact`, which sets up a fake capability, or `then fact`, which
+    /// checks what it holds.
+    Fact { given: bool, fact: Fact },
+    /// `then condition`: a Rust condition on what fake capabilities hold.
+    Check(Expr),
+}
+
+/// What a fake capability holds, named by its grant.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fact {
+    pub grant: Ident,
+    pub kind: FactKind,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum FactKind {
+    /// `name[key] is value`
+    Entry { key: Box<Expr>, value: Box<Expr> },
+    /// `name is empty`
+    Empty,
+    /// `name fails`
+    Fails,
 }
 
 /// Text in a step: a path, a string literal's value, or a text block's lines.

@@ -14,6 +14,12 @@
 //!   test runs the same way every time.
 //! - **Capabilities** are owned, non-`Clone` handles to what the host grants
 //!   ([`HttpServer`], [`Table`]).
+//! - **Stored values** take the form the `inset-value` crate defines, which
+//!   the test runner shares: [`Stored`] for a table's values and a
+//!   component's saved state, and [`Key`] for a table's keys, whose bytes
+//!   sort in key order. The compiler implements `Stored` for each data type
+//!   a program declares, so serde's derives and attributes, which say how a
+//!   JSON body looks, never change what is stored.
 //! - **Failures** are not Rust panics where they can be avoided. A failed
 //!   capability call or message ends its handler by dropping the handler's
 //!   future, so the component's `failure` block can roll it back and the
@@ -33,6 +39,7 @@ mod executor;
 mod failure;
 mod http;
 mod program;
+mod stored;
 mod table;
 
 #[cfg(test)]
@@ -55,6 +62,9 @@ pub use actor::{Component, Handle, Message, Scope, send};
 pub use failure::{Failure, Response, Stopped};
 pub use http::{HttpServer, IntoResponse, Method, PathParams, Reply, Request, Route, Status};
 pub use program::{App, Grant, GrantValue, Grants, Setting, SettingType};
+pub use rust_decimal::Decimal;
+pub use serde_json::Value as Json;
+pub use stored::{Key, KeyReader, KeyType, Saved, SavedFields, Stored, data};
 pub use table::Table;
 
 #[doc(hidden)]
@@ -65,7 +75,7 @@ pub mod prelude {
     pub use crate::{
         App, Component, Failure, Grant, GrantValue, Grants, Handle, HttpServer, IntoResponse,
         Message, Method, Reply, Request, Response, Route, Scope, Setting, SettingType, Status,
-        Stopped, Table, send,
+        Stopped, Stored, Table, send,
     };
 }
 

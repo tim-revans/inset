@@ -1,8 +1,9 @@
 //! The negative cases of the semantic checks, shared by the checker's tests
 //! and the language server's, which must report the same diagnostics. Each
 //! case is a small change to Hello HTTP, to `COUNTING`, a program with
-//! messages and an outlet between three components, or to `SHELF`, a
-//! program of two modules with a struct and an error enum.
+//! messages and an outlet between three components, to `SHELF`, a
+//! program of two modules with a struct and an error enum, or to `STORE`,
+//! a program that keeps a table, with requirements that state its facts.
 
 pub const HELLO: &str = r#"app HelloHttp {
     setting port: u16 = 8080;
@@ -138,6 +139,55 @@ fn shelf() -> Vec<Book> {
 pub const SHELF_REQ: &str = r#"requirement "A book with a copy on the shelf is lent"
     when Shelf receives GET /lend/Dune
     then Shelf replies OK with "1 left"
+"#;
+
+pub const STORE: &str = r#"app Store {
+    setting port: u16 = 8080;
+    grant http: HttpServer { port };
+    grant items: Table<String, Item> { file: "store.db", name: "items" };
+    start Counter { http: move http, items: move items };
+}
+
+/// An item, stored under its SKU.
+#[derive(Clone, Debug, PartialEq)]
+struct Item {
+    /// How many are on hand.
+    on_hand: u32,
+    price: Decimal,
+}
+
+component Counter {
+    http: HttpServer,
+    items: Table<String, Item>,
+
+    failure {
+        /// A database error fails only its own request.
+        Capability(items) => rollback,
+    }
+
+    #[post("/items/{sku}/receipts", via = http, body = quantity)]
+    async fn receive(&mut self, sku: String, quantity: u32) -> Option<String> {
+        let mut item = self.items.get(&sku).await?;
+        item.on_hand += quantity;
+        self.items.insert(sku, item.clone()).await;
+        Some(item.on_hand.to_string())
+    }
+}
+"#;
+
+pub const STORE_REQ: &str = r#"requirement "Received stock is added to what is on hand"
+    given items["bolt-m6"] is Item { on_hand: 3, price: 0.10 }
+    when Store receives POST /items/bolt-m6/receipts with "20"
+    then Store replies OK with "23"
+    and items["bolt-m6"] is Item { on_hand: 23, price: 0.10 }
+    and items["bolt-m6"].on_hand > 20
+
+requirement "A database failure changes nothing"
+    given items is empty
+    and items fails
+    when Store receives POST /items/bolt-m6/receipts with "20"
+    then Store replies InternalServerError
+    and items is empty
 "#;
 
 /// A broken program: its code and its requirements.
@@ -413,6 +463,62 @@ pub fn all() -> Vec<Case> {
             "format!(\"{}\", self.http)",
         );
         add("self_without_receiver", main, HELLO_REQ.to_string());
+    }
+    {
+        let req = edit(STORE_REQ, "    and items fails", "    and stock fails");
+        let req = edit(&req, "    and items is empty", "    and http is empty");
+        add("fact_naming_unknown_grant", STORE.to_string(), req);
+    }
+    {
+        let req = edit(
+            STORE_REQ,
+            "given items[\"bolt-m6\"] is Item { on_hand: 3, price: 0.10 }",
+            "given items[6] is Item { on_hand: \"3\", price: 0.10 }",
+        );
+        let req = edit(
+            &req,
+            "price: 0.10 }\n    and",
+            "price: dec!(1.2.3) }\n    and",
+        );
+        add("fact_of_wrong_type", STORE.to_string(), req);
+    }
+    {
+        let req = edit(
+            STORE_REQ,
+            "    then Store replies InternalServerError\n",
+            "    then Store replies InternalServerError\n    and items fails\n",
+        );
+        add("fails_after_then", STORE.to_string(), req);
+    }
+    {
+        let req = edit(
+            STORE_REQ,
+            "    and items[\"bolt-m6\"].on_hand > 20",
+            "    and items[\"bolt-m6\"].on_hand > dec!(20)\n    and items[\"bolt-m6\"].price\n    \
+             and 1 + 1 == 2\n    and items[\"bolt-m6\"].weight == 0",
+        );
+        add("check_of_wrong_type", STORE.to_string(), req);
+    }
+    {
+        let main = edit(
+            STORE,
+            "#[derive(Clone, Debug, PartialEq)]\n",
+            "#[derive(Clone)]\n",
+        );
+        add("compared_without_debug", main, STORE_REQ.to_string());
+    }
+    {
+        let main = edit(
+            STORE,
+            "grant items: Table<String, Item>",
+            "grant items: Table<f64, Item>",
+        );
+        let main = edit(
+            &main,
+            "    items: Table<String, Item>,",
+            "    items: Table<f64, Item>,",
+        );
+        add("table_key_not_orderable", main, STORE_REQ.to_string());
     }
     {
         let case = Case {

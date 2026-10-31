@@ -387,6 +387,32 @@ fn an_app_name_in_a_step_leads_to_the_app() {
 }
 
 #[test]
+fn a_fact_leads_to_its_grant_and_its_value_to_its_type() {
+    let mut client = Client::start();
+    let dir = example("stock-tracker");
+    let requirements = dir.join("requirements/stock.req.inset");
+    let text = std::fs::read_to_string(&requirements).unwrap();
+    client.open(&requirements, &text);
+    let main = dir.join("src/main.inset");
+    let code = std::fs::read_to_string(&main).unwrap();
+
+    let (line, column) = find(&text, "items[\"bolt-m6\"] is Item");
+    let grant = client.at("textDocument/definition", &requirements, (line, column + 1));
+    assert_eq!(grant["uri"], uri(&main));
+    assert_eq!(
+        start(&grant["range"]),
+        find(&code, "items: Table<String, Item> {")
+    );
+
+    let (line, column) = find(&text, "Item { on_hand: 40");
+    let item = client.at("textDocument/definition", &requirements, (line, column + 1));
+    assert_eq!(start(&item["range"]), find(&code, "Item {\n"));
+    let field = client.at("textDocument/definition", &requirements, (line, column + 8));
+    assert_eq!(start(&field["range"]), find(&code, "on_hand: u32"));
+    client.shutdown();
+}
+
+#[test]
 fn names_in_code_lead_to_their_declarations() {
     let mut client = Client::start();
     let root = std::env::temp_dir().join("inset-lsp-definitions");

@@ -4,8 +4,9 @@
 use inset_check::Modules;
 use inset_syntax::Span;
 use inset_syntax::ast::{
-    App, AttributeKind, Component, Enum, Expr, ExprKind, Function, HandoffValue, HttpMethod, Item,
-    ItemKind, LitKind, PatternKind, Route, TypeKind, UnaryOp, UseTree, Visibility,
+    App, AttributeKind, Component, Enum, Expr, ExprKind, FailureConditionKind, FailureResponse,
+    Function, HandoffValue, HttpMethod, Item, ItemKind, LitKind, PatternKind, Route, Struct, Type,
+    TypeKind, UnaryOp, UseTree, Visibility,
 };
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -75,12 +76,15 @@ impl Emitter {
                         quote!(#docs #vis #name: #ty)
                     })
                     .collect();
+                let stored = stored_struct(s);
                 quote! {
                     #item_docs
                     #derive
                     #vis struct #name {
                         #(#fields),*
                     }
+
+                    #stored
                 }
             }
             ItemKind::Enum(e) => {
@@ -103,6 +107,7 @@ impl Emitter {
                     })
                     .collect();
                 let status = status_impl(e);
+                let stored = stored_enum(e);
                 quote! {
                     #item_docs
                     #derive
@@ -111,6 +116,8 @@ impl Emitter {
                     }
 
                     #status
+
+                    #stored
                 }
             }
             ItemKind::Use(tree) => {
@@ -186,13 +193,7 @@ impl Emitter {
             .grants
             .iter()
             .map(|grant| {
-                if !is_http_server(&grant.ty.kind) {
-                    let what = match &grant.ty.kind {
-                        TypeKind::Path(p) => format!("a `{}` grant", p.segments[0].ident.name),
-                        _ => "this grant".into(),
-                    };
-                    self.unsupported(&what, grant.ty.span, "granted here");
-                }
+                let capability = type_text(&grant.ty);
                 let name = &grant.name.name;
                 let fields = grant.fields.iter().map(|field| {
                     let name = &field.name.name;
@@ -217,7 +218,7 @@ impl Emitter {
                 });
                 quote!(::inset_runtime::Grant {
                     name: #name,
-                    capability: "HttpServer",
+                    capability: #capability,
                     fields: &[#(#fields),*],
                 })
             })
@@ -247,6 +248,10 @@ impl Emitter {
                                 quote!(#field: #grant)
                             }
                         }
+                        HandoffValue::Expr(expr) => {
+                            let value = self.expr(expr);
+                            quote!(#field: #value)
+                        }
                         _ => {
                             self.unsupported("this handoff", handoff.span, "handed off here");
                             quote!(#field: todo!())
@@ -263,7 +268,11 @@ impl Emitter {
             .map(|g| {
                 let var = ident(&g.name.name);
                 let name = &g.name.name;
-                quote!(let #var = grants.http_server(#name);)
+                if is_http_server(&g.ty.kind) {
+                    quote!(let #var = grants.http_server(#name);)
+                } else {
+                    quote!(let #var = grants.table(#name)?;)
+                }
             });
         let scope = if starts.is_empty() {
             quote!(_)
@@ -310,18 +319,33 @@ impl Emitter {
         let name = ident(&c.name.name);
         let component_name = &c.name.name;
         let mut servers = Vec::new();
+        let mut tables = Vec::new();
+        let mut state = Vec::new();
         let fields: Vec<_> = c
             .fields
             .iter()
             .map(|field| {
-                if is_http_server(&field.ty.kind) {
+                let handed_down = field
+                    .attrs
+                    .iter()
+                    .any(|a| a.kind == AttributeKind::HandedDown);
+                if handed_down {
+                    self.unsupported("a `#[handed_down]` field", field.name.span, "this field");
+                } else if is_http_server(&field.ty.kind) {
                     servers.push(&field.name.name);
-                } else {
+                } else if is_named(&field.ty.kind, "Table") {
+                    tables.push(&field.name.name);
+                } else if let Some(kind) = ["Handle", "Outlet"]
+                    .into_iter()
+                    .find(|kind| is_named(&field.ty.kind, kind))
+                {
                     self.unsupported(
-                        "a field that is not an `HttpServer`",
+                        &format!("a `{kind}` field"),
                         field.ty.span,
                         "this field's type",
                     );
+                } else {
+                    state.push(&field.name.name);
                 }
                 let docs = docs(&field.docs);
                 let name = ident(&field.name.name);
@@ -334,10 +358,17 @@ impl Emitter {
         for start in &c.starts {
             self.unsupported("`start` in a component", start.span, "starts a child");
         }
-        if let Some(failure) = &c.failure {
-            let keyword = Span::new(failure.span.start, failure.span.start + "failure".len());
-            self.unsupported("a `failure` block", keyword, "this block");
-        }
+        let respond = self.respond_fn(c);
+        let rolls_back = c.failure.as_ref().is_some_and(|f| {
+            f.arms
+                .iter()
+                .any(|arm| arm.response == FailureResponse::Rollback)
+        });
+        let rolls_back = rolls_back.then(|| {
+            quote!(
+                const ROLLS_BACK: bool = true;
+            )
+        });
 
         let functions: Vec<_> = c.functions.iter().map(|f| self.function(f)).collect();
         let methods = (!functions.is_empty()).then(|| quote!(impl #name { #(#functions)* }));
@@ -353,7 +384,43 @@ impl Emitter {
                 }
             }
         });
+        let label_fn = (!tables.is_empty()).then(|| {
+            let labels = tables.iter().map(|field| {
+                let var = ident(field);
+                quote!(self.#var.label(#field);)
+            });
+            quote! {
+                fn label(&mut self) {
+                    #(#labels)*
+                }
+            }
+        });
         let route_fn = self.route_fn(c);
+        let saved = if state.is_empty() {
+            quote! {
+                type Saved = ();
+
+                fn save(&self) {}
+
+                fn restore(&mut self, (): ()) {}
+            }
+        } else {
+            let vars: Vec<_> = state.iter().map(|field| ident(field)).collect();
+            quote! {
+                type Saved = ::inset_runtime::Saved;
+
+                fn save(&self) -> ::inset_runtime::Saved {
+                    ::inset_runtime::Saved::new(Vec::from([
+                        #(::inset_runtime::Stored::to_json(&self.#vars)),*
+                    ]))
+                }
+
+                fn restore(&mut self, saved: ::inset_runtime::Saved) {
+                    let mut saved = saved.fields();
+                    #(saved.restore(&mut self.#vars);)*
+                }
+            }
+        };
 
         quote! {
             #item_docs
@@ -366,17 +433,66 @@ impl Emitter {
             impl ::inset_runtime::Component for #name {
                 const NAME: &'static str = #component_name;
 
-                type Saved = ();
+                #rolls_back
 
-                fn save(&self) {}
+                #saved
 
-                fn restore(&mut self, (): ()) {}
+                #respond
+
+                #label_fn
 
                 #servers_fn
 
                 #route_fn
             }
         }
+    }
+
+    /// `respond`: the `failure` block, one arm for each of its arms.
+    fn respond_fn(&mut self, c: &Component) -> Option<TokenStream> {
+        let failure = c.failure.as_ref()?;
+        let mut catch_all = false;
+        let arms: Vec<_> = failure
+            .arms
+            .iter()
+            .filter_map(|arm| {
+                if arm.response == FailureResponse::Restart {
+                    let span = Span::new(arm.condition.span.start, arm.span.end);
+                    self.unsupported("`restart`", span, "this response");
+                    return None;
+                }
+                let pattern = match &arm.condition.kind {
+                    FailureConditionKind::Panic => quote!(::inset_runtime::Failure::Panic),
+                    FailureConditionKind::Overflow => quote!(::inset_runtime::Failure::Overflow),
+                    FailureConditionKind::Capability(field) => {
+                        let field = &field.name;
+                        quote!(::inset_runtime::Failure::Capability(#field))
+                    }
+                    FailureConditionKind::Message(field) => {
+                        let field = &field.name;
+                        quote!(::inset_runtime::Failure::Message(#field))
+                    }
+                    FailureConditionKind::Child(_) => {
+                        self.unsupported("`Child(...)`", arm.condition.span, "this condition");
+                        return None;
+                    }
+                    FailureConditionKind::Other => {
+                        catch_all = true;
+                        quote!(_)
+                    }
+                };
+                Some(quote!(#pattern => Some(::inset_runtime::Response::Rollback),))
+            })
+            .collect();
+        let rest = (!catch_all).then(|| quote!(_ => None,));
+        Some(quote! {
+            fn respond(failure: &::inset_runtime::Failure) -> Option<::inset_runtime::Response> {
+                match failure {
+                    #(#arms)*
+                    #rest
+                }
+            }
+        })
     }
 
     /// `route`: each route attribute in order, grouped by the server its
@@ -422,10 +538,8 @@ impl Emitter {
                 self.unsupported("a message handler", attr.span, "this attribute");
             }
         }
-        if f.is_async {
-            self.unsupported("an `async fn`", f.name.span, "this function");
-        }
         let docs = docs(&f.docs);
+        let asyncness = f.is_async.then(|| quote!(async));
         let vis = self.vis(&f.vis);
         let name = ident(&f.name.name);
         let receiver = f.receiver.as_ref().map(|r| {
@@ -448,7 +562,7 @@ impl Emitter {
         let body = self.block(&f.body);
         quote! {
             #docs
-            #vis fn #name(#receiver #(#params),*) #ret #body
+            #vis #asyncness fn #name(#receiver #(#params),*) #ret #body
         }
     }
 }
@@ -508,6 +622,11 @@ fn route_arm(route: &Route, f: &Function) -> TokenStream {
         Some(_) => (quote!(component), quote!(component.#name(#(#locals),*))),
         None => (quote!(_), quote!(Self::#name(#(#locals),*))),
     };
+    let call = if f.is_async {
+        quote!(#call.await)
+    } else {
+        call
+    };
     let is_move = (!locals.is_empty()).then(|| quote!(move));
     let to = quote! {
         return ::inset_runtime::Route::to(#is_move |#component: &mut Self| {
@@ -554,6 +673,135 @@ fn locals(names: &[String]) -> Vec<proc_macro2::Ident> {
 
 fn is_http_server(ty: &TypeKind) -> bool {
     matches!(ty, TypeKind::Path(p) if matches!(p.segments.as_slice(), [only] if only.ident.name == "HttpServer" && only.generics.is_empty()))
+}
+
+/// Whether a type is the standard type `name`, with any arguments.
+fn is_named(ty: &TypeKind, name: &str) -> bool {
+    matches!(ty, TypeKind::Path(p) if matches!(p.segments.as_slice(), [only] if only.ident.name == name))
+}
+
+/// A type as the source writes it, for the manifest: `Table<String, Item>`.
+fn type_text(t: &Type) -> String {
+    match &t.kind {
+        TypeKind::Path(p) => p
+            .segments
+            .iter()
+            .map(|s| {
+                let mut text = s.ident.name.clone();
+                if !s.generics.is_empty() {
+                    let args: Vec<String> = s.generics.iter().map(type_text).collect();
+                    text.push_str(&format!("<{}>", args.join(", ")));
+                }
+                text
+            })
+            .collect::<Vec<_>>()
+            .join("::"),
+        TypeKind::Ref { mutable, inner } => {
+            format!(
+                "&{}{}",
+                if *mutable { "mut " } else { "" },
+                type_text(inner)
+            )
+        }
+        TypeKind::Tuple(elems) => {
+            let elems: Vec<String> = elems.iter().map(type_text).collect();
+            if elems.len() == 1 {
+                format!("({},)", elems[0])
+            } else {
+                format!("({})", elems.join(", "))
+            }
+        }
+        TypeKind::Slice(inner) => format!("[{}]", type_text(inner)),
+        TypeKind::Infer => "_".into(),
+    }
+}
+
+/// `impl Stored` for a struct: an object of its fields, by name.
+fn stored_struct(s: &Struct) -> TokenStream {
+    let name = ident(&s.name.name);
+    let type_name = &s.name.name;
+    let names: Vec<&str> = s.fields.iter().map(|f| f.name.name.as_str()).collect();
+    let vars: Vec<_> = names.iter().map(|n| ident(n)).collect();
+    let read = if names.is_empty() {
+        quote! {
+            ::inset_runtime::data::fields(#type_name, json)?;
+            Ok(#name {})
+        }
+    } else {
+        quote! {
+            let fields = ::inset_runtime::data::fields(#type_name, json)?;
+            Ok(#name { #(#vars: fields.get(#names)?),* })
+        }
+    };
+    quote! {
+        impl ::inset_runtime::Stored for #name {
+            fn to_json(&self) -> ::inset_runtime::Json {
+                ::inset_runtime::data::object(Vec::from([
+                    #((#names, ::inset_runtime::Stored::to_json(&self.#vars))),*
+                ]))
+            }
+
+            fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+                #read
+            }
+        }
+    }
+}
+
+/// `impl Stored` for an enum: a unit variant's name, or its name and fields.
+fn stored_enum(e: &Enum) -> TokenStream {
+    let name = ident(&e.name.name);
+    let type_name = &e.name.name;
+    let mut writes = Vec::new();
+    let mut reads = Vec::new();
+    for variant in &e.variants {
+        let variant_name = &variant.name.name;
+        let var = ident(variant_name);
+        let count = variant.fields.len();
+        let bound: Vec<_> = (0..count).map(|i| ident(&format!("field{i}"))).collect();
+        if count == 0 {
+            writes.push(quote! {
+                Self::#var => ::inset_runtime::data::variant(#variant_name, Vec::new()),
+            });
+            reads.push(quote! {
+                #variant_name => {
+                    ::inset_runtime::data::arity(#variant_name, fields, 0)?;
+                    Ok(Self::#var)
+                }
+            });
+        } else {
+            let indices = (0..count).map(proc_macro2::Literal::usize_unsuffixed);
+            writes.push(quote! {
+                Self::#var(#(#bound),*) => ::inset_runtime::data::variant(
+                    #variant_name,
+                    Vec::from([#(::inset_runtime::Stored::to_json(#bound)),*]),
+                ),
+            });
+            reads.push(quote! {
+                #variant_name => {
+                    ::inset_runtime::data::arity(#variant_name, fields, #count)?;
+                    Ok(Self::#var(#(::inset_runtime::Stored::from_json(&fields[#indices])?),*))
+                }
+            });
+        }
+    }
+    quote! {
+        impl ::inset_runtime::Stored for #name {
+            fn to_json(&self) -> ::inset_runtime::Json {
+                match self {
+                    #(#writes)*
+                }
+            }
+
+            fn from_json(json: &::inset_runtime::Json) -> Result<Self, String> {
+                let (variant, fields) = ::inset_runtime::data::to_variant(json)?;
+                match variant {
+                    #(#reads)*
+                    other => ::inset_runtime::data::unknown_variant(#type_name, other),
+                }
+            }
+        }
+    }
 }
 
 /// The runtime's name for a setting's type.

@@ -94,12 +94,13 @@ impl<'a> Checker<'a> {
             }
             settings.insert(&setting.name.name, ty);
         }
-        for (grant, ty) in app.grants.iter().zip(grant_tys) {
+        for (grant, ty) in app.grants.iter().zip(&grant_tys) {
             if !used.insert(&grant.name.name) {
                 self.name_used_twice(&grant.name);
             }
-            self.check_grant(grant, &ty, &settings);
+            self.check_grant(grant, ty, &settings);
         }
+        self.grant_tys = grant_tys;
         self.check_starts(Scope::App, &app.starts, &mut used);
     }
 
@@ -137,6 +138,30 @@ impl<'a> Checker<'a> {
                 )
                 .with_help("store data types, which hold no capabilities, handles or outlets"),
             );
+        } else if let Ty::Table(key, value) = ty {
+            if let Some(found) = crate::values::not_a_key(key) {
+                self.error(
+                    Diagnostic::new(
+                        format!("a table cannot be keyed by `{found}`"),
+                        grant.ty.span,
+                        "keys are stored in an order a database can sort",
+                    )
+                    .with_help(
+                        "key a table by an integer type, `bool`, `char`, `String`, or a tuple of \
+                         them",
+                    ),
+                );
+            }
+            if let Some(found) = not_storable(value) {
+                self.error(
+                    Diagnostic::new(
+                        format!("a table cannot store a `{found}`"),
+                        grant.ty.span,
+                        "a stored value is owned data",
+                    )
+                    .with_help("store an owned type, such as `String` for text"),
+                );
+            }
         }
         let expected = grant_fields(ty);
         let mut given: Vec<&str> = Vec::new();
@@ -1018,6 +1043,15 @@ fn grant_type_name(ty: &Ty) -> &'static str {
     }
 }
 
+/// A type inside a table's value type that cannot be stored: a borrowed one.
+fn not_storable(ty: &Ty) -> Option<&Ty> {
+    match ty {
+        Ty::Ref { .. } | Ty::Str | Ty::Slice(_) => Some(ty),
+        Ty::Tuple(elems) | Ty::Std(_, elems) => elems.iter().find_map(not_storable),
+        _ => None,
+    }
+}
+
 /// Checks a literal against a setting's or grant field's type.
 fn literal_fits(expr: &Expr, ty: &Ty, what: &str) -> Result<(), Diagnostic> {
     let (lit, negative) = match &expr.kind {
@@ -1059,7 +1093,12 @@ fn not_literal(expr: &Expr, what: &str) -> Diagnostic {
     .with_help("write the value itself, such as `8080` or \"items.db\"; a grant's field may also name a setting")
 }
 
-fn int_fits(text: &str, negative: bool, name: &str, span: Span) -> Result<(), Diagnostic> {
+pub(crate) fn int_fits(
+    text: &str,
+    negative: bool,
+    name: &str,
+    span: Span,
+) -> Result<(), Diagnostic> {
     let digits: String = text.chars().filter(|c| *c != '_').collect();
     let suffix = INTS.iter().find(|s| digits.ends_with(**s));
     if let Some(suffix) = suffix
@@ -1099,7 +1138,7 @@ fn int_fits(text: &str, negative: bool, name: &str, span: Span) -> Result<(), Di
     }
 }
 
-fn int_range(name: &str) -> (i128, i128) {
+pub(crate) fn int_range(name: &str) -> (i128, i128) {
     let bits: u32 = match name.trim_start_matches(['i', 'u']) {
         "size" => 64,
         n => n.parse().unwrap_or(64),

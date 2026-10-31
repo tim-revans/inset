@@ -1,21 +1,96 @@
 //! Requirement steps, resolved against the app: its name, its `HttpServer`
-//! grants and the routes they serve. A step that names something the program
-//! does not have is a compile error, not a test failure. A step that
-//! resolves refers to what it names: its app, and the handler of its route.
+//! grants and the routes they serve, and its `Table` grants and what they
+//! hold. A step that names something the program does not have is a compile
+//! error, not a test failure. A step that resolves refers to what it names:
+//! its app, the handler of its route, or its grant.
+//!
+//! Checking the steps also plans them: a [`Plan`] is every requirement as
+//! the test runner runs it, with each request's server chosen, each status
+//! a number, and each value in a fact or check typed and ready to store or
+//! compare.
 
 use std::collections::HashMap;
 
-use inset_syntax::ast::{RequirementsFile, StepKind, TypeKind};
+use inset_syntax::ast::{FactKind, RequirementsFile, StepKind, TypeKind};
 use inset_syntax::{Diagnostic, Ident, Span};
+use inset_value::{Check, Shape, Types, Value};
 
 use crate::types::Ty;
+use crate::values::{Values, shape};
 use crate::{Checker, Program, Reply, Report, RouteInfo, Segment, names, status};
+
+/// A program's requirements, as the test runner runs them.
+#[derive(Clone, Debug)]
+pub struct Plan {
+    pub app: String,
+    /// The program's structs and enums, which the values' shapes refer to.
+    pub types: Types,
+    /// In order of file and then of position.
+    pub requirements: Vec<PlannedRequirement>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PlannedRequirement {
+    /// The file's index in [`Program::files`].
+    pub file: usize,
+    pub sentence: String,
+    pub span: Span,
+    pub steps: Vec<PlannedStep>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PlannedStep {
+    pub span: Span,
+    pub kind: Planned,
+}
+
+#[derive(Clone, Debug)]
+pub enum Planned {
+    /// Delivers a request through the `HttpServer` grant `server`.
+    Request {
+        server: String,
+        method: String,
+        path: String,
+        body: Vec<u8>,
+    },
+    /// The reply to the latest request has this status and body.
+    Reply { status: u16, body: String },
+    /// Sets up what a fake holds.
+    Given(PlannedFact),
+    /// Checks what a fake holds.
+    Then(PlannedFact),
+    /// A condition on what the fakes hold.
+    Check(Check),
+}
+
+#[derive(Clone, Debug)]
+pub enum PlannedFact {
+    /// `grant[key] is value`
+    Entry {
+        grant: String,
+        /// The key's stored form.
+        key: Vec<u8>,
+        key_value: Value,
+        value: Value,
+        /// The shape of the table's values.
+        shape: Shape,
+    },
+    /// `grant is empty`
+    Empty {
+        grant: String,
+        key_shape: Shape,
+        shape: Shape,
+    },
+    /// `grant fails`
+    Fails { grant: String },
+}
 
 pub(crate) fn check(
     cx: &Checker,
     program: &Program,
     files: &[(usize, RequirementsFile)],
     refs: &mut Vec<(usize, Span, Span)>,
+    plans: &mut Vec<PlannedRequirement>,
 ) -> Vec<Report> {
     let mut reports = Vec::new();
     let mut sentences: HashMap<&str, (usize, Span)> = HashMap::new();
@@ -48,14 +123,21 @@ pub(crate) fn check(
             }
             // The route the most recent `when` step reached, if it resolved.
             let mut last: Option<Option<&RouteInfo>> = None;
+            let mut planned = Vec::new();
             for step in &requirement.steps {
+                let mut plan = |kind| {
+                    planned.push(PlannedStep {
+                        span: step.span,
+                        kind,
+                    })
+                };
                 match &step.kind {
                     StepKind::Request {
                         app,
                         method,
                         path,
                         via,
-                        ..
+                        body,
                     } => {
                         app_name(cx, app, &mut report, &mut |span, target| {
                             refs.push((*file, span, target))
@@ -70,10 +152,21 @@ pub(crate) fn check(
                         );
                         if let Some(route) = route {
                             refs.push((*file, step.span, route.decl.function));
+                            plan(Planned::Request {
+                                server: via.as_ref().map_or_else(
+                                    || route.grant.clone().unwrap_or_default(),
+                                    |v| v.name.clone(),
+                                ),
+                                method: method.as_str().to_string(),
+                                path: path.value.clone(),
+                                body: body
+                                    .as_ref()
+                                    .map_or_else(Vec::new, |b| b.value.clone().into_bytes()),
+                            });
                         }
                         last = Some(route);
                     }
-                    StepKind::Reply { app, status, .. } => {
+                    StepKind::Reply { app, status, body } => {
                         app_name(cx, app, &mut report, &mut |span, target| {
                             refs.push((*file, span, target))
                         });
@@ -92,12 +185,119 @@ pub(crate) fn check(
                             refs.push((*file, step.span, route.decl.function));
                         }
                         check_status(status, route, &mut report);
+                        if let Some(code) = status::code(&status.name) {
+                            plan(Planned::Reply {
+                                status: code,
+                                body: body.as_ref().map_or_else(String::new, |b| b.value.clone()),
+                            });
+                        }
+                    }
+                    StepKind::Fact { given, fact } => {
+                        let mut values = Values {
+                            cx,
+                            diagnostics: Vec::new(),
+                            refs: Vec::new(),
+                        };
+                        if let Some(grant) = cx
+                            .app
+                            .and_then(|a| a.grants.iter().find(|g| g.name.name == fact.grant.name))
+                        {
+                            refs.push((*file, fact.grant.span, grant.name.span));
+                        }
+                        if let Some(fact) = plan_fact(&mut values, *given, fact) {
+                            plan(if *given {
+                                Planned::Given(fact)
+                            } else {
+                                Planned::Then(fact)
+                            });
+                        }
+                        refs.extend(values.refs.into_iter().map(|(s, t)| (*file, s, t)));
+                        values.diagnostics.into_iter().for_each(&mut report);
+                    }
+                    StepKind::Check(expr) => {
+                        let mut values = Values {
+                            cx,
+                            diagnostics: Vec::new(),
+                            refs: Vec::new(),
+                        };
+                        if let Some(check) = values.check(expr) {
+                            plan(Planned::Check(check));
+                        }
+                        refs.extend(values.refs.into_iter().map(|(s, t)| (*file, s, t)));
+                        values.diagnostics.into_iter().for_each(&mut report);
                     }
                 }
             }
+            plans.push(PlannedRequirement {
+                file: *file,
+                sentence: sentence.value.clone(),
+                span: requirement.span,
+                steps: planned,
+            });
         }
     }
     reports
+}
+
+/// Checks a fact against the grant it names, and types its values.
+fn plan_fact(
+    values: &mut Values,
+    given: bool,
+    fact: &inset_syntax::ast::Fact,
+) -> Option<PlannedFact> {
+    let grant = &fact.grant;
+    match &fact.kind {
+        FactKind::Fails => {
+            if !given {
+                values.diagnostics.push(
+                    Diagnostic::new(
+                        "`fails` follows `given`",
+                        fact.span,
+                        "a `then` step checks what happened, and this sets up a failure",
+                    )
+                    .with_help(format!(
+                        "move it to a `given` step before the request it fails: `and {} fails`",
+                        grant.name
+                    )),
+                );
+                return None;
+            }
+            if values.table(&grant.name).is_none() {
+                let diagnostic = values.not_a_table(grant, "can be made to fail")?;
+                values.diagnostics.push(diagnostic);
+                return None;
+            }
+            Some(PlannedFact::Fails {
+                grant: grant.name.clone(),
+            })
+        }
+        FactKind::Empty => {
+            let (key, value) = values.entry_types(grant)?;
+            Some(PlannedFact::Empty {
+                grant: grant.name.clone(),
+                key_shape: shape(key),
+                shape: shape(value),
+            })
+        }
+        FactKind::Entry { key, value } => {
+            let (key_ty, value_ty) = values.entry_types(grant)?;
+            let (key_ty, value_ty) = (key_ty.clone(), value_ty.clone());
+            let key_value = values.value(key, &key_ty, &format!("the key of `{}`", grant.name));
+            let value = values.value(value, &value_ty, &format!("a value of `{}`", grant.name));
+            if !given && let Some(diagnostic) = values.not_comparable(&value_ty, fact.span) {
+                values.diagnostics.push(diagnostic);
+                return None;
+            }
+            let key_value = key_value?;
+            Some(PlannedFact::Entry {
+                grant: grant.name.clone(),
+                key: inset_value::key::encode(&key_value, &shape(&key_ty)).ok()?,
+                key_value,
+                value: value?,
+                shape: shape(&value_ty),
+            })
+        }
+    }
 }
 
 fn app_name(

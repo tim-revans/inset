@@ -1,0 +1,30 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: the key of `items` is a `String`, and this is an integer
+   ╭─[ requirements/main.req.inset:2:17 ]
+   │
+ 2 │     given items[6] is Item { on_hand: "3", price: 0.10 }
+   │                 ┬  
+   │                 ╰── expected a `String`
+   │ 
+   │ Help: write text in quotes, such as "bolt-m6"
+───╯
+Error: the field `on_hand` is a `u32`, and this is text
+   ╭─[ requirements/main.req.inset:2:39 ]
+   │
+ 2 │     given items[6] is Item { on_hand: "3", price: 0.10 }
+   │                                       ─┬─  
+   │                                        ╰─── expected a `u32`
+   │ 
+   │ Help: write an integer, such as `40`
+───╯
+Error: `dec!` takes one number
+   ╭─[ requirements/main.req.inset:5:56 ]
+   │
+ 5 │     and items["bolt-m6"] is Item { on_hand: 23, price: dec!(1.2.3) }
+   │                                                        ─────┬─────  
+   │                                                             ╰─────── not one number
+   │ 
+   │ Help: write the number in it, such as `dec!(0.10)`
+───╯

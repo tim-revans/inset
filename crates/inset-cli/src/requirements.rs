@@ -1,18 +1,24 @@
 //! Runs a program's requirements against its built component, in the host
 //! with a fake behind every grant, and reports each by its sentence.
 //!
+//! The steps come from the checker's plan, with every value typed, so this
+//! runs them without reading the program's code. `given` facts write the
+//! fake tables in the stored form `inset-value` defines, which is what the
+//! program's own code writes, and `then` facts and checks read them back.
+//!
 //! Each requirement starts the program afresh, so no requirement depends on
 //! another having run. Its steps run in order, and the first that does not
-//! hold fails it. The report is the same every time for the same program,
-//! so it holds no timings.
+//! hold fails it. A fact that does not hold reports both values, written as
+//! Rust's `{:?}` writes them, as `assert_eq!` does. The report is the same
+//! every time for the same program, so it holds no timings.
 
 use std::path::Path;
 
-use inset_check::Program;
 use inset_check::status::STATUSES;
-use inset_host::{Mode, Options, Request, Response};
-use inset_syntax::ast::{Requirement, StepKind};
-use inset_syntax::{Span, is_requirements_file, parse_requirements};
+use inset_check::{Plan, Planned, PlannedFact, PlannedRequirement, Program};
+use inset_host::{Mode, Options, Request, Response, Running};
+use inset_syntax::Span;
+use inset_value::{Check, CheckError, Op, Shape, Types, Value, json, key};
 use serde::Serialize;
 
 /// What `inset test --json` prints.
@@ -45,18 +51,38 @@ pub struct Failure {
     /// The step as written.
     pub step: String,
     pub message: String,
+    /// For a fact or check that did not hold, the value the step expected,
+    /// as Rust's `{:?}` writes it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected: Option<String>,
+    /// The value found instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actual: Option<String>,
+}
+
+/// A step that did not hold.
+struct Failed {
+    span: Span,
+    message: String,
+    /// What was expected and what was found, when the step compared two values.
+    values: Option<(String, String)>,
+}
+
+impl Failed {
+    fn new(span: Span, message: String) -> Failed {
+        Failed {
+            span,
+            message,
+            values: None,
+        }
+    }
 }
 
 /// Runs every requirement of `program` against the component built from it.
 pub fn run(program: &Program, component: &Path) -> Result<TestReport, String> {
+    let plan = inset_check::plan(program)
+        .map_err(|_| "the program has errors, so its requirements cannot run".to_string())?;
     let host = inset_host::Program::load(component).map_err(|e| e.to_string())?;
-    let servers: Vec<&str> = host
-        .manifest()
-        .grants
-        .iter()
-        .filter(|g| g.capability == "HttpServer")
-        .map(|g| g.name.as_str())
-        .collect();
     let working_dir = std::env::current_dir().map_err(|e| e.to_string())?;
     let options = Options {
         settings: Vec::new(),
@@ -64,27 +90,27 @@ pub fn run(program: &Program, component: &Path) -> Result<TestReport, String> {
         working_dir,
     };
     let mut requirements = Vec::new();
-    for file in &program.files {
-        if !file.path.starts_with("requirements/") || !is_requirements_file(&file.path) {
-            continue;
-        }
+    for requirement in &plan.requirements {
+        let file = &program.files[requirement.file];
         let line = |span: Span| file.text[..span.start].matches('\n').count() + 1;
-        for requirement in parse_requirements(&file.text).ast.requirements {
-            let mut running = host.start(&options).map_err(|e| e.to_string())?;
-            let failure =
-                steps(&requirement, &mut running, &servers).map(|(span, message)| Failure {
-                    line: line(span),
-                    step: step_text(&file.text, span),
-                    message,
-                });
-            requirements.push(Outcome {
-                sentence: requirement.sentence.value.clone(),
-                file: file.path.clone(),
-                line: line(requirement.span),
-                result: if failure.is_some() { "fail" } else { "pass" },
-                failure,
-            });
-        }
+        let mut running = host.start(&options).map_err(|e| e.to_string())?;
+        let failure = steps(&plan, requirement, &mut running).map(|failed| {
+            let (expected, actual) = failed.values.unzip();
+            Failure {
+                line: line(failed.span),
+                step: step_text(&file.text, failed.span),
+                message: failed.message,
+                expected,
+                actual,
+            }
+        });
+        requirements.push(Outcome {
+            sentence: requirement.sentence.clone(),
+            file: file.path.clone(),
+            line: line(requirement.span),
+            result: if failure.is_some() { "fail" } else { "pass" },
+            failure,
+        });
     }
     let failed = requirements.iter().filter(|r| r.failure.is_some()).count();
     Ok(TestReport {
@@ -98,59 +124,190 @@ pub fn run(program: &Program, component: &Path) -> Result<TestReport, String> {
 /// Runs a requirement's steps, and returns the first that does not hold,
 /// with what happened instead.
 fn steps(
-    requirement: &Requirement,
-    running: &mut inset_host::Running<'_>,
-    servers: &[&str],
-) -> Option<(Span, String)> {
+    plan: &Plan,
+    requirement: &PlannedRequirement,
+    running: &mut Running<'_>,
+) -> Option<Failed> {
     let mut last: Option<Response> = None;
     let mut reports_before = 0;
     for step in &requirement.steps {
+        let fail = |message: String| Some(Failed::new(step.span, message));
         match &step.kind {
-            StepKind::Request {
+            Planned::Request {
+                server,
                 method,
                 path,
-                via,
                 body,
-                ..
             } => {
-                // The checker made sure a request names its server when
-                // there is more than one.
-                let server = via.as_ref().map_or(servers[0], |v| v.name.as_str());
                 let request = Request {
-                    method: method.as_str().into(),
-                    path: path.value.clone(),
-                    body: body
-                        .as_ref()
-                        .map_or_else(Vec::new, |b| b.value.clone().into_bytes()),
+                    method: method.clone(),
+                    path: path.clone(),
+                    body: body.clone(),
                 };
                 reports_before = running.reports().len();
                 match running.request(server, &request) {
                     Ok(response) => last = Some(response),
                     Err(stopped) => {
-                        let message = format!(
+                        return fail(format!(
                             "the program stopped before it replied: {}",
                             inset_host::describe(&stopped)
-                        );
-                        return Some((step.span, message));
+                        ));
                     }
                 }
             }
-            StepKind::Reply { status, body, .. } => {
+            Planned::Reply { status, body } => {
                 let response = last.as_ref().expect("the checker puts a request first");
-                let code = inset_check::status::code(&status.name)
-                    .expect("the checker accepts only known statuses");
-                let expected = body.as_ref().map_or("", |b| b.value.as_str());
-                if response.status != code || response.body != expected.as_bytes() {
+                if response.status != *status || response.body != body.as_bytes() {
                     let mut message = format!("but the reply was {}", describe(response));
                     for report in &running.reports()[reports_before..] {
                         message.push_str(&format!("\nafter {report}"));
                     }
-                    return Some((step.span, message));
+                    return fail(message);
+                }
+            }
+            Planned::Given(fact) => {
+                if let Err(e) = given(running, fact) {
+                    return fail(format!("but the fake could not be set up: {e}"));
+                }
+            }
+            Planned::Then(fact) => {
+                if let Some(mut failed) = then(running, fact, &plan.types) {
+                    failed.span = step.span;
+                    return Some(failed);
+                }
+            }
+            Planned::Check(check) => {
+                if let Some(mut failed) = check_holds(running, check, &plan.types) {
+                    failed.span = step.span;
+                    return Some(failed);
                 }
             }
         }
     }
     None
+}
+
+/// Sets up a fake table, as a `given` fact says.
+fn given(running: &Running<'_>, fact: &PlannedFact) -> Result<(), String> {
+    match fact {
+        PlannedFact::Entry {
+            grant, key, value, ..
+        } => {
+            let stored = json::encode(value).to_string();
+            table(running, grant).set(key, stored.as_bytes())
+        }
+        PlannedFact::Empty { grant, .. } => table(running, grant).clear(),
+        PlannedFact::Fails { grant } => {
+            table(running, grant).fails = true;
+            Ok(())
+        }
+    }
+}
+
+fn table<'r>(
+    running: &'r Running<'_>,
+    grant: &str,
+) -> std::sync::MutexGuard<'r, inset_host::Table> {
+    running
+        .table(grant)
+        .expect("the checker names only the app's table grants")
+}
+
+/// Checks a `then` fact against what a fake table holds.
+fn then(running: &Running<'_>, fact: &PlannedFact, types: &Types) -> Option<Failed> {
+    let failed = |message: String| Some(Failed::new(Span::new(0, 0), message));
+    match fact {
+        PlannedFact::Entry {
+            grant,
+            key,
+            key_value,
+            value,
+            shape,
+        } => {
+            let stored = match table(running, grant).get(key) {
+                Ok(stored) => stored,
+                Err(e) => return failed(format!("but `{grant}` could not be read: {e}")),
+            };
+            let Some(stored) = stored else {
+                return failed(format!("but `{grant}` holds nothing under {key_value}"));
+            };
+            let actual = match read(&stored, shape, types) {
+                Ok(actual) => actual,
+                Err(e) => return failed(format!("but {grant}[{key_value}] {e}")),
+            };
+            if actual == *value {
+                return None;
+            }
+            Some(Failed {
+                span: Span::new(0, 0),
+                message: format!(
+                    "but {grant}[{key_value}] is another value\n  expected: {value}\n  actual:   {actual}"
+                ),
+                values: Some((value.to_string(), actual.to_string())),
+            })
+        }
+        PlannedFact::Empty {
+            grant,
+            key_shape,
+            shape,
+        } => {
+            let entries = match table(running, grant).entries() {
+                Ok(entries) => entries,
+                Err(e) => return failed(format!("but `{grant}` could not be read: {e}")),
+            };
+            if entries.is_empty() {
+                return None;
+            }
+            let count = entries.len();
+            let mut message = format!(
+                "but `{grant}` holds {count} {}",
+                if count == 1 { "entry" } else { "entries" }
+            );
+            for (key, value) in entries.iter().take(5) {
+                let key = key::decode(key, key_shape).map_or_else(|e| e, |k| k.to_string());
+                let value = read(value, shape, types).map_or_else(|e| e, |v| v.to_string());
+                message.push_str(&format!("\n  {grant}[{key}] is {value}"));
+            }
+            if count > 5 {
+                message.push_str(&format!("\n  and {} more", count - 5));
+            }
+            failed(message)
+        }
+        PlannedFact::Fails { .. } => unreachable!("the checker allows `fails` after `given` only"),
+    }
+}
+
+/// Reads a stored value, or says why it cannot be read.
+fn read(stored: &[u8], shape: &Shape, types: &Types) -> Result<Value, String> {
+    let json: serde_json::Value =
+        serde_json::from_slice(stored).map_err(|e| format!("is not stored as JSON: {e}"))?;
+    json::decode(&json, shape, types).map_err(|e| format!("does not fit its type: {e}"))
+}
+
+/// Evaluates a check against what the fakes hold.
+fn check_holds(running: &Running<'_>, check: &Check, types: &Types) -> Option<Failed> {
+    let failed = |message: String| Some(Failed::new(Span::new(0, 0), message));
+    let mut lookup = |grant: &str, key: &[u8]| table(running, grant).get(key).ok().flatten();
+    match check.eval(&mut lookup, types) {
+        Ok(Value::Bool(true)) => None,
+        Ok(_) => {
+            // A comparison shows both of its sides, as `assert!` does not.
+            if let Check::Binary(op, lhs, rhs) = check
+                && !matches!(op, Op::And | Op::Or)
+            {
+                let left = lhs.eval(&mut lookup, types).ok()?;
+                let right = rhs.eval(&mut lookup, types).ok()?;
+                return failed(format!(
+                    "but it is false\n  left:  {left}\n  right: {right}"
+                ));
+            }
+            failed("but it is false".into())
+        }
+        Err(CheckError::Missing { grant, key }) => {
+            failed(format!("but `{grant}` holds nothing under {key}"))
+        }
+        Err(CheckError::Failed(e)) => failed(format!("but it could not be worked out: {e}")),
+    }
 }
 
 /// A reply as a step would state it: `OK with "Hello, Ada!"`.

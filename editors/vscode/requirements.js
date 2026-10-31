@@ -21,7 +21,7 @@ const { programRoot } = require("./program");
  *   file: string,
  *   line: number,
  *   result: "pass" | "fail",
- *   failure?: { line: number, step: string, message: string },
+ *   failure?: { line: number, step: string, message: string, expected?: string, actual?: string },
  * }} Outcome
  */
 
@@ -261,7 +261,11 @@ class Requirements {
       const uri = vscode.Uri.file(path.join(root, outcome.file));
       const location = new vscode.Location(uri, new vscode.Position(failure.line - 1, 0));
       const detail = `${failure.step.trim()}\n${failure.message}`;
-      const message = new vscode.TestMessage(detail);
+      // A fact that compared two values shows them side by side.
+      const message =
+        failure.expected !== undefined && failure.actual !== undefined
+          ? vscode.TestMessage.diff(detail, failure.expected, failure.actual)
+          : new vscode.TestMessage(detail);
       message.location = location;
       run.failed(item, message);
       this.results.set(item.id, { result: "fail", detail, location });

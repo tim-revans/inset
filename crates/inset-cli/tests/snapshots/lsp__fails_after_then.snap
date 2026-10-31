@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:13:9-13:20
+`fails` follows `given`
+a `then` step checks what happened, and this sets up a failure
+help: move it to a `given` step before the request it fails: `and items fails`

@@ -1,0 +1,53 @@
+// Key order, compiled: a table's entries come back in the order of their
+// keys, for integer keys with negative numbers among them, and text keys.
+
+/// Lists numbers and words in order.
+app Ordered {
+    /// The port to serve on.
+    setting port: u16 = 8080;
+    grant http: HttpServer { port };
+    grant numbers: Table<i64, String> { file: "ordered.db", name: "numbers" };
+    grant words: Table<String, u32> { file: "ordered.db", name: "words" };
+    start Lists { http: move http, numbers: move numbers, words: move words };
+}
+
+/// Keeps the numbers and the words.
+component Lists {
+    http: HttpServer,
+    numbers: Table<i64, String>,
+    words: Table<String, u32>,
+
+    /// Stores a number with its name.
+    #[put("/numbers/{n}", via = http, body = name)]
+    async fn number(&mut self, n: i64, name: String) -> String {
+        self.numbers.insert(n, name).await;
+        "stored".to_string()
+    }
+
+    /// Lists the numbers, smallest first.
+    #[get("/numbers", via = http)]
+    async fn list_numbers(&self) -> String {
+        let mut keys = Vec::new();
+        for (n, _) in self.numbers.entries().await {
+            keys.push(n.to_string());
+        }
+        keys.join(" ")
+    }
+
+    /// Stores a word with a count.
+    #[put("/words/{word}", via = http, body = count)]
+    async fn word(&mut self, word: String, count: u32) -> String {
+        self.words.insert(word, count).await;
+        "stored".to_string()
+    }
+
+    /// Lists the words in Rust's order of strings.
+    #[get("/words", via = http)]
+    async fn list_words(&self) -> String {
+        let mut keys = Vec::new();
+        for (word, _) in self.words.entries().await {
+            keys.push(word);
+        }
+        keys.join(" ")
+    }
+}

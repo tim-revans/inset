@@ -1,0 +1,31 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&text)
+---
+pass  The quantity on hand of a stocked item is shown
+pass  An item that is not stocked is not found
+FAIL  A new item is stocked at its price, in the back room, with none on hand
+      requirements/room.req.inset:18
+      and items["bolt-m6"] is Item { on_hand: 0, price: 0.10, place: Place::Back }
+      but items["bolt-m6"] is another value
+        expected: Item { on_hand: 0, price: 0.10, place: Back }
+        actual:   Item { on_hand: 1, price: 0.10, place: Back }
+pass  Received stock is added to the quantity on hand
+pass  Stock moves from one item to another
+pass  Moving more stock than an item holds is refused and changes nothing
+FAIL  An item moved to a shelf is kept there
+      requirements/room.req.inset:46
+      and items["bolt-m6"].place == Place::Shelf(4)
+      but it is false
+        left:  Shelf(5)
+        right: Shelf(4)
+FAIL  A discontinued item is no longer stocked
+      requirements/room.req.inset:52
+      and items is empty
+      but `items` holds 1 entry
+        items["bolt-m6"] is Item { on_hand: 3, price: 0.10, place: Back }
+pass  Items are listed in SKU order, with what their stock is worth
+pass  A database failure fails the request and changes nothing
+pass  A transfer whose total is too large to count fails and changes nothing
+
+11 requirements: 8 passed, 3 failed

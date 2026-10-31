@@ -9,6 +9,7 @@ use crate::actor::{self, Running, Scope};
 use crate::executor;
 use crate::failure::{Failure, Response, Stopped};
 use crate::http::{HttpServer, Reply, Request};
+use crate::stored::{KeyType, Stored};
 use crate::table::Table;
 
 /// What the compiler emits for the app.
@@ -65,11 +66,9 @@ impl Grants {
         HttpServer::new(grant)
     }
 
-    pub fn table<K, V>(&mut self, grant: &str) -> Result<Table<K, V>, Stopped>
-    where
-        K: serde::Serialize,
-        V: serde::Serialize + serde::de::DeserializeOwned,
-    {
+    /// Opens a table grant, and refuses it if anything it holds is not a
+    /// `K` and a `V`. The host names the file and the table.
+    pub fn table<K: KeyType, V: Stored>(&mut self, grant: &str) -> Result<Table<K, V>, Stopped> {
         Table::open(grant).map_err(|message| Stopped {
             component: format!("grant:{grant}"),
             failure: "Capability".into(),
