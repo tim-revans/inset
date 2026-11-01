@@ -90,5 +90,55 @@ expression: stdout(&json)
       "line": 75,
       "result": "pass"
     }
+  ],
+  "routes": [
+    {
+      "route": "GET /items/{sku}",
+      "holds": [
+        "StockRoom/Room"
+      ]
+    },
+    {
+      "route": "PUT /items/{sku}",
+      "holds": [
+        "StockRoom/Room"
+      ]
+    },
+    {
+      "route": "POST /items/{sku}/receipts",
+      "holds": [
+        "StockRoom/Room"
+      ]
+    },
+    {
+      "route": "POST /items/{from}/transfers/{to}",
+      "holds": [
+        "StockRoom/Room"
+      ]
+    },
+    {
+      "route": "POST /items/{sku}/shelf",
+      "holds": [
+        "StockRoom/Room"
+      ]
+    },
+    {
+      "route": "DELETE /items/{sku}",
+      "holds": [
+        "StockRoom/Room"
+      ]
+    },
+    {
+      "route": "GET /items",
+      "holds": [
+        "StockRoom/Room"
+      ]
+    },
+    {
+      "route": "GET /writes",
+      "holds": [
+        "StockRoom/Room"
+      ]
+    }
   ]
 }

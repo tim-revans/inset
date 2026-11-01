@@ -18,4 +18,10 @@ FAIL  Products are listed in SKU order, at most as many as asked for, and parts 
 pass  A search gives the SKUs of the products with the name in theirs
 pass  A request without what it needs is refused
 
+requests that can run at the same time
+                                    1   2   3
+ 1 GET /products?{limit}&{parts}    ·  no  no
+ 2 GET /search?{name}              no   ·  no
+ 3 PUT /products/{sku}             no  no   ·
+
 5 requirements: 4 passed, 1 failed

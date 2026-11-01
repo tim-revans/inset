@@ -262,7 +262,7 @@ class Requirements {
     if (stderr) {
       print(stderr);
     }
-    /** @type {{ requirements: Outcome[], defensive?: Defensive[] } | undefined} */
+    /** @type {{ requirements: Outcome[], defensive?: Defensive[], routes?: { route: string, holds: string[] }[] } | undefined} */
     let report;
     try {
       report = JSON.parse(stdout);
@@ -326,6 +326,7 @@ class Requirements {
       }
       this.report(run, item, uri, outcome.failure, outcome.inputs?.length ? property : undefined);
     }
+    print(sideBySide(report.routes ?? []));
   }
 
   /**
@@ -354,6 +355,29 @@ class Requirements {
     run.failed(item, message);
     this.results.set(item.id, { result: "fail", detail, location });
   }
+}
+
+/**
+ * Which routes' requests can run at the same time, as the table `inset test`
+ * prints: `yes` where two routes hold no component in common.
+ * @param {{ route: string, holds: string[] }[]} routes
+ */
+function sideBySide(routes) {
+  if (routes.length < 2) {
+    return "";
+  }
+  const width = Math.max(...routes.map((r) => [...r.route].length));
+  const cell = (/** @type {string} */ text) => text.padStart(4);
+  let out = "\nrequests that can run at the same time\n";
+  out += `    ${"".padEnd(width)}${routes.map((_, i) => cell(String(i + 1))).join("")}\n`;
+  routes.forEach((a, i) => {
+    const cells = routes.map((b, j) => {
+      if (i === j) return cell("·");
+      return cell(a.holds.some((c) => b.holds.includes(c)) ? "no" : "yes");
+    });
+    out += `${String(i + 1).padStart(2)} ${a.route.padEnd(width)} ${cells.join("")}\n`;
+  });
+  return out;
 }
 
 /**

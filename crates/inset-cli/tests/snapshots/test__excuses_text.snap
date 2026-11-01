@@ -9,6 +9,11 @@ FAIL  defensive code was reached: Prices/Shop/fn:set/0/b0
       #[defensive("the shop's form never sends a price of nothing")]
       but "A price of nothing is refused" reached it
 
+requests that can run at the same time
+                        1   2
+ 1 PUT /prices/{sku}    ·  no
+ 2 GET /prices/{sku}   no   ·
+
 2 requirements passed
 1 element marked defensive was reached
 

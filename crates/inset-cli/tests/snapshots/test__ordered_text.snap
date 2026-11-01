@@ -6,4 +6,11 @@ pass  Numbers are listed smallest first, negative numbers before the rest
 pass  Words are listed in the order of their characters
 pass  A stored number keeps its name
 
+requests that can run at the same time
+                        1   2   3   4
+ 1 PUT /numbers/{n}     ·  no  no  no
+ 2 GET /numbers        no   ·  no  no
+ 3 PUT /words/{word}   no  no   ·  no
+ 4 GET /words          no  no  no   ·
+
 3 requirements passed

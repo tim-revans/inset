@@ -9,7 +9,9 @@
 //! picture draws, by the ID in its `data-id` attribute. A program that does
 //! not check, or has a part that cannot be drawn yet, gets its problems
 //! instead, each with its location. A document outside any program gets
-//! `null`. With `--coverage`, the picture marks what the requirements
+//! `null`. It also gives each route with the components a request to it
+//! holds, so the editor can show which requests can run at the same time.
+//! With `--coverage`, the picture marks what the requirements
 //! reached, as the last `inset test --coverage` wrote it, and with no
 //! coverage to show, the problem says how to get it.
 //!
@@ -50,6 +52,20 @@ pub(crate) struct Picture {
     pub sources: BTreeMap<String, Location>,
     /// Why there is no picture.
     pub problems: Vec<Problem>,
+    /// Each route, with the components a request to it holds, for a
+    /// viewer to show which requests can run at the same time.
+    pub routes: Vec<RouteHolds>,
+}
+
+/// A route and the components a request to it holds while it runs.
+#[derive(Debug, Serialize)]
+pub(crate) struct RouteHolds {
+    /// The handler's ID, which its row in the picture has as `data-id`.
+    pub handler: String,
+    /// As a request names it, such as `GET /forecast/{city}`.
+    pub route: String,
+    /// The components' IDs, which their boxes have as `data-id`.
+    pub holds: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -104,6 +120,14 @@ impl Server<'_> {
         let mut picture = Picture {
             app: Some(diagram.app.name.clone()),
             functions: functions(diagram),
+            routes: inset_diagram::holds(diagram)
+                .into_iter()
+                .map(|h| RouteHolds {
+                    handler: h.handler,
+                    route: h.route,
+                    holds: h.components,
+                })
+                .collect(),
             sources: emitted
                 .sources
                 .iter()

@@ -296,10 +296,12 @@ fn a_restarted_child_starts_again_from_nothing() {
     let out = run(&mut inset(&["test"], &dir));
     std::fs::remove_dir_all(&dir).unwrap();
     assert!(out.status.success(), "{}{}", stdout(&out), stderr(&out));
-    assert_eq!(
-        stdout(&out),
-        "pass  A tally that fails starts again from nothing, with its part\n\n1 requirement passed\n"
+    let text = stdout(&out);
+    assert!(
+        text.starts_with("pass  A tally that fails starts again from nothing, with its part\n"),
+        "{text}"
     );
+    assert!(text.ends_with("\n1 requirement passed\n"), "{text}");
 }
 
 /// Requirements send JSON bodies written as values and compare JSON

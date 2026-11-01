@@ -133,5 +133,50 @@ expression: stdout(&json)
       "line": 94,
       "result": "pass"
     }
+  ],
+  "routes": [
+    {
+      "route": "GET /items/{sku}",
+      "holds": [
+        "StockTracker/Warehouse",
+        "StockTracker/Warehouse/inventory"
+      ]
+    },
+    {
+      "route": "GET /items?{low}",
+      "holds": [
+        "StockTracker/Warehouse",
+        "StockTracker/Warehouse/inventory"
+      ]
+    },
+    {
+      "route": "PUT /items/{sku}",
+      "holds": [
+        "StockTracker/Warehouse",
+        "StockTracker/Warehouse/inventory"
+      ]
+    },
+    {
+      "route": "POST /items/{sku}/receipts",
+      "holds": [
+        "StockTracker/Warehouse",
+        "StockTracker/Warehouse/inventory"
+      ]
+    },
+    {
+      "route": "POST /items/{sku}/shipments",
+      "holds": [
+        "StockTracker/Warehouse",
+        "StockTracker/Warehouse/inventory",
+        "StockTracker/Warehouse/reorders"
+      ]
+    },
+    {
+      "route": "GET /reorders",
+      "holds": [
+        "StockTracker/Warehouse",
+        "StockTracker/Warehouse/reorders"
+      ]
+    }
   ]
 }

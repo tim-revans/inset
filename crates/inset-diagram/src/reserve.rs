@@ -15,12 +15,40 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::model::{Component, Diagram, Edge, Handoff};
+use crate::model::{Component, Diagram, Edge, Handoff, Route};
+
+/// A route, and the components a request to it holds while it runs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Holds {
+    /// The handler's ID.
+    pub handler: String,
+    /// The route as a request names it, such as `GET /forecast/{city}`.
+    pub route: String,
+    /// The IDs of the components it holds, in ID order.
+    pub components: Vec<String>,
+}
+
+impl Holds {
+    /// Whether a request to this route can run while one to `other` does:
+    /// whether they hold no component in common.
+    pub fn alongside(&self, other: &Holds) -> bool {
+        !self.components.iter().any(|c| other.components.contains(c))
+    }
+}
 
 /// For each route handler, by its ID, the IDs of the components a request
 /// to it reserves, in ID order. Routes are listed in the order the
 /// diagram draws them.
 pub fn reservations(diagram: &Diagram) -> Vec<(String, Vec<String>)> {
+    holds(diagram)
+        .into_iter()
+        .map(|h| (h.handler, h.components))
+        .collect()
+}
+
+/// Every route, with the components a request to it holds, in the order
+/// the diagram draws them.
+pub fn holds(diagram: &Diagram) -> Vec<Holds> {
     // Where each function's edges lead: the handlers it sends or awaits,
     // and the outlets it emits through.
     let mut leads: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
@@ -39,7 +67,8 @@ pub fn reservations(diagram: &Diagram) -> Vec<(String, Vec<String>)> {
     collect(&diagram.app.components, &mut connected, &mut routes);
     routes
         .into_iter()
-        .map(|handler| {
+        .map(|route| {
+            let handler = route.handler.id.as_str();
             let mut reached = BTreeSet::new();
             let mut seen = BTreeSet::new();
             let mut stack = vec![handler.to_string()];
@@ -64,7 +93,11 @@ pub fn reservations(diagram: &Diagram) -> Vec<(String, Vec<String>)> {
                     }
                 }
             }
-            (handler.to_string(), reached.into_iter().collect())
+            Holds {
+                handler: handler.to_string(),
+                route: format!("{} {}", route.method.as_str(), route.path),
+                components: reached.into_iter().collect(),
+            }
         })
         .collect()
 }
@@ -72,7 +105,7 @@ pub fn reservations(diagram: &Diagram) -> Vec<(String, Vec<String>)> {
 fn collect<'d>(
     components: &'d [Component],
     connected: &mut BTreeMap<String, Vec<&'d str>>,
-    routes: &mut Vec<&'d str>,
+    routes: &mut Vec<&'d Route>,
 ) {
     for component in components {
         for handoff in &component.start {
@@ -83,7 +116,7 @@ fn collect<'d>(
                     .push(to);
             }
         }
-        routes.extend(component.routes.iter().map(|r| r.handler.id.as_str()));
+        routes.extend(component.routes.iter());
         collect(&component.components, connected, routes);
     }
 }

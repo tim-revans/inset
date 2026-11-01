@@ -61,6 +61,22 @@ pub struct TestReport {
     /// a diagram.
     #[serde(skip)]
     pub elements: Vec<(inset_diagram::coverage::Element, String)>,
+    /// Each route, with the components a request to it holds, which says
+    /// which requests can run at the same time. Empty when the program's
+    /// diagram cannot be drawn.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub routes: Vec<RouteHolds>,
+}
+
+/// A route, and the components a request to it holds while it runs. Two
+/// requests run at the same time only when their routes hold no component
+/// in common.
+#[derive(Debug, Serialize)]
+pub struct RouteHolds {
+    /// As a request names it, such as `GET /forecast/{city}`.
+    pub route: String,
+    /// The diagram IDs of the components it holds.
+    pub holds: Vec<String>,
 }
 
 /// An element marked `#[defensive]`, which a requirement reached.
@@ -246,7 +262,18 @@ fn run_plan(
     let failed = requirements.iter().filter(|r| r.result == "fail").count();
     let coverage = inset_diagram::model::Coverage { reached };
     // A program whose diagram cannot be drawn yet has no elements to check.
-    let elements: Vec<_> = match inset_diagram::emit_with_sources(program) {
+    let emitted = inset_diagram::emit_with_sources(program);
+    let routes = match &emitted {
+        Ok(emitted) => inset_diagram::holds(&emitted.diagram)
+            .into_iter()
+            .map(|h| RouteHolds {
+                route: h.route,
+                holds: h.components,
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    let elements: Vec<_> = match emitted {
         Ok(emitted) => inset_diagram::coverage::elements(&emitted.diagram)
             .into_iter()
             .map(|element| {
@@ -284,6 +311,7 @@ fn run_plan(
         defensive,
         coverage,
         elements,
+        routes,
     })
 }
 
@@ -922,7 +950,50 @@ pub fn render(report: &TestReport) -> String {
             .collect();
         out.push_str(&format!("      but {} reached it\n", by.join(" and ")));
     }
+    out.push_str(&side_by_side(&report.routes));
     out.push_str(&summary(report));
+    out
+}
+
+/// Which routes' requests can run at the same time, as a table: `yes` where
+/// two routes hold no component in common, `no` where one waits for the
+/// other. Nothing for a program with fewer than two routes.
+fn side_by_side(routes: &[RouteHolds]) -> String {
+    if routes.len() < 2 {
+        return String::new();
+    }
+    let alongside = |a: &RouteHolds, b: &RouteHolds| !a.holds.iter().any(|c| b.holds.contains(c));
+    let width = routes
+        .iter()
+        .map(|r| r.route.chars().count())
+        .max()
+        .unwrap_or(0);
+    let number = |i: usize| format!("{:>2}", i + 1);
+    let mut out = String::from("\nrequests that can run at the same time\n");
+    let heading: Vec<String> = (0..routes.len()).map(|i| format!("{:>4}", i + 1)).collect();
+    out.push_str(&format!("    {:width$}{}\n", "", heading.join("")));
+    for (i, a) in routes.iter().enumerate() {
+        let cells: Vec<String> = routes
+            .iter()
+            .enumerate()
+            .map(|(j, b)| {
+                let cell = if i == j {
+                    "·"
+                } else if alongside(a, b) {
+                    "yes"
+                } else {
+                    "no"
+                };
+                format!("{cell:>4}")
+            })
+            .collect();
+        out.push_str(&format!(
+            "{} {:width$} {}\n",
+            number(i),
+            a.route,
+            cells.join("")
+        ));
+    }
     out
 }
 

@@ -77,5 +77,14 @@ expression: stdout(&json)
       "result": "pass",
       "cases": 100
     }
+  ],
+  "routes": [
+    {
+      "route": "POST /price-lists",
+      "holds": [
+        "PriceImport/Importer",
+        "PriceImport/Importer/csv"
+      ]
+    }
   ]
 }

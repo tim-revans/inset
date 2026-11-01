@@ -108,6 +108,8 @@ A program serves several requests at once while one of them waits for another se
 
 *Why requests that share a component take turns:* a request's handlers then never see another request's work half done, in any component. That is the guarantee the requirement tests rely on, and the one a reviewer reads a requirement with. A component's routes all share it, so a program whose requests should overlap spreads its routes over components that each serve their own on a lent server (see `syntax.md`, "Starting components").
 
+`inset test` prints which routes' requests can run at the same time, as a table, and the editor's diagram panel shows what each route holds (see [`diagrams.md`](diagrams.md#side-by-side)).
+
 **Outgoing calls.** A call through an `HttpClient` is not an import, because an import would hold up the whole program until it returned. The runtime records the call and the handler waits. When the program is idle, `deliver` or `resume` returns the calls recorded since, and the host makes them, on Tokio when serving for real and from the fakes in a requirement test. The host hands each reply back through `resume`, which wakes the handler. A call the host cannot make, or that gets no reply, comes back as an error, and the handler fails with `Capability(field)`.
 
 *Why not WASI 0.3's async ABI:* it would carry the same thing in a standard form, but as of Wasmtime 50.0.1 Wasmtime calls its support for it "very incomplete". `deliver`, `resume` and the call records work on WASI 0.2 today, and changing to the standard ABI later changes only `inset-runtime`, the WIT and the host, not the emitted Rust.

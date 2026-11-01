@@ -28,4 +28,15 @@ pass  Items are listed in SKU order, with what their stock is worth
 pass  A database failure fails the request and changes nothing
 pass  A transfer whose total is too large to count fails and changes nothing
 
+requests that can run at the same time
+                                        1   2   3   4   5   6   7   8
+ 1 GET /items/{sku}                     ·  no  no  no  no  no  no  no
+ 2 PUT /items/{sku}                    no   ·  no  no  no  no  no  no
+ 3 POST /items/{sku}/receipts          no  no   ·  no  no  no  no  no
+ 4 POST /items/{from}/transfers/{to}   no  no  no   ·  no  no  no  no
+ 5 POST /items/{sku}/shelf             no  no  no  no   ·  no  no  no
+ 6 DELETE /items/{sku}                 no  no  no  no  no   ·  no  no
+ 7 GET /items                          no  no  no  no  no  no   ·  no
+ 8 GET /writes                         no  no  no  no  no  no  no   ·
+
 11 requirements: 8 passed, 3 failed

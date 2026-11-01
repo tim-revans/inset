@@ -9,4 +9,10 @@ pass  Any count up to a thousand is counted exactly
 pass  A second count replaces the first
       held in 100 cases
 
+requests that can run at the same time
+                      1   2   3
+ 1 POST /ask          ·  no  no
+ 2 GET /notes        no   ·  no
+ 3 POST /count/{n}   no  no   ·
+
 4 requirements passed

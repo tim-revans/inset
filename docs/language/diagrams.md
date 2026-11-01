@@ -97,6 +97,15 @@ On a flowchart, each branch's edge and label, each `?` error path with its `retu
 
 The coverage is written to `<dir>/target/inset/coverage.json`, as the `coverage` field below. Coverage that names an element the diagram no longer has is from an older version of the program, and `inset diagram --coverage` refuses it rather than draw a stale picture.
 
+## Side by side
+
+Which requests can run at the same time follows from what each route holds: the component that serves it and every component it can reach (see [`runtime.md`](runtime.md#concurrent-requests)). Two requests run side by side when their routes hold no component in common, and otherwise take turns. It is shown in two places.
+
+- **Always, as a table.** `inset test` ends with a table of every pair of routes, `yes` where requests to the two can run at the same time and `no` where one waits for the other, for a program with two routes or more. The JSON report gives each route with the components it holds, as `routes`. Pinned in a snapshot, the table makes a change that turns `yes` into `no` show up in review.
+- **On request, in a viewer.** The editor's diagram panel has a **Side by side** box. With it ticked, clicking a route picks it: the components it holds are shaded, every other route is outlined in the covered colour with `alongside` if it can run meanwhile, or dashed in the uncovered colour with `waits` if it takes turns with it, and a line above the picture names them. The panel gets each route's components from the language server with the picture, so another viewer can do the same.
+
+*Why the table is always shown and the picture is not:* the table answers every pair at once, in text that a terminal, a test report and a snapshot all hold, so nothing has to be asked for. It says what, but not why. The picture answers why, by showing the component two routes share, but only for the route picked, which suits a viewer where picking is a click. `inset diagram` has no such view, so a picture never depends on which route a reader thought to ask about.
+
 ## Diagram data and views
 
 The compiler emits diagram data that holds everything the source says about the program's structure. A view is drawn from that data, and only the view chooses what to show.

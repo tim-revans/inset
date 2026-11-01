@@ -9,4 +9,9 @@ pass  A title too short to look for is refused
 pass  The titles of a genre are listed in shelf order
 pass  A genre the shelf does not know is not found
 
+requests that can run at the same time
+                         1   2
+ 1 GET /lend/{title}     ·  no
+ 2 GET /genres/{name}   no   ·
+
 6 requirements passed

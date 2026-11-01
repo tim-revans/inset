@@ -102,5 +102,14 @@ expression: stdout(&json)
         }
       ]
     }
+  ],
+  "routes": [
+    {
+      "route": "POST /price-lists",
+      "holds": [
+        "PriceImport/Importer",
+        "PriceImport/Importer/csv"
+      ]
+    }
   ]
 }

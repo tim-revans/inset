@@ -54,3 +54,69 @@ select {
 #picture circle[data-source]:hover {
   filter: brightness(1.25);
 }
+
+#side {
+  margin: 0 0 8px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* "Side by side": the colours of the coverage overlay, which were chosen
+   against the diagram's palette. Teal for a route that runs alongside the
+   picked one, amber for one that takes turns with it, and the diagram's
+   component blue, deepened, for what the picked route holds. */
+body {
+  --side-held: #1d3a5f;
+  --side-held-edge: #5797f8;
+  --side-alongside: #2fd4b4;
+  --side-waits: #e8e337;
+}
+
+body.vscode-light,
+body.vscode-high-contrast-light {
+  --side-held: #dbe8fd;
+  --side-held-edge: #196df7;
+  --side-alongside: #0b7d74;
+  --side-waits: #8f6b09;
+}
+
+#picture rect.comp.side-held {
+  fill: var(--side-held);
+  stroke: var(--side-held-edge);
+  stroke-width: 2.4;
+}
+
+#picture rect.side-mark {
+  fill: none;
+  stroke-width: 1.4;
+}
+
+#picture rect.side-chosen {
+  stroke: var(--side-held-edge);
+  stroke-width: 2;
+}
+
+#picture rect.side-alongside {
+  stroke: var(--side-alongside);
+}
+
+#picture rect.side-waits {
+  stroke: var(--side-waits);
+  stroke-dasharray: 4 3;
+}
+
+#picture text.side-label {
+  font-size: 11px;
+  font-family: var(--vscode-editor-font-family);
+}
+
+#picture text.side-chosen {
+  fill: var(--side-held-edge);
+}
+
+#picture text.side-alongside {
+  fill: var(--side-alongside);
+}
+
+#picture text.side-waits {
+  fill: var(--side-waits);
+}

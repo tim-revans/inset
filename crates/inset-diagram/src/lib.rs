@@ -39,7 +39,7 @@ mod validate;
 
 pub use emit::{Emitted, Source, emit, emit_with_sources};
 pub use model::Diagram;
-pub use reserve::reservations;
+pub use reserve::{Holds, holds, reservations};
 pub use theme::Theme;
 pub use validate::validate;
 pub use view::{Hide, VIEW_OPTIONS, View};

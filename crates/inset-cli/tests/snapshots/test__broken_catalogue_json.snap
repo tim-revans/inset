@@ -44,5 +44,25 @@ expression: stdout(&json)
       "line": 66,
       "result": "pass"
     }
+  ],
+  "routes": [
+    {
+      "route": "GET /products?{limit}&{parts}",
+      "holds": [
+        "Catalogue/Shop"
+      ]
+    },
+    {
+      "route": "GET /search?{name}",
+      "holds": [
+        "Catalogue/Shop"
+      ]
+    },
+    {
+      "route": "PUT /products/{sku}",
+      "holds": [
+        "Catalogue/Shop"
+      ]
+    }
   ]
 }

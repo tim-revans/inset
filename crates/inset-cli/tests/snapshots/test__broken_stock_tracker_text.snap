@@ -24,4 +24,13 @@ pass  Stock levels are listed in SKU order
 pass  Nothing is listed when no item is stocked
 pass  Only items at or below their reorder level are listed as low stock
 
+requests that can run at the same time
+                                  1   2   3   4   5   6
+ 1 GET /items/{sku}               ·  no  no  no  no  no
+ 2 GET /items?{low}              no   ·  no  no  no  no
+ 3 PUT /items/{sku}              no  no   ·  no  no  no
+ 4 POST /items/{sku}/receipts    no  no  no   ·  no  no
+ 5 POST /items/{sku}/shipments   no  no  no  no   ·  no
+ 6 GET /reorders                 no  no  no  no  no   ·
+
 13 requirements: 12 passed, 1 failed

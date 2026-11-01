@@ -4,7 +4,9 @@
 // renderer. Clicking an element opens its source, and the panel redraws
 // whenever an Inset file is saved. With coverage on, the picture marks what
 // the requirements reached in their last run, which writes the coverage
-// the panel reads, and the panel redraws after each run.
+// the panel reads, and the panel redraws after each run. With "Side by
+// side" on, clicking a route shades the components a request to it holds,
+// and marks every other route by whether its requests can run meanwhile.
 
 const vscode = require("vscode");
 const { programRoot } = require("./program");
@@ -19,6 +21,7 @@ const { programRoot } = require("./program");
  *   functions: string[],
  *   sources: Record<string, { uri: string, range: any }>,
  *   problems: { message: string, location?: { uri: string, range: any } }[],
+ *   routes?: { handler: string, route: string, holds: string[] }[],
  * }} Picture
  */
 
@@ -164,6 +167,7 @@ class DiagramPanel {
       coverage: this.coverage,
       clickable: Object.keys(picture.sources),
       problems: picture.problems.map((p) => p.message),
+      routes: picture.routes ?? [],
     });
   }
 
@@ -220,6 +224,11 @@ class DiagramPanel {
   click(id) {
     this.post({ type: "click", id });
   }
+
+  /** For tests: turns "Side by side" on or off, as the reader's checkbox does. */
+  sideBySide(on) {
+    this.post({ type: "side-by-side", on });
+  }
 }
 
 /** @param {vscode.TextDocument} document */
@@ -249,7 +258,9 @@ function html(webview, media) {
   <label>Show <select id="view"><option value="">Components</option></select></label>
   <label><input type="checkbox" id="expand-all"> Expand every component</label>
   <label title="What the requirements reached when they last ran"><input type="checkbox" id="coverage"> Coverage</label>
+  <label title="Click a route to see which requests can run while one to it does"><input type="checkbox" id="side-by-side"> Side by side</label>
 </div>
+<p id="side" hidden></p>
 <p id="message" hidden></p>
 <ul id="problems" hidden></ul>
 <div id="picture"></div>

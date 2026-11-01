@@ -29,5 +29,19 @@ expression: stdout(&json)
         "A price of nothing is refused"
       ]
     }
+  ],
+  "routes": [
+    {
+      "route": "PUT /prices/{sku}",
+      "holds": [
+        "Prices/Shop"
+      ]
+    },
+    {
+      "route": "GET /prices/{sku}",
+      "holds": [
+        "Prices/Shop"
+      ]
+    }
   ]
 }

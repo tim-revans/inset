@@ -69,5 +69,25 @@ expression: stdout(&json)
       "line": 1,
       "result": "pass"
     }
+  ],
+  "routes": [
+    {
+      "route": "GET /hello/{name}",
+      "holds": [
+        "Greetings/Greeter"
+      ]
+    },
+    {
+      "route": "GET /find/{n}",
+      "holds": [
+        "Greetings/Greeter"
+      ]
+    },
+    {
+      "route": "POST /next",
+      "holds": [
+        "Greetings/Greeter"
+      ]
+    }
   ]
 }

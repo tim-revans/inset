@@ -8,4 +8,12 @@ pass  A forecast service that does not answer fails only that request
 pass  Notes are kept by name
 pass  The relay says it is up
 
+requests that can run at the same time
+                           1   2   3   4   5
+ 1 GET /health             ·  no yes yes yes
+ 2 GET /asked             no   ·  no yes yes
+ 3 GET /forecast/{city}  yes  no   · yes yes
+ 4 PUT /notes/{name}     yes yes yes   ·  no
+ 5 GET /notes/{name}     yes yes yes  no   ·
+
 5 requirements passed

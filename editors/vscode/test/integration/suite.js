@@ -40,6 +40,10 @@ async function diagramPanel(api, example) {
     encoding: "utf8",
   });
   assert.equal(api.diagram.svg, drawn);
+  // What "Side by side" shades when the route is picked.
+  assert.deepEqual(api.diagram.picture.routes, [
+    { handler: "HelloHttp/Greeter/fn:hello", route: "GET /hello/{name}", holds: ["HelloHttp/Greeter"] },
+  ]);
 
   api.diagram.click("HelloHttp/Greeter");
   const editor = await until("main.inset to open at Greeter", () =>
@@ -102,6 +106,8 @@ async function testExplorer(api) {
       child.children.forEach((row) => assert.equal(results.get(row.id).result, "pass", row.label));
     });
   }
+  // The Stock tracker's routes all wait for each other, as the table says.
+  assert.match(api.requirements.output, /requests that can run at the same time\n.*\n 1 GET \/items\/\{sku\} +· +no/);
   // A property reports how many generated cases held.
   assert.match(api.requirements.output, /pass {2}The gross price is never below the net price\n {6}held in 100 cases\n/);
 }

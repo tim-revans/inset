@@ -26,4 +26,10 @@ FAIL  A greeting spans two lines
       but the reply was OK with "Hello, Ada!"
 pass  The number after another is one more
 
+requests that can run at the same time
+                        1   2   3
+ 1 GET /hello/{name}    ·  no  no
+ 2 GET /find/{n}       no   ·  no
+ 3 POST /next          no  no   ·
+
 7 requirements: 3 passed, 4 failed
