@@ -2,6 +2,8 @@
 
 The living reference for Inset's syntax. It is a draft: the parser in [`crates/inset-syntax/`](../../crates/inset-syntax/) and the checker in [`crates/inset-check/`](../../crates/inset-check/) cover everything the three examples use: components that start children and send them messages, outlets, `failure` blocks that roll back and restart, modules, structs and enums, error enums, `match` and loops, `fork for`, JSON bodies and query parameters, a front end, external components written in Rust, and requirements that set up and check what a table holds, with `examples` tables and properties. They report the rest as not supported yet. The syntax changes as each example program is compiled.
 
+**What Inset makes.** An Inset program is a long-running local service with an HTTP boundary, optionally with a web front end served from `web/`. A program's only way in is an `HttpServer`, and its requirements are written in HTTP terms. Command-line tools and terminal (TUI) applications are planned: commands, a clock and a terminal will be boundaries of their own, with requirement steps of their own. A desktop GUI is written in another language. It calls the program's HTTP routes today, using the contract `inset contract` generates, and is planned to run the program's commands instead. The GUI is reviewed by using it, as a web front end is.
+
 Each construct is marked with its status:
 
 - **Used**: an example program uses it.
