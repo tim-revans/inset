@@ -1122,6 +1122,7 @@ dependencies = [
  "inset-syntax",
  "inset-value",
  "insta",
+ "proptest",
  "serde",
  "serde_json",
 ]

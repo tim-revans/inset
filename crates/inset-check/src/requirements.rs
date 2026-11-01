@@ -11,11 +11,11 @@
 
 use std::collections::HashMap;
 
-use inset_syntax::ast::{Body, FactKind, RequirementsFile, Step, StepKind, TypeKind};
+use inset_syntax::ast::{Body, FactKind, ForAll, RequirementsFile, Step, StepKind, TypeKind};
 use inset_syntax::{Diagnostic, Ident, Span};
 use inset_value::{Check, Shape, Types, Value};
 
-use crate::types::Ty;
+use crate::types::{Resolver, Ty};
 use crate::values::{Values, shape};
 use crate::{BodyDecl, Checker, Program, Reply, Report, RouteInfo, Segment, names, status};
 
@@ -35,9 +35,32 @@ pub struct PlannedRequirement {
     pub file: usize,
     pub sentence: String,
     pub span: Span,
-    /// The steps, when there is no examples table.
+    /// The steps, when there is no examples table and no `for all`.
     pub steps: Vec<PlannedStep>,
     pub examples: Option<PlannedExamples>,
+    /// What a property generates, when the requirement has `for all`. Its
+    /// steps are planned for each case, by [`crate::Cases`].
+    pub property: Option<PlannedProperty>,
+}
+
+/// A property's inputs and `where` condition, and where its steps are.
+#[derive(Clone, Debug)]
+pub struct PlannedProperty {
+    pub inputs: Vec<PlannedInput>,
+    /// The `where` condition, which reads the inputs as [`Check::Input`].
+    pub condition: Option<Check>,
+    /// The `for all` line, from `for` to the end of the condition.
+    pub span: Span,
+    /// The text of the steps in the requirement's file, which each case
+    /// reads with its values in place of the placeholders.
+    pub steps: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct PlannedInput {
+    pub name: String,
+    /// The type of value to generate: an integer type, `bool` or `Decimal`.
+    pub shape: Shape,
 }
 
 /// An examples table, whose rows each run as a case of their own.
@@ -173,6 +196,27 @@ pub(crate) fn check(
                             None => note,
                         });
                     }
+                    if let Some(for_all) = &requirement.for_all
+                        && let Some(input) = for_all
+                            .placeholders
+                            .iter()
+                            .find(|p| overlaps(**p, diagnostic.span))
+                            .and_then(|p| {
+                                let text = &program.files[*file].text;
+                                let name = text.get(p.start + 1..p.end - 1)?;
+                                for_all.inputs.iter().find(|i| i.name.name == name)
+                            })
+                    {
+                        let note = format!(
+                            "with `<{}>` read as a generated value, such as `{}`",
+                            input.name.name,
+                            ForAll::sample(&input.ty)
+                        );
+                        diagnostic.help = Some(match diagnostic.help {
+                            Some(help) => format!("{help}; {note}"),
+                            None => note,
+                        });
+                    }
                     // Every row reads the steps, so one mistake outside the
                     // placeholders would be found in each.
                     if !found.contains(&diagnostic) {
@@ -205,20 +249,132 @@ pub(crate) fn check(
                     }),
                 ),
             };
+            let (steps, property) = match &requirement.for_all {
+                Some(for_all) => (
+                    Vec::new(),
+                    plan_property(cx, for_all, &program.files[*file].text, &mut report),
+                ),
+                None => (steps, None),
+            };
             plans.push(PlannedRequirement {
                 file: *file,
                 sentence: sentence.value.clone(),
                 span: requirement.span,
                 steps,
                 examples,
+                property,
             });
         }
     }
     reports
 }
 
+/// Checks a property's inputs and `where` condition. Its steps were
+/// checked with a sample value for each input, as its case.
+fn plan_property(
+    cx: &Checker,
+    for_all: &ForAll,
+    text: &str,
+    report: &mut impl FnMut(Diagnostic),
+) -> Option<PlannedProperty> {
+    let resolver = Resolver {
+        names: &cx.names,
+        module: 0,
+    };
+    let mut ok = true;
+    let mut inputs: Vec<(Ident, Ty)> = Vec::new();
+    for input in &for_all.inputs {
+        let name = &input.name;
+        if inputs.iter().any(|(n, _)| n.name == name.name) {
+            report(Diagnostic::new(
+                format!("`{}` is an input twice", name.name),
+                name.span,
+                "each input has a name of its own",
+            ));
+            ok = false;
+            continue;
+        }
+        let mut diagnostics = Vec::new();
+        let ty = resolver.resolve(&input.ty, &mut diagnostics);
+        if !diagnostics.is_empty() {
+            diagnostics.into_iter().for_each(&mut *report);
+            ok = false;
+        } else if !generated(&ty) {
+            report(
+                Diagnostic::new(
+                    format!("a property cannot generate {} yet", crate::values::a(&ty)),
+                    input.ty.span,
+                    "not a type `for all` generates",
+                )
+                .with_help(
+                    "an input is an integer type other than `u128`, `bool` or `Decimal`, whose \
+                     text in a step is the value as Rust writes it",
+                ),
+            );
+            ok = false;
+        }
+        let used = for_all
+            .placeholders
+            .iter()
+            .any(|p| text.get(p.start + 1..p.end - 1) == Some(name.name.as_str()));
+        if !used {
+            report(
+                Diagnostic::new(
+                    format!("no step uses `<{}>`", name.name),
+                    name.span,
+                    "this input is generated and never used",
+                )
+                .with_help(format!(
+                    "write `<{}>` in a step where the value goes, or remove the input",
+                    name.name
+                )),
+            );
+            ok = false;
+        }
+        inputs.push((name.clone(), ty));
+    }
+    let condition = match &for_all.condition {
+        Some(condition) if ok => {
+            let mut values = Values {
+                cx,
+                diagnostics: Vec::new(),
+                refs: Vec::new(),
+                inputs: inputs.clone(),
+            };
+            let check = values.check(condition);
+            values.diagnostics.into_iter().for_each(&mut *report);
+            Some(check?)
+        }
+        _ => None,
+    };
+    if !ok {
+        return None;
+    }
+    Some(PlannedProperty {
+        inputs: inputs
+            .iter()
+            .map(|(name, ty)| PlannedInput {
+                name: name.name.clone(),
+                shape: shape(ty),
+            })
+            .collect(),
+        condition,
+        span: for_all.span,
+        steps: for_all.steps,
+    })
+}
+
+/// Whether a property can generate values of a type.
+fn generated(ty: &Ty) -> bool {
+    match ty {
+        Ty::Int(Some(name)) => *name != "u128",
+        Ty::Bool | Ty::Decimal => true,
+        _ => false,
+    }
+}
+
 /// Checks a case's steps, and plans them.
-fn plan_steps(
+pub(crate) fn plan_steps(
     cx: &Checker,
     file: usize,
     steps: &[Step],
@@ -313,6 +469,7 @@ fn plan_steps(
                     cx,
                     diagnostics: Vec::new(),
                     refs: Vec::new(),
+                    inputs: Vec::new(),
                 };
                 if let Some(grant) = cx
                     .app
@@ -335,6 +492,7 @@ fn plan_steps(
                     cx,
                     diagnostics: Vec::new(),
                     refs: Vec::new(),
+                    inputs: Vec::new(),
                 };
                 if let Some(check) = values.check(expr) {
                     plan(Planned::Check(check));
@@ -750,6 +908,7 @@ fn json_value(
         cx,
         diagnostics: Vec::new(),
         refs: Vec::new(),
+        inputs: Vec::new(),
     };
     let typed = values.value(value, ty, role);
     if compared && let Some(diagnostic) = values.not_comparable(ty, value.span) {

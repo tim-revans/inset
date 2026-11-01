@@ -1,0 +1,12 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&out)
+---
+pass  Every name is asked about at once, and answered in order
+pass  An empty list asks about nothing
+pass  Any count up to a thousand is counted exactly
+      held in 100 cases
+pass  A second count replaces the first
+      held in 100 cases
+
+4 requirements passed

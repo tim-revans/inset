@@ -365,3 +365,25 @@ fn external_child_rolled_back() {
 fn external_with_a_field() {
     errors("external_with_a_field");
 }
+
+// ---- `fork` and properties ---------------------------------------------------
+
+#[test]
+fn fork_branch_changes_what_others_see() {
+    errors("fork_branch_changes_what_others_see");
+}
+
+#[test]
+fn property_inputs() {
+    errors("property_inputs");
+}
+
+#[test]
+fn property_condition() {
+    errors("property_condition");
+}
+
+#[test]
+fn property_value_of_wrong_type() {
+    errors("property_value_of_wrong_type");
+}

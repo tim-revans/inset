@@ -81,16 +81,27 @@
       ]
     },
     "for-all": {
-      "comment": "The generated value is used as a placeholder in the steps, so it is scoped as one.",
-      "match": "^\\s+(for\\s+all)\\s+([a-z_]\\w*)",
-      "captures": {
+      "comment": "Each generated input is used as a placeholder in the steps, so its name is scoped as one. The `where` condition is Rust.",
+      "begin": "^\\s+(for\\s+all)\\b",
+      "beginCaptures": {
         "1": {
           "name": "keyword.control.step.inset-req"
-        },
-        "2": {
-          "name": "variable.parameter.placeholder.inset-req"
         }
-      }
+      },
+      "end": "$",
+      "patterns": [
+        {
+          "match": "\\b([a-z_]\\w*)(?=\\s*:(?!:))",
+          "captures": {
+            "1": {
+              "name": "variable.parameter.placeholder.inset-req"
+            }
+          }
+        },
+        {
+          "include": "#values"
+        }
+      ]
     },
     "step": {
       "patterns": [

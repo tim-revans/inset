@@ -616,6 +616,13 @@ pub enum ExprKind {
         iter: Box<Expr>,
         body: Block,
     },
+    /// `fork for pattern in iter { body }`: the body run once for each
+    /// element, concurrently, giving a `Vec` of the body's values in order.
+    Fork {
+        pattern: Pattern,
+        iter: Box<Expr>,
+        body: Block,
+    },
     /// `while cond { body }`, where `cond` may be a `let`.
     While {
         cond: Box<Expr>,
@@ -722,13 +729,60 @@ pub struct Requirement {
     /// have placeholders, and each row has them read with its cells.
     pub steps: Vec<Step>,
     pub examples: Option<Examples>,
+    /// `for all ...`, which makes the requirement a property.
+    pub for_all: Option<ForAll>,
     pub span: Span,
+}
+
+/// A property's `for all name: Type, ... where condition` line. The steps
+/// have placeholders for the inputs, and are read again with each case's
+/// values.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ForAll {
+    pub inputs: Vec<Input>,
+    /// The `where` condition, a Rust condition on the inputs.
+    pub condition: Option<Expr>,
+    /// From `for` to the end of the condition.
+    pub span: Span,
+    /// The text of the steps, from the first step to the end of the
+    /// requirement, which each case reads with its values.
+    pub steps: Span,
+    /// The steps read with a sample value for each input, such as `0`, so
+    /// the checker can check them before any value is generated.
+    pub sample: Vec<Step>,
+    /// Where the placeholders are in the steps.
+    pub placeholders: Vec<Span>,
+}
+
+/// One of a property's inputs: `name: Type`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Input {
+    pub name: Ident,
+    pub ty: Type,
+}
+
+impl ForAll {
+    /// The text read in place of an input's placeholder when the steps are
+    /// checked: a value of each type a property can generate.
+    pub fn sample(ty: &Type) -> &'static str {
+        match &ty.kind {
+            TypeKind::Path(path) => match path.segments.last().map(|s| s.ident.name.as_str()) {
+                Some("bool") => "true",
+                Some("Decimal") => "0.00",
+                _ => "0",
+            },
+            _ => "0",
+        }
+    }
 }
 
 impl Requirement {
     /// Each case the requirement tests: its steps, with the examples row
     /// they were read with, if any.
     pub fn cases(&self) -> Vec<(Option<&ExampleRow>, &[Step])> {
+        if let Some(for_all) = &self.for_all {
+            return vec![(None, &for_all.sample)];
+        }
         match &self.examples {
             None => vec![(None, &self.steps)],
             Some(examples) => examples

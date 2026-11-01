@@ -8,15 +8,24 @@
 //!
 //! Each requirement starts the program afresh, so no requirement depends on
 //! another having run. A requirement with an examples table runs once for
-//! each row, each time afresh, and reports each row's result. Its steps run in order, and the first that does not
-//! hold fails it. A fact that does not hold reports both values, written as
+//! each row, each time afresh, and reports each row's result. Its steps run
+//! in order, and the first that does not hold fails it. A fact that does not hold reports both values, written as
 //! Rust's `{:?}` writes them, as `assert_eq!` does. The report is the same
 //! every time for the same program, so it holds no timings.
+//!
+//! **Properties.** A requirement with `for all` is run with proptest, with
+//! a fixed number of cases and a seed made from its sentence, so its report
+//! is the same every time. Each case's values are written as Rust writes
+//! them and put in place of the placeholders, and the steps are read and
+//! planned again with them, by the checker's [`Cases`], before they run. A
+//! failing case is shrunk to the smallest proptest finds that still fails,
+//! and that case is run once more, for the step and values to report.
 //!
 //! **Coverage.** The program reports which elements of its diagram each
 //! case reached, and each element is credited to the requirement whose
 //! case reached it, so a requirement with an examples table is credited
-//! with what any of its rows reached. A requirement that fails is credited
+//! with what any of its rows reached, and a property with what any of its
+//! cases reached. A requirement that fails is credited
 //! too: its sentence still says the code is wanted. An element marked
 //! `#[defensive]` that a requirement reached fails the run, because the
 //! reason given for it is then wrong.
@@ -25,10 +34,12 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use inset_check::status::STATUSES;
-use inset_check::{Plan, Planned, PlannedBody, PlannedFact, PlannedStep, Program};
+use inset_check::{
+    Cases, Plan, Planned, PlannedBody, PlannedFact, PlannedRequirement, PlannedStep, Program,
+};
 use inset_host::{Mode, Options, Request, Response, Running};
 use inset_syntax::Span;
-use inset_value::{Check, CheckError, Op, Shape, Types, Value, json, key};
+use inset_value::{Check, CheckError, Decimal, Op, Shape, Types, Value, json, key};
 use serde::Serialize;
 
 /// What `inset test --json` prints.
@@ -83,6 +94,22 @@ pub struct Outcome {
     /// Each row of the examples table, run as a case of its own.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub rows: Vec<RowOutcome>,
+    /// For a property, how many generated cases ran and held, not counting
+    /// those its `where` condition left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cases: Option<u32>,
+    /// For a property that failed, the smallest input found that breaks
+    /// it, with a value for each of its inputs.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub inputs: Vec<InputValue>,
+}
+
+/// One input of a property's failing case.
+#[derive(Debug, Serialize)]
+pub struct InputValue {
+    pub name: String,
+    /// As it is read in the steps: as Rust writes the value.
+    pub value: String,
 }
 
 /// One row of an examples table.
@@ -134,8 +161,19 @@ impl Failed {
 
 /// Runs every requirement of `program` against the component built from it.
 pub fn run(program: &Program, component: &Path) -> Result<TestReport, String> {
-    let plan = inset_check::plan(program)
-        .map_err(|_| "the program has errors, so its requirements cannot run".to_string())?;
+    inset_check::plan_with(program, |plan, cases| {
+        let plan =
+            plan.map_err(|_| "the program has errors, so its requirements cannot run".to_string())?;
+        run_plan(program, component, &plan, cases)
+    })
+}
+
+fn run_plan(
+    program: &Program,
+    component: &Path,
+    plan: &Plan,
+    cases: &Cases<'_, '_>,
+) -> Result<TestReport, String> {
     let host = inset_host::Program::load(component).map_err(|e| e.to_string())?;
     let working_dir = std::env::current_dir().map_err(|e| e.to_string())?;
     let options = Options {
@@ -151,7 +189,7 @@ pub fn run(program: &Program, component: &Path) -> Result<TestReport, String> {
         // Each case starts the program afresh.
         let mut run_case = |steps: &[PlannedStep]| -> Result<Option<Failure>, String> {
             let mut running = host.start(&options).map_err(|e| e.to_string())?;
-            let failed = run_steps(&plan, steps, &mut running);
+            let failed = run_steps(plan, steps, &mut running);
             for id in running.reached() {
                 let by = reached.entry(id.clone()).or_default();
                 if !by.contains(&requirement.sentence) {
@@ -169,7 +207,14 @@ pub fn run(program: &Program, component: &Path) -> Result<TestReport, String> {
                 }
             }))
         };
+        let mut property = None;
         let (failure, headings, rows) = match &requirement.examples {
+            None if requirement.property.is_some() => {
+                let outcome = run_property(plan, cases, requirement, &mut run_case)?;
+                let failure = outcome.failure;
+                property = Some((outcome.cases, outcome.inputs));
+                (failure, Vec::new(), Vec::new())
+            }
             None => (run_case(&requirement.steps)?, Vec::new(), Vec::new()),
             Some(examples) => {
                 let mut rows = Vec::new();
@@ -194,6 +239,8 @@ pub fn run(program: &Program, component: &Path) -> Result<TestReport, String> {
             failure,
             headings,
             rows,
+            cases: property.as_ref().map(|(cases, _)| *cases),
+            inputs: property.map(|(_, inputs)| inputs).unwrap_or_default(),
         });
     }
     let failed = requirements.iter().filter(|r| r.result == "fail").count();
@@ -238,6 +285,226 @@ pub fn run(program: &Program, component: &Path) -> Result<TestReport, String> {
         coverage,
         elements,
     })
+}
+
+/// How many cases a property generates that its `where` condition keeps.
+/// Fixed, with a seed of its own for each property, so that the report is
+/// the same every time.
+pub const PROPERTY_CASES: u32 = 100;
+
+/// Runs one case's steps against a freshly started program, and returns
+/// the step that did not hold, if one did.
+type RunCase<'r> = dyn FnMut(&[PlannedStep]) -> Result<Option<Failure>, String> + 'r;
+
+/// What running a property found.
+struct PropertyOutcome {
+    cases: u32,
+    inputs: Vec<InputValue>,
+    failure: Option<Failure>,
+}
+
+/// Runs a property: generates values for its inputs, keeps those its
+/// `where` condition holds for, and runs its steps with each, until
+/// [`PROPERTY_CASES`] have held or one fails. Proptest then shrinks a
+/// failing case to the smallest it can find that still fails, and that
+/// case is run again for the report.
+fn run_property(
+    plan: &Plan,
+    cases: &Cases<'_, '_>,
+    requirement: &PlannedRequirement,
+    run_case: &mut RunCase<'_>,
+) -> Result<PropertyOutcome, String> {
+    use proptest::strategy::BoxedStrategy;
+    use proptest::test_runner::{
+        Config, RngAlgorithm, RngSeed, TestCaseError, TestError, TestRng, TestRunner,
+    };
+    use std::cell::{Cell, RefCell};
+
+    let property = requirement
+        .property
+        .as_ref()
+        .expect("only a property is run as one");
+    let config = Config {
+        cases: PROPERTY_CASES,
+        max_local_rejects: PROPERTY_CASES * 100,
+        max_global_rejects: PROPERTY_CASES * 100,
+        failure_persistence: None,
+        fork: false,
+        timeout: 0,
+        max_shrink_time: 0,
+        max_shrink_iters: 1024,
+        verbose: 0,
+        rng_algorithm: RngAlgorithm::ChaCha,
+        rng_seed: RngSeed::Fixed(0),
+        ..Config::default()
+    };
+    let rng = TestRng::from_seed(RngAlgorithm::ChaCha, &seed(&requirement.sentence));
+    let mut runner = TestRunner::new_with_rng(config, rng);
+    let strategy: Vec<BoxedStrategy<Value>> = property
+        .inputs
+        .iter()
+        .map(|input| generate(&input.shape))
+        .collect();
+    let run_case = RefCell::new(run_case);
+    let error = RefCell::new(None);
+    // The cases that held before the first that failed: shrinking runs
+    // more, which do not count.
+    let held = Cell::new(0);
+    let failed = Cell::new(false);
+    // A case's steps, or why its values do not make steps that check.
+    let steps = |values: &[Value]| -> Result<Vec<PlannedStep>, String> {
+        let texts: Vec<String> = values.iter().map(value_text).collect();
+        cases
+            .property(requirement, &texts)
+            .map_err(|d| format!("the steps do not check with these values: {}", d.message))
+    };
+    let result = runner.run(&strategy, |values| {
+        if let Some(condition) = &property.condition {
+            match condition.eval_inputs(&values, &plan.types) {
+                Ok(Value::Bool(true)) => {}
+                Ok(_) => return Err(TestCaseError::reject("the `where` condition is false")),
+                Err(CheckError::Failed(e) | CheckError::Missing { grant: e, .. }) => {
+                    return Err(TestCaseError::fail(format!(
+                        "but the `where` condition could not be worked out: {e}"
+                    )));
+                }
+            }
+        }
+        let steps = steps(&values).map_err(|e| {
+            failed.set(true);
+            TestCaseError::fail(e)
+        })?;
+        match (run_case.borrow_mut())(&steps) {
+            Ok(None) => {
+                if !failed.get() {
+                    held.set(held.get() + 1);
+                }
+                Ok(())
+            }
+            Ok(Some(failure)) => {
+                failed.set(true);
+                Err(TestCaseError::fail(failure.message))
+            }
+            Err(e) => {
+                error.replace(Some(e));
+                Err(TestCaseError::fail("the program could not start"))
+            }
+        }
+    });
+    if let Some(e) = error.into_inner() {
+        return Err(e);
+    }
+    let run_case = run_case.into_inner();
+    let names = || property.inputs.iter().map(|input| input.name.clone());
+    let file = &cases.program().files[requirement.file].text;
+    // A failure of the property as a whole, rather than of one of its steps.
+    let at_for_all = |message: String| Failure {
+        line: file[..property.span.start].matches('\n').count() + 1,
+        step: step_text(file, property.span),
+        message,
+        expected: None,
+        actual: None,
+    };
+    Ok(match result {
+        Ok(()) => PropertyOutcome {
+            cases: PROPERTY_CASES,
+            inputs: Vec::new(),
+            failure: None,
+        },
+        Err(TestError::Fail(reason, values)) => {
+            let inputs = names()
+                .zip(&values)
+                .map(|(name, value)| InputValue {
+                    name,
+                    value: value_text(value),
+                })
+                .collect();
+            // Run the smallest failing case again, for the step that failed.
+            let failure = match steps(&values) {
+                Ok(steps) => run_case(&steps)?,
+                Err(message) => Some(at_for_all(message)),
+            };
+            let failure = failure.unwrap_or_else(|| at_for_all(reason.message().to_string()));
+            PropertyOutcome {
+                cases: held.get(),
+                inputs,
+                failure: Some(failure),
+            }
+        }
+        Err(TestError::Abort(reason)) => PropertyOutcome {
+            cases: held.get(),
+            inputs: Vec::new(),
+            failure: Some(at_for_all(format!(
+                "but only {} generated cases met the `where` condition before too many were \
+                 left out: {}",
+                held.get(),
+                reason.message()
+            ))),
+        },
+    })
+}
+
+/// A property's seed, from its sentence, so each property generates values
+/// of its own, and the same ones every time.
+fn seed(sentence: &str) -> [u8; 32] {
+    // FNV-1a, spread over the seed's bytes.
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut seed = [0; 32];
+    for (i, chunk) in seed.chunks_mut(8).enumerate() {
+        for byte in sentence.bytes().chain([i as u8]) {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
+        }
+        chunk.copy_from_slice(&hash.to_le_bytes());
+    }
+    seed
+}
+
+/// The values a property generates for an input of shape `shape`. Small
+/// values come up more often than the type's range alone would give them,
+/// since that is where the edge cases are, and every value shrinks
+/// towards zero.
+fn generate(shape: &Shape) -> proptest::strategy::BoxedStrategy<Value> {
+    use proptest::prelude::*;
+    match shape {
+        Shape::Bool => any::<bool>().prop_map(Value::Bool).boxed(),
+        Shape::Int { signed, bits } => {
+            let (min, max): (i128, i128) = if *signed {
+                (-(1 << (bits - 1)), (1 << (bits - 1)) - 1)
+            } else {
+                (0, (1 << bits) - 1)
+            };
+            prop_oneof![
+                3 => min.max(-100)..=max.min(100),
+                1 => min..=max,
+            ]
+            .prop_map(Value::Int)
+            .boxed()
+        }
+        Shape::Decimal => {
+            let mantissa = prop_oneof![
+                3 => -10_000i64..=10_000,
+                1 => any::<i64>(),
+            ];
+            // A scale up to 28 digits, as `rust_decimal` allows, mostly small.
+            let scale = prop_oneof![4 => 0u32..=4, 1 => 0u32..=28];
+            (mantissa, scale)
+                .prop_map(|(m, s)| Value::Decimal(Decimal::new(m, s)))
+                .boxed()
+        }
+        _ => unreachable!("the checker generates only integers, `bool` and `Decimal`"),
+    }
+}
+
+/// A generated value as Rust writes it, which is how it reads in a step:
+/// `-12`, `true` or `0.10`.
+fn value_text(value: &Value) -> String {
+    match value {
+        Value::Int(n) => n.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Decimal(d) => d.to_string(),
+        other => other.to_string(),
+    }
 }
 
 /// How much of the program the requirements reached, with each element
@@ -623,6 +890,21 @@ fn render_requirements(report: &TestReport) -> String {
             "pass"
         };
         out.push_str(&format!("{result}  {}\n", outcome.sentence));
+        if let Some(cases) = outcome.cases {
+            if outcome.failure.is_none() {
+                out.push_str(&format!("      held in {}\n", count(cases, "case")));
+            } else if !outcome.inputs.is_empty() {
+                let inputs: Vec<String> = outcome
+                    .inputs
+                    .iter()
+                    .map(|i| format!("{} = {}", i.name, i.value))
+                    .collect();
+                out.push_str(&format!(
+                    "      fails for {}, the smallest failing input found\n",
+                    inputs.join(", ")
+                ));
+            }
+        }
         if let Some(failure) = &outcome.failure {
             failed(&mut out, &outcome.file, failure, "      ");
         }
@@ -666,4 +948,13 @@ fn summary(report: &TestReport) -> String {
         n => out.push_str(&format!("{n} elements marked defensive were reached\n")),
     }
     out
+}
+
+/// `n` and a noun, plural unless `n` is 1.
+fn count(n: u32, noun: &str) -> String {
+    if n == 1 {
+        format!("1 {noun}")
+    } else {
+        format!("{n} {noun}s")
+    }
 }

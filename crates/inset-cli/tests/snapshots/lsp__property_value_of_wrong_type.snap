@@ -1,0 +1,7 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:20:35-20:42
+the other side is a `Decimal`, and this is a `bool`
+expected a `Decimal`
+help: write a number with a point, such as `0.10`; with `<price>` read as a generated value, such as `true`

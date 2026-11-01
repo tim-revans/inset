@@ -94,19 +94,16 @@ async function testExplorer(api) {
     },
   );
   assert.equal(results.get(item.id).result, "pass", results.get(item.id).detail);
+  // Every example builds, and every requirement and examples row passes.
   for (const program of programs) {
-    if (results.get(program.id)) {
-      assert.equal(results.get(program.id).result, "error");
-      program.children.forEach((child) => assert.match(results.get(child.id).detail, /could not be built/));
-    } else {
-      program.children.forEach((child) => {
-        assert.equal(results.get(child.id).result, "pass", child.label);
-        child.children.forEach((row) => assert.equal(results.get(row.id).result, "pass", row.label));
-      });
-    }
+    assert.equal(results.get(program.id), undefined, `${program.label}: ${results.get(program.id)?.detail}`);
+    program.children.forEach((child) => {
+      assert.equal(results.get(child.id).result, "pass", child.label);
+      child.children.forEach((row) => assert.equal(results.get(row.id).result, "pass", row.label));
+    });
   }
-  // Hello HTTP and the Stock tracker build; CSV import needs `fork` first.
-  assert.equal(results.get(programs.find((p) => p.label === "examples/stock-tracker").id), undefined);
+  // A property reports how many generated cases held.
+  assert.match(api.requirements.output, /pass {2}The gross price is never below the net price\n {6}held in 100 cases\n/);
 }
 
 /**
@@ -128,7 +125,8 @@ async function coverage(api, example) {
 
 /**
  * The requirements panel lists the sentence as passed, and every Stock
- * tracker requirement too, with each row of its examples table under it.
+ * tracker requirement too, with each row of its examples table under it,
+ * and every CSV import requirement.
  */
 async function requirementsPanel(api) {
   await vscode.commands.executeCommand("inset.requirements.focus");
@@ -155,6 +153,14 @@ async function requirementsPanel(api) {
   );
   for (const row of rows) {
     assert.equal(tree.getTreeItem(row).description, "passed", row.label);
+  }
+
+  // CSV import, with its two properties.
+  const csv = tree.getChildren().find((p) => p.label === "examples/csv-import");
+  const csvRequirements = tree.getChildren(csv);
+  assert.equal(csvRequirements.length, 7);
+  for (const requirement of csvRequirements) {
+    assert.equal(tree.getTreeItem(requirement).description, "passed", requirement.label);
   }
 }
 

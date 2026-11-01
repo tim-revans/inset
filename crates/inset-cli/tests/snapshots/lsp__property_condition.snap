@@ -1,0 +1,16 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:16:58-16:63
+a `u32` has no `scale`
+only a `Decimal` has a scale
+
+requirements/main.req.inset:16:74-16:79
+this condition reads no input
+a `where` condition limits the inputs `for all` generates
+help: compare an input with something, such as `net >= dec!(0)`
+
+requirements/main.req.inset:16:83-16:99
+a `where` condition cannot read a capability
+this reads a table
+help: a `where` condition limits the inputs, before the steps run

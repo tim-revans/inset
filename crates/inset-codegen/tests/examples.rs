@@ -33,7 +33,6 @@ fn every_checked_example_builds_without_rust_errors_or_warnings() {
         assert_eq!(result.warnings, "", "{name}: rustc warned");
         built.push(name);
     }
-    // The examples the compiler covers so far. Another example joins this
-    // list when it checks clean.
-    assert_eq!(built, ["hello-http", "stock-tracker"]);
+    // Every example checks clean, so every example is built.
+    assert_eq!(built, ["csv-import", "hello-http", "stock-tracker"]);
 }

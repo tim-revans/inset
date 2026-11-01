@@ -1,38 +1,24 @@
-//! What `inset check` still reports on the examples the compiler does not
-//! cover yet. Each error belongs to a construct a later part of the plan
-//! adds, so none may be about types, modules, `match` or `for`, which the
-//! checker reads. The snapshots pin the rest, so a new error shows up.
+//! Every example checks clean, and the checker never panics on a broken one.
 
 use std::path::Path;
 
 use inset_check::{Program, check};
 
-/// The constructs the checker covers, as diagnostics name them.
-const COVERED: [&str; 8] = [
-    "`struct`",
-    "`enum`",
-    "`#[derive]`",
-    "`#[status]`",
-    "`mod`",
-    "`use`",
-    "`match`",
-    "`for`",
-];
-
+/// What `inset check` reports on an example.
 fn remaining(name: &str) -> String {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples")
         .join(name);
     let program = Program::load(&dir).expect("load the example");
-    let reports = check(&program);
-    for report in &reports {
-        let message = &report.diagnostic.message;
-        assert!(
-            !COVERED.iter().any(|c| message.contains(c)),
-            "{name}: {message}"
-        );
-    }
-    reports.iter().map(|r| program.render(r, false)).collect()
+    check(&program)
+        .iter()
+        .map(|r| program.render(r, false))
+        .collect()
+}
+
+#[test]
+fn hello_http() {
+    assert_eq!(remaining("hello-http"), "");
 }
 
 #[test]
@@ -42,7 +28,7 @@ fn stock_tracker() {
 
 #[test]
 fn csv_import() {
-    insta::assert_snapshot!(remaining("csv-import"));
+    assert_eq!(remaining("csv-import"), "");
 }
 
 /// The language server checks a program on every keystroke, so no edit

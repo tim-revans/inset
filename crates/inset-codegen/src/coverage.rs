@@ -19,7 +19,8 @@
 //!
 //! Marking a branch adds one statement at the start of its block. A loop's
 //! skip needs to know whether the body ran, so a loop is wrapped in a block
-//! with a flag. The error path of a `?` is marked by passing the value to
+//! with a flag. A branch of a `fork for` cannot change a flag, so a fork's
+//! skip is marked when the fork gives no values. The error path of a `?` is marked by passing the value to
 //! `coverage::exit`, which returns it unchanged. None of this changes what
 //! the code does.
 
@@ -162,6 +163,30 @@ impl Emitter<'_> {
                     let init = self.decision(&id, init, Value::Assigned);
                     (quote!(let #p #ty = #init;), true)
                 }
+                Stmt::Let {
+                    pattern: p,
+                    ty,
+                    init:
+                        Some(Expr {
+                            kind:
+                                ExprKind::Fork {
+                                    pattern: each,
+                                    iter,
+                                    body,
+                                },
+                            ..
+                        }),
+                    else_block: None,
+                    ..
+                } => {
+                    let p = pattern(p);
+                    let ty = ty.as_ref().map(|t| {
+                        let t = self.ty(t);
+                        quote!(: #t)
+                    });
+                    let init = self.covered_fork(&id, each, iter, body);
+                    (quote!(let #p #ty = #init;), true)
+                }
                 Stmt::Let { init, .. } => {
                     let exit = init.as_ref().is_some_and(tries);
                     (self.action(&id, exit, |e| e.stmt(stmt)), true)
@@ -206,6 +231,11 @@ impl Emitter<'_> {
                 let cond = self.expr(cond);
                 (self.covered_loop(id, quote!(while #cond), body), true)
             }
+            ExprKind::Fork {
+                pattern: each,
+                iter,
+                body,
+            } => (self.covered_fork(id, each, iter, body), true),
             // The flowchart cannot draw a block in a body yet.
             ExprKind::Block(_) => (self.expr(expr), false),
             ExprKind::Return(_) => (self.expr(expr), true),
@@ -311,6 +341,32 @@ impl Emitter<'_> {
     }
 }
 
+impl Emitter<'_> {
+    /// A `fork for`, with its body and its skip marked. The skip is the
+    /// fork running no branches, which its values tell once it is joined.
+    fn covered_fork(
+        &mut self,
+        id: &str,
+        each: &inset_syntax::ast::Pattern,
+        iter: &Expr,
+        body: &Block,
+    ) -> TokenStream {
+        let iter = self.expr(iter);
+        let lead = self.mark(format!("{id}/body"));
+        let covered = self.covered_block(&format!("{id}/body"), body, Value::Assigned, lead);
+        let skip = self.mark(format!("{id}/skip"));
+        let values = quote!(__inset_values);
+        let forked = crate::body::fork(pattern(each), iter, covered, crate::body::awaits(body));
+        quote!({
+            let #values = #forked;
+            if #values.is_empty() {
+                #skip
+            }
+            #values
+        })
+    }
+}
+
 /// Whether an expression has a `?` outside any closure, which the
 /// flowchart draws as the step's error path.
 fn tries(expr: &Expr) -> bool {
@@ -380,6 +436,8 @@ fn tries(expr: &Expr) -> bool {
                     .any(|arm| arm.guard.as_ref().is_some_and(tries) || tries(&arm.body))
         }
         ExprKind::For { iter, body, .. } => tries(iter) || block(body),
+        // A branch of a `fork` cannot use `?`.
+        ExprKind::Fork { iter, .. } => tries(iter),
         ExprKind::While { cond, body } => tries(cond) || block(body),
     }
 }

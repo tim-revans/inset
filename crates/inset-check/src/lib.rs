@@ -6,8 +6,10 @@
 //! capabilities it was handed, values cross component boundaries only as
 //! syntax.md allows, and every requirement step resolves to a real route or
 //! grant, with each value in it typed. [`plan`] hands the test runner the
-//! requirements in that resolved form. Each problem is a [`Report`]: a diagnostic in one file. The checks run on
-//! whatever parsed, so a parse error does not hide the semantic errors
+//! requirements in that resolved form, and [`plan_with`] also hands it the
+//! checked program as [`Cases`], which plans each generated case of a
+//! property. Each problem is a [`Report`]: a diagnostic in one file. The
+//! checks run on whatever parsed, so a parse error does not hide the semantic errors
 //! elsewhere, which the language server relies on.
 //!
 //! The type check is partial on purpose. A type the checker cannot work out
@@ -15,9 +17,10 @@
 //! of. Rust's own checks still run on the generated code, but an error
 //! there is a compiler bug, so what rustc would surely refuse, such as a
 //! derive a field cannot have or a `match` that leaves out a variant, is
-//! reported here. The checker covers the code of the Stock tracker: the
+//! reported here. The checker covers the code of the examples: the
 //! structure of components, outlets, messages and `failure` blocks, which
-//! decide what the diagram draws, and the modules and data types around it.
+//! decide what the diagram draws, the modules and data types around it,
+//! and what a branch of a `fork` may not do.
 //!
 //! A program's files are its modules (`modules`), parsed with spans that
 //! are unique across the program, so the checker compares spans without
@@ -35,13 +38,13 @@
 //!   `failure` blocks;
 //! - `wiring`: settings, grants, `start` statements and their handoffs, and
 //!   which grant reaches each route;
-//! - `body`: names and types in function bodies, closures, messages and
-//!   capability calls;
+//! - `body`: names and types in function bodies, closures, forks, messages
+//!   and capability calls;
 //! - `defensive`: where `#[defensive]` may mark a branch;
 //! - `requirements`: requirement steps against the app's routes and grants,
-//!   and the plan the test runner follows;
-//! - `values`: values and checks in requirement facts, typed against the
-//!   program.
+//!   a property's inputs, and the plan the test runner follows;
+//! - `values`: values and checks in requirement facts, and a property's
+//!   `where` condition, typed against the program.
 //!
 //! Diagnostic wording is pinned by `insta` snapshot tests in `tests/`.
 
@@ -77,8 +80,8 @@ pub use modules::{Module, Modules};
 use names::Names;
 pub use program::{Asset, MAIN, Program, SourceFile};
 pub use requirements::{
-    Plan, Planned, PlannedBody, PlannedExamples, PlannedFact, PlannedRequirement, PlannedRow,
-    PlannedStep,
+    Plan, Planned, PlannedBody, PlannedExamples, PlannedFact, PlannedInput, PlannedProperty,
+    PlannedRequirement, PlannedRow, PlannedStep,
 };
 use types::Ty;
 
@@ -166,6 +169,15 @@ pub fn analyze(program: &Program) -> Analysis {
 /// runs them, with every step resolved and every value typed, or its
 /// reports if it does not check clean.
 pub fn plan(program: &Program) -> Result<Plan, Vec<Report>> {
+    plan_with(program, |plan, _| plan)
+}
+
+/// Plans the program's requirements as [`plan`] does, and hands `run` the
+/// plan with the checked program, which plans each case of a property.
+pub fn plan_with<R>(
+    program: &Program,
+    run: impl FnOnce(Result<Plan, Vec<Report>>, &Cases<'_, '_>) -> R,
+) -> R {
     let (modules, mut reports) = Modules::load(program);
     let mut checker = Checker::new(&modules);
     checker.check();
@@ -177,16 +189,69 @@ pub fn plan(program: &Program) -> Result<Plan, Vec<Report>> {
         &mut reports,
         &mut requirements,
     );
-    if !reports.is_empty() {
-        return Err(reports);
+    let plan = if reports.is_empty() {
+        Ok(Plan {
+            app: checker
+                .app
+                .map_or_else(String::new, |a| a.name.name.clone()),
+            types: values::types(&checker),
+            requirements,
+        })
+    } else {
+        Err(reports)
+    };
+    run(
+        plan,
+        &Cases {
+            checker: &checker,
+            program,
+        },
+    )
+}
+
+/// A checked program, which plans the steps of a property's cases as the
+/// test runner generates them. The steps were checked with a sample value
+/// for each input, so a case's values, written as Rust writes them, give
+/// steps that check too, unless a value is out of its type's range.
+pub struct Cases<'c, 'a> {
+    checker: &'c Checker<'a>,
+    program: &'c Program,
+}
+
+impl Cases<'_, '_> {
+    /// The program the cases are of.
+    pub fn program(&self) -> &Program {
+        self.program
     }
-    Ok(Plan {
-        app: checker
-            .app
-            .map_or_else(String::new, |a| a.name.name.clone()),
-        types: values::types(&checker),
-        requirements,
-    })
+
+    /// The steps of the property `requirement`, read with `values`, the
+    /// text of each input's value in the order of its inputs, and planned.
+    /// The first problem found, if they do not check.
+    pub fn property(
+        &self,
+        requirement: &PlannedRequirement,
+        values: &[String],
+    ) -> Result<Vec<PlannedStep>, Diagnostic> {
+        let property = requirement
+            .property
+            .as_ref()
+            .expect("only a property has cases to plan");
+        let names: Vec<String> = property.inputs.iter().map(|i| i.name.clone()).collect();
+        let text = &self.program.files[requirement.file].text;
+        let (steps, mut diagnostics) =
+            inset_syntax::read_property_case(text, property.steps, &names, values);
+        let planned = requirements::plan_steps(
+            self.checker,
+            requirement.file,
+            &steps,
+            &mut Vec::new(),
+            |d| diagnostics.push(d),
+        );
+        match diagnostics.into_iter().min_by_key(|d| d.span.start) {
+            Some(diagnostic) => Err(diagnostic),
+            None => Ok(planned),
+        }
+    }
 }
 
 /// Checks the requirements against a checked program, and gathers the reports.

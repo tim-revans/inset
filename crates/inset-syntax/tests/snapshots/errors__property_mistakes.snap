@@ -1,0 +1,38 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "requirement \"Any name is greeted\"\n    for all n: u32 where n > 0\n    when HelloHttp receives GET /hello/<n>\n    then HelloHttp replies OK with <greeting>\n\nrequirement \"Greetings are polite\"\n    when HelloHttp receives GET /hello/Ada\n    for all n: u32\n    then HelloHttp replies OK with \"Hello, Ada!\"\n\nrequirement \"Every number is greeted\"\n    for all n: u32\n    when HelloHttp receives GET /hello/<n>\n    then HelloHttp replies OK with \"Hello, <n>!\"\n    examples\n    | n |\n    | 1 |\n\nrequirement \"Inputs are typed\"\n    for all n u32\n    when HelloHttp receives GET /hello/<n>\n    then HelloHttp replies OK with \"Hello, <n>!\"\n"
+---
+Error: `<greeting>` is not an input of the property
+   ╭─[ hello.req.inset:4:36 ]
+   │
+ 4 │     then HelloHttp replies OK with <greeting>
+   │                                    ─────┬────  
+   │                                         ╰────── nothing gives this placeholder a value
+   │ 
+   │ Help: name the placeholder after one of the inputs that `for all` names
+───╯
+Error: `for all` after a step
+   ╭─[ hello.req.inset:8:5 ]
+   │
+ 8 │     for all n: u32
+   │     ─┬─  
+   │      ╰─── a property's inputs come before its steps
+   │ 
+   │ Help: move `for all` to the line after the requirement's sentence
+───╯
+Error: a property has no examples table
+    ╭─[ hello.req.inset:15:5 ]
+    │
+ 15 │     examples
+    │     ────┬───  
+    │         ╰───── `for all` already gives the placeholders their values
+    │ 
+    │ Help: write the cases as a requirement of their own, without `for all`
+────╯
+Error: expected `:` after the input's name, found `u32`
+    ╭─[ hello.req.inset:20:15 ]
+    │
+ 20 │     for all n u32
+    │               ─┬─  
+    │                ╰─── expected `:`
+────╯

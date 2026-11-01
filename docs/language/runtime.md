@@ -85,6 +85,19 @@ Inset needs nothing else from an async runtime. All I/O is a call to the host, s
 
 The runtime's tests check both, including that a handler which sends a message and then awaits another to the same receiver does not see the first one: it has not been delivered yet.
 
+### Forks
+
+A `fork for` runs inside its component's task, on the same thread, so a fork adds no tasks. The emitted Rust passes the collection and the body, as a closure, to `inset_runtime::fork`:
+
+- When the body awaits nothing, the closure is an ordinary one, and `fork::each` calls it for each element in turn. A pure algorithm gives the same values in any order, so there is nothing to gain from running its branches any other way on one thread.
+- When the body awaits, the closure is async, and `fork::each_async` starts a branch for each element and polls every unfinished branch, in order, each time the task is woken. Each branch runs until it waits, so every branch has sent its first message before any sends its second, and the messages reach their receivers in the order of the collection. The values come back in that order too.
+
+Both closures are `Fn`, not `FnMut`, so Rust allows a branch to read what it captures and not to change it. That is the rule `syntax.md` gives for branches, which the checker reports first, so rustc enforces it again.
+
+A failed message or capability call in a branch ends the handler as it would outside a fork, because the fork's future is part of the handler's. A panic in a branch traps the instance as any panic does.
+
+*Why the branches share a task:* a branch borrows the handler's `self` and its local variables, as a scoped thread does, so it cannot outlive the handler. A task of its own would have to own what it uses. Polling the branches inside the handler's future keeps the borrows, and keeps the fork's join in the handler, where rollback already looks.
+
 ## Capabilities
 
 A program can reach only what its imports reach, and the host decides what is behind each import.
@@ -213,7 +226,7 @@ Nothing outside the adapter knows the component's language, and no adapter may r
 
 ## Coverage
 
-The emitted code counts its own coverage. At the start of each function and of each branch, the compiler adds a statement that marks the element reached, by its index in a list of the diagram IDs coverage counts. A `?` passes its value through `coverage::exit`, which marks the error path when the value is an `Err` or `None` and returns it unchanged. A loop is wrapped in a block with a flag that its body sets, so the end of the loop can tell whether the body ran at all. The runtime marks each `failure` arm itself, when it uses the arm's response.
+The emitted code counts its own coverage. At the start of each function and of each branch, the compiler adds a statement that marks the element reached, by its index in a list of the diagram IDs coverage counts. A `?` passes its value through `coverage::exit`, which marks the error path when the value is an `Err` or `None` and returns it unchanged. A loop is wrapped in a block with a flag that its body sets, so the end of the loop can tell whether the body ran at all. A `fork for` gives a value for each branch, so the fork's skip is marked when it gives none. The runtime marks each `failure` arm itself, when it uses the arm's response.
 
 A component's list holds IDs relative to a running component, such as `fn:ship/1/b0`, in `Component::BRANCHES`, and each running component keeps a flag for each, because a component type started twice runs as two components with IDs of their own. The top-level algorithms' elements have full IDs, in `App::BRANCHES`. A mark is a load and a store, made only in the running handler's own component: a component's function that runs while another component's handler is running marks nothing.
 

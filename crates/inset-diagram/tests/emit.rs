@@ -41,9 +41,11 @@ fn every_checked_example_is_drawn_as_its_expected_diagram() {
         assert_eq!(emitted, expected, "{name}");
         drawn_examples.push(name);
     }
-    // The examples the compiler covers so far. Another example joins this
-    // list when it checks clean.
-    assert_eq!(drawn_examples, ["hello-http", "stock-tracker"]);
+    // Every example checks clean, so every example is drawn.
+    assert_eq!(
+        drawn_examples,
+        ["csv-import", "hello-http", "stock-tracker"]
+    );
 }
 
 /// Every view of a diagram draws, which also checks each flowchart's ID.

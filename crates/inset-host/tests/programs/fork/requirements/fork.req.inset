@@ -1,0 +1,25 @@
+requirement "Every name is asked about at once, and answered in order"
+    when Forks receives POST /ask with "ada, bob"
+    then Forks replies OK with "ada=1,bob=2"
+    when Forks receives GET /notes
+    then Forks replies OK with "ada asks,bob asks,ada thanks,bob thanks"
+
+requirement "An empty list asks about nothing"
+    when Forks receives POST /ask with ""
+    then Forks replies OK with ""
+    when Forks receives GET /notes
+    then Forks replies OK with ""
+
+requirement "Any count up to a thousand is counted exactly"
+    for all n: u32 where n <= 1000
+    when Forks receives POST /count/<n>
+    then Forks replies OK with "<n>"
+    and counts["count"] == <n>
+
+requirement "A second count replaces the first"
+    for all first: u16, second: u16 where first <= 500 && second <= 500
+    when Forks receives POST /count/<first>
+    then Forks replies OK with "<first>"
+    when Forks receives POST /count/<second>
+    then Forks replies OK with "<second>"
+    and counts["count"] == <second>

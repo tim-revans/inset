@@ -768,7 +768,7 @@ impl Parser<'_> {
             T::Keyword(Kw::Match) => return self.parse_match(),
             T::Keyword(Kw::For) => return self.parse_for(),
             T::Keyword(Kw::While) => return self.parse_while(),
-            T::Keyword(Kw::Fork) => return Err(self.unsupported("`fork`", start)),
+            T::Keyword(Kw::Fork) => return self.parse_fork(),
             T::Keyword(Kw::Let) => {
                 return Err(self.report(
                     Diagnostic::new(
@@ -1026,6 +1026,35 @@ impl Parser<'_> {
             kind: ExprKind::For {
                 pattern,
                 iter: Box::new(iter),
+                body,
+            },
+        })
+    }
+
+    /// `fork for pattern in iter { body }`. `fork { a, b }` is Draft.
+    fn parse_fork(&mut self) -> PResult<Expr> {
+        let start = self.bump().span;
+        if !self.at_kw(Kw::For) {
+            if self.at(P::LBrace) {
+                let span = start.to(self.span());
+                return Err(self.unsupported("`fork { ... }`", span));
+            }
+            return Err(self.expected("`for` after `fork`"));
+        }
+        let Expr { kind, span } = self.parse_for()?;
+        let ExprKind::For {
+            pattern,
+            iter,
+            body,
+        } = kind
+        else {
+            unreachable!("`parse_for` reads a `for` loop");
+        };
+        Ok(Expr {
+            span: start.to(span),
+            kind: ExprKind::Fork {
+                pattern,
+                iter,
                 body,
             },
         })

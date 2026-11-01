@@ -158,6 +158,19 @@ impl Emitter<'_> {
                     let head = Span::new(span.start, scrutinee.span.end);
                     Some(self.match_decision(cx, id, head, init, Value::Assigned))
                 }
+                Stmt::Let {
+                    init:
+                        Some(Expr {
+                            kind: ExprKind::Fork { iter, body, .. },
+                            ..
+                        }),
+                    else_block: None,
+                    span,
+                    ..
+                } => {
+                    let head = Span::new(span.start, body.span.start);
+                    Some(self.fork_step(cx, id, head, iter, body))
+                }
                 Stmt::Let { init, span, .. } => {
                     let uses = self.uses(cx, init.as_ref());
                     Some(self.action(cx, id, *span, uses))
@@ -199,6 +212,10 @@ impl Emitter<'_> {
                 let uses = self.uses(cx, Some(iter));
                 self.no_exit(&uses, iter.span, "in a loop's head");
                 Some(self.loop_step(cx, id, head, uses, body, "each"))
+            }
+            ExprKind::Fork { iter, body, .. } => {
+                let head = Span::new(expr.span.start, body.span.start);
+                Some(self.fork_step(cx, id, head, iter, body))
             }
             ExprKind::While { cond, body } => {
                 let head = Span::new(expr.span.start, body.span.start);
@@ -429,6 +446,43 @@ impl Emitter<'_> {
         }
     }
 
+    /// A `fork for`: a loop whose bodies run concurrently and are joined.
+    /// The body's final value is the branch's, drawn if it does something.
+    fn fork_step(
+        &mut self,
+        cx: &Context<'_>,
+        id: String,
+        head: Span,
+        iter: &Expr,
+        body: &Block,
+    ) -> Step {
+        let uses = self.uses(cx, Some(iter));
+        self.no_exit(&uses, iter.span, "in a fork's head");
+        let body_id = format!("{id}/body");
+        let skip_id = format!("{id}/skip");
+        self.locate(&id, head);
+        self.locate(&body_id, body.span);
+        self.locate(&skip_id, head);
+        Step::Loop {
+            text: self.text(head),
+            links: uses.links,
+            concurrent: true,
+            body: Branch {
+                steps: self.block(cx, &body_id, body, Value::Assigned, false),
+                id: body_id,
+                label: "each".into(),
+                defensive: None,
+            },
+            skip: Branch {
+                id: skip_id,
+                label: "none".into(),
+                steps: Vec::new(),
+                defensive: None,
+            },
+            id,
+        }
+    }
+
     fn no_exit(&mut self, uses: &Uses, span: Span, place: &str) {
         if uses.tries > 0 {
             self.unsupported(&format!("`?` {place}"), span, "returns early here");
@@ -529,7 +583,7 @@ impl Emitter<'_> {
                     self.walk(cx, &arm.body, uses, true);
                 }
             }
-            ExprKind::For { iter, body, .. } if in_closure => {
+            ExprKind::For { iter, body, .. } | ExprKind::Fork { iter, body, .. } if in_closure => {
                 self.walk(cx, iter, uses, true);
                 self.walk_block(cx, body, uses);
             }
@@ -542,6 +596,9 @@ impl Emitter<'_> {
             }
             ExprKind::For { .. } | ExprKind::While { .. } => {
                 self.unsupported("a loop inside an expression", expr.span, "this loop");
+            }
+            ExprKind::Fork { .. } => {
+                self.unsupported("a `fork` inside an expression", expr.span, "this `fork`");
             }
             // A capability call is a step linked to the capability's edge,
             // and a message, awaited or sent, a step linked to its arrow.

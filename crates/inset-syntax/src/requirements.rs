@@ -109,8 +109,8 @@ struct ReqParser<'a> {
     /// Diagnostics that already have the file's spans, from facts read
     /// in an examples row.
     mapped: Vec<Diagnostic>,
-    /// Whether the requirement being read starts with `for all`, whose
-    /// placeholders are not supported yet.
+    /// Whether the steps being read are a property's, whose placeholders
+    /// name its inputs.
     for_all: bool,
 }
 
@@ -185,10 +185,13 @@ impl<'a> ReqParser<'a> {
             self.expect_end(&mut cursor);
         }
         self.diagnostics.append(&mut cursor.diagnostics);
-        self.for_all = self.lines[self.next..]
+        let starts_for_all = self.lines[self.next..]
             .iter()
             .find(|l| !l.is_blank())
-            .is_some_and(|l| l.indent > 0 && l.text.starts_with("for "));
+            .is_some_and(|l| l.indent == STEP_INDENT && l.text.starts_with("for "));
+        if starts_for_all {
+            return self.parse_property(header, sentence);
+        }
         let examples_at = self.find_examples();
         let first_step = self.next;
         let (steps, any_step_lines) = if examples_at.is_some() {
@@ -224,6 +227,140 @@ impl<'a> ReqParser<'a> {
             sentence,
             steps,
             examples,
+            for_all: None,
+        })
+    }
+
+    /// A property: its `for all` line, then its steps, which are read with
+    /// a sample value for each input, so they can be checked before any
+    /// value is generated.
+    fn parse_property(
+        &mut self,
+        header: Line<'a>,
+        sentence: Option<StrLit>,
+    ) -> Option<Requirement> {
+        let line = self.next_line()?;
+        let mut end = line.end();
+        while let Some(next) = self.next_deeper(STEP_INDENT) {
+            end = next.end();
+        }
+        let span = Span::new(line.text_start(), end);
+        let mut cursor = Cursor::new(self.source, span);
+        cursor.word();
+        let parsed = match cursor.word() {
+            Some((word, _)) if word == "all" => {
+                let rest = cursor.span_of_rest();
+                let (parsed, mut diagnostics) = crate::parse_for_all(self.source, rest);
+                self.diagnostics.append(&mut diagnostics);
+                parsed
+            }
+            _ => {
+                self.error(
+                    Diagnostic::new(
+                        "expected `for all`",
+                        span,
+                        "a property starts with `for all`",
+                    )
+                    .with_help("write `for all net: Decimal where net >= dec!(0)`"),
+                );
+                None
+            }
+        };
+        let steps_start = self.lines[self.next..]
+            .iter()
+            .find(|l| !l.is_blank())
+            .filter(|l| l.indent > 0)
+            .map(|l| l.start);
+        let end_line = self.lines[self.next..]
+            .iter()
+            .position(|l| !l.is_blank() && l.indent == 0)
+            .map_or(self.lines.len(), |i| self.next + i);
+        let steps_end = self
+            .lines
+            .get(end_line)
+            .map_or(self.source.len(), |l| l.start);
+        let examples_at = self.find_examples();
+        self.next = end_line;
+        let sentence = sentence?;
+        let Some(steps_start) = steps_start else {
+            self.error(Diagnostic::new(
+                "requirement has no steps",
+                sentence.span,
+                "this property says nothing to test",
+            ));
+            return None;
+        };
+        if let Some(at) = examples_at {
+            let keyword = self.lines[at];
+            self.error(
+                Diagnostic::new(
+                    "a property has no examples table",
+                    Span::new(
+                        keyword.text_start(),
+                        keyword.text_start() + "examples".len(),
+                    ),
+                    "`for all` already gives the placeholders their values",
+                )
+                .with_help("write the cases as a requirement of their own, without `for all`"),
+            );
+            return None;
+        }
+        let (inputs, condition) = parsed?;
+        let steps = Span::new(steps_start, steps_end);
+        let headings: Vec<Text> = inputs
+            .iter()
+            .map(|input| Text {
+                value: input.name.name.clone(),
+                span: input.name.span,
+            })
+            .collect();
+        let samples: Vec<Text> = inputs
+            .iter()
+            .map(|input| Text {
+                value: ForAll::sample(&input.ty).to_string(),
+                span: input.ty.span,
+            })
+            .collect();
+        let (sample, placeholders, diagnostics) = self.row(steps, &headings, &samples, true);
+        let mut seen: Vec<Diagnostic> = Vec::new();
+        for mut diagnostic in diagnostics {
+            if let Some(input) = placeholders
+                .iter()
+                .find(|p| overlaps(**p, diagnostic.span))
+                .and_then(|p| {
+                    let name = &self.source[p.start + 1..p.end - 1];
+                    inputs.iter().find(|i| i.name.name == name)
+                })
+            {
+                let note = format!(
+                    "with `<{}>` read as a generated value, such as `{}`",
+                    input.name.name,
+                    ForAll::sample(&input.ty)
+                );
+                diagnostic.help = Some(match diagnostic.help {
+                    Some(help) => format!("{help}; {note}"),
+                    None => note,
+                });
+            }
+            if !seen.contains(&diagnostic) {
+                seen.push(diagnostic.clone());
+                self.error(diagnostic);
+            }
+        }
+        let last = sample.last().map_or(span, |s| s.span);
+        Some(Requirement {
+            span: Span::new(header.text_start(), last.end.max(span.end)),
+            sentence,
+            steps: Vec::new(),
+            examples: None,
+            for_all: Some(ForAll {
+                inputs,
+                condition,
+                span,
+                steps,
+                sample,
+                placeholders,
+            }),
         })
     }
 
@@ -364,7 +501,7 @@ impl<'a> ReqParser<'a> {
         let rows = rows
             .into_iter()
             .map(|(cells, span)| {
-                let (steps, placeholders, diagnostics) = self.row(steps, &headings, &cells);
+                let (steps, placeholders, diagnostics) = self.row(steps, &headings, &cells, false);
                 let line = self.source[..span.start].matches('\n').count() + 1;
                 for mut diagnostic in diagnostics {
                     // A diagnostic about a placeholder is the row's own.
@@ -436,6 +573,7 @@ impl<'a> ReqParser<'a> {
         steps: Span,
         headings: &[Text],
         cells: &[Text],
+        for_all: bool,
     ) -> (Vec<Step>, Vec<Span>, Vec<Diagnostic>) {
         let template = &self.source[steps.start..steps.end];
         let mut text = self.source[..steps.start].to_string();
@@ -486,7 +624,7 @@ impl<'a> ReqParser<'a> {
             diagnostics: Vec::new(),
             row: Some(&map),
             mapped: Vec::new(),
-            for_all: false,
+            for_all,
         };
         parser.next = parser
             .lines
@@ -522,10 +660,14 @@ impl<'a> ReqParser<'a> {
         let span = Span::new(line.text_start() + start, line.text_start() + end);
         let diagnostic = if self.for_all {
             Diagnostic::new(
-                "a placeholder from `for all` is not supported yet",
+                format!(
+                    "`{}` is not an input of the property",
+                    &line.text[start..end]
+                ),
                 span,
-                "the parser does not handle this yet",
+                "nothing gives this placeholder a value",
             )
+            .with_help("name the placeholder after one of the inputs that `for all` names")
         } else if self.row.is_some() {
             Diagnostic::new(
                 format!(
@@ -627,7 +769,14 @@ impl<'a> ReqParser<'a> {
                 }
             },
             "for" => {
-                self.unsupported("`for all`", word_span);
+                self.error(
+                    Diagnostic::new(
+                        "`for all` after a step",
+                        word_span,
+                        "a property's inputs come before its steps",
+                    )
+                    .with_help("move `for all` to the line after the requirement's sentence"),
+                );
                 return None;
             }
             "examples" => {
@@ -739,14 +888,6 @@ impl<'a> ReqParser<'a> {
             }),
             StepFact::Check(expr) => Some(StepKind::Check(expr)),
         }
-    }
-
-    fn unsupported(&mut self, what: &str, span: Span) {
-        self.error(Diagnostic::new(
-            format!("{what} is not supported yet"),
-            span,
-            "the parser does not handle this yet",
-        ));
     }
 
     fn app_name(&mut self, cursor: &mut Cursor<'a>) -> Option<Ident> {
@@ -1264,4 +1405,35 @@ fn is_snake(word: &str) -> bool {
 fn is_upper_camel(word: &str) -> bool {
     word.starts_with(|c: char| c.is_ascii_uppercase())
         && word.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+/// A property's steps read with one case's values, for
+/// [`crate::read_property_case`].
+pub(crate) fn read_property_case(
+    source: &str,
+    steps: Span,
+    names: &[String],
+    values: &[String],
+) -> (Vec<Step>, Vec<Diagnostic>) {
+    let parser = ReqParser {
+        source,
+        lines: lines(source),
+        next: 0,
+        diagnostics: Vec::new(),
+        row: None,
+        mapped: Vec::new(),
+        for_all: true,
+    };
+    let text = |value: &String| Text {
+        value: value.clone(),
+        span: Span::new(0, 0),
+    };
+    let headings: Vec<Text> = names.iter().map(text).collect();
+    let cells: Vec<Text> = values.iter().map(text).collect();
+    let (steps, _, diagnostics) = parser.row(steps, &headings, &cells, true);
+    (steps, diagnostics)
+}
+
+fn overlaps(placeholder: Span, span: Span) -> bool {
+    placeholder.start < span.end.max(span.start + 1) && span.start < placeholder.end
 }

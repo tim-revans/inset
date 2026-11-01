@@ -26,9 +26,9 @@ nut-m6,M6 nut,0.05
 | The Rust side | `csv_reader.rs` implements the generated `interface::CsvReader` trait for its own `Reader` type and names it with `interface::export!`. It is built as a WebAssembly component of its own, so the host enforces that it holds no capabilities |
 | Declared capabilities | `CsvReader` has no fields, so it holds no capabilities and can only compute |
 | External component as a child | `Importer` starts it with `start csv: CsvReader {}` and sends it messages like any component |
-| Structured concurrency | `fork for row in rows { ... }` in `parse_price_list` reads every row concurrently and joins the results in order |
+| Structured concurrency | `fork for row in rows { ... }` in `parse_price_list` reads every row concurrently and joins the results in order. Each branch gives a `Result`, because a branch cannot `return` or change what the others see |
 | Top-level algorithms | `parse_price_list`, `parse_row`, `parse_price` and `add_vat`, which take no `self` |
-| Property tests | "Any net price ... is stored exactly" and "The gross price is never below the net price", which generate prices and post them in a price list |
+| Property tests | "Any net price ... is stored exactly" and "The gross price is never below the net price", which generate prices and post them in a price list. `inset test` runs each for 100 generated prices, the same ones every time |
 | Examples table | The refused net prices, filled into a text block |
 | Branch coverage of loops | "A price list with no products is accepted and stores nothing" runs the `fork` and the `for` with nothing to loop over, so the case of an empty list is a stated requirement, not an accident |
 | Checks | `and products["bolt-m6"].gross >= <net>`, for a result a property cannot state exactly |
@@ -37,6 +37,8 @@ nut-m6,M6 nut,0.05
 | Error replies with a body | `ImportError::InvalidRows(String)` replies `400 Bad Request` with the string as its body |
 
 It covers the brief's CSV import row: an external Rust crate, structured concurrency, and property tests.
+
+Every branch of the code is reached by some requirement, so `inset test examples/csv-import --coverage` reports nothing uncovered.
 
 The gross price property only holds for whole numbers of pence. For a net price of `0.001`, VAT would round the gross price down to `0.00`. `parse_price` refuses such prices, and the property's `where` clause generates only whole pence.
 

@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: the other side is a `Decimal`, and this is a `bool`
+    ╭─[ requirements/main.req.inset:20:35 ]
+    │
+ 20 │     and items["bolt-m6"].price == <price>
+    │                                   ───┬───  
+    │                                      ╰───── expected a `Decimal`
+    │ 
+    │ Help: write a number with a point, such as `0.10`; with `<price>` read as a generated value, such as `true`
+────╯

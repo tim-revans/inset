@@ -1,0 +1,39 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `?` cannot leave a branch of a `fork`
+    ╭─[ src/main.inset:39:24 ]
+    │
+ 39 │             let item = self.items.get(sku).await?;
+    │                        ─────────────┬────────────  
+    │                                     ╰────────────── this would leave one branch while the others run
+    │ 
+    │ Help: give each branch a value, such as a `Result`, and handle the values after the `fork`, where every branch has finished
+────╯
+Error: a branch of a `fork` cannot change `total`, which every branch sees
+    ╭─[ src/main.inset:40:13 ]
+    │
+ 40 │             total += item.on_hand;
+    │             ──┬──  
+    │               ╰──── this changes it
+    │ 
+    │ Help: the branches run concurrently, so none may change what the others can see: give each branch a value, and gather the values after the `fork`
+────╯
+Error: a branch of a `fork` cannot change `seen`, which every branch sees
+    ╭─[ src/main.inset:41:18 ]
+    │
+ 41 │             seen.push(sku.clone());
+    │                  ──┬─  
+    │                    ╰─── `push` changes `seen`
+    │ 
+    │ Help: the branches run concurrently, so none may change what the others can see: give each branch a value, and gather the values after the `fork`
+────╯
+Error: a branch of a `fork` cannot change a table, and `insert` does
+    ╭─[ src/main.inset:44:24 ]
+    │
+ 44 │             self.items.insert(sku.clone(), item.clone()).await;
+    │                        ───┬──  
+    │                           ╰──── every branch sees this table
+    │ 
+    │ Help: the branches run concurrently, so none may change what the others can see: give each branch a value, and write them to the table after the `fork`
+────╯

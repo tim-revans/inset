@@ -25,6 +25,38 @@ const STD_NAMES: [&str; 19] = [
     "Box", "Rc", "Arc", "Cell", "RefCell", "Mutex", "RwLock", "Decimal", "char", "str",
 ];
 
+/// Methods of the standard library's collections and `String` that take
+/// `&mut self`, which a branch of a `fork` cannot call on what every branch
+/// sees.
+const CHANGING_METHODS: [&str; 26] = [
+    "push",
+    "push_str",
+    "push_back",
+    "push_front",
+    "pop",
+    "pop_back",
+    "pop_front",
+    "insert",
+    "remove",
+    "clear",
+    "extend",
+    "append",
+    "truncate",
+    "retain",
+    "sort",
+    "sort_by",
+    "sort_by_key",
+    "sort_unstable",
+    "dedup",
+    "drain",
+    "reverse",
+    "swap",
+    "entry",
+    "get_mut",
+    "iter_mut",
+    "resize",
+];
+
 /// The macros Inset keeps (syntax.md, "What Inset keeps from Rust").
 const MACROS: [&str; 7] = [
     "vec", "format", "matches", "assert", "write", "panic", "dec",
@@ -89,6 +121,12 @@ pub(crate) struct Body<'c, 'a> {
     scopes: Vec<Vec<Local>>,
     /// Inside a closure, which may not wait, send or call a capability.
     in_closure: bool,
+    /// Inside the body of a `fork for`: the index of the body's first
+    /// scope, so a variable in an earlier scope is one every branch sees.
+    fork: Option<usize>,
+    /// Inside the body of a `fork for` and not in a closure within it, so
+    /// `return` and `?` would leave the branch.
+    in_branch: bool,
     diagnostics: Vec<Diagnostic>,
     locals: Vec<(Ident, Ty)>,
     refs: Vec<(Span, Span)>,
@@ -108,6 +146,8 @@ impl<'c, 'a> Body<'c, 'a> {
             function,
             scopes: vec![Vec::new()],
             in_closure: false,
+            fork: None,
+            in_branch: false,
             diagnostics: Vec::new(),
             locals: Vec::new(),
             refs: Vec::new(),
@@ -380,6 +420,21 @@ impl<'c, 'a> Body<'c, 'a> {
         self.bind_in(&pattern, ty, by_ref);
     }
 
+    /// A place such as `self.items` or `totals[i]`, written out.
+    fn text_of_expr(&self, expr: &Expr) -> String {
+        match &expr.kind {
+            ExprKind::Path(path) => self.text_of_path(path),
+            ExprKind::Field { base, name } => format!("{}.{}", self.text_of_expr(base), name.name),
+            ExprKind::Index { base, .. } => format!("{}[..]", self.text_of_expr(base)),
+            ExprKind::Paren(inner) => self.text_of_expr(inner),
+            ExprKind::Unary {
+                op: UnaryOp::Deref,
+                operand,
+            } => format!("*{}", self.text_of_expr(operand)),
+            _ => "this".to_string(),
+        }
+    }
+
     fn text_of_path(&self, path: &Path) -> String {
         path.segments
             .iter()
@@ -590,10 +645,13 @@ impl<'c, 'a> Body<'c, 'a> {
                 Ty::Unknown
             }
             ExprKind::Await(inner) => self.await_expr(expr.span, inner),
-            ExprKind::Try(inner) => match self.expr(inner) {
-                Ty::Std("Option" | "Result", args) => args[0].clone(),
-                _ => Ty::Unknown,
-            },
+            ExprKind::Try(inner) => {
+                self.leaves_branch(expr.span, "`?`");
+                match self.expr(inner) {
+                    Ty::Std("Option" | "Result", args) => args[0].clone(),
+                    _ => Ty::Unknown,
+                }
+            }
             ExprKind::Unary { op, operand } => {
                 let ty = self.expr(operand);
                 match (op, ty) {
@@ -602,13 +660,19 @@ impl<'c, 'a> Body<'c, 'a> {
                     (_, ty) => ty,
                 }
             }
-            ExprKind::Ref { mutable, operand } => Ty::Ref {
-                mutable: *mutable,
-                inner: Box::new(self.expr(operand)),
-            },
+            ExprKind::Ref { mutable, operand } => {
+                if *mutable {
+                    self.shared_change(operand, None);
+                }
+                Ty::Ref {
+                    mutable: *mutable,
+                    inner: Box::new(self.expr(operand)),
+                }
+            }
             ExprKind::Binary { op, lhs, rhs } => self.binary(*op, lhs, rhs),
             ExprKind::Assign { op, lhs, rhs } => {
                 self.check_assign_target(lhs);
+                self.shared_change(lhs, None);
                 let target = self.expr(lhs);
                 if op.is_none() {
                     self.expect(rhs, &target, "the target");
@@ -655,6 +719,7 @@ impl<'c, 'a> Body<'c, 'a> {
                 }
             }
             ExprKind::Return(value) => {
+                self.leaves_branch(expr.span, "`return`");
                 self.return_expr(expr.span, value.as_deref());
                 Ty::Never
             }
@@ -689,6 +754,22 @@ impl<'c, 'a> Body<'c, 'a> {
                 self.block(body);
                 self.scopes.pop();
                 Ty::unit()
+            }
+            ExprKind::Fork {
+                pattern,
+                iter,
+                body,
+            } => {
+                let iter_ty = self.expr(iter);
+                self.scopes.push(Vec::new());
+                let outer = (self.fork, self.in_branch);
+                self.fork = Some(self.scopes.len() - 1);
+                self.in_branch = true;
+                self.bind(pattern, element(&iter_ty));
+                let ty = self.block(body);
+                (self.fork, self.in_branch) = outer;
+                self.scopes.pop();
+                Ty::Std("Vec", vec![ty])
             }
             ExprKind::While { cond, body } => {
                 self.scopes.push(Vec::new());
@@ -1255,8 +1336,9 @@ impl<'c, 'a> Body<'c, 'a> {
             let ty = param.ty.as_ref().map_or(Ty::Unknown, |t| self.resolve(t));
             self.bind(&param.pattern, ty);
         }
-        let outer = self.in_closure;
+        let outer = (self.in_closure, self.in_branch);
         self.in_closure = true;
+        self.in_branch = false;
         let ret = closure.ret.as_ref().map(|t| self.resolve(t));
         match ret {
             Some(ret) => {
@@ -1266,8 +1348,76 @@ impl<'c, 'a> Body<'c, 'a> {
                 self.expr(&closure.body);
             }
         }
-        self.in_closure = outer;
+        (self.in_closure, self.in_branch) = outer;
         self.scopes.pop();
+    }
+
+    /// Reports `what`, a `return` or a `?`, in a branch of a `fork for`,
+    /// where it would leave one branch while the others run.
+    fn leaves_branch(&mut self, span: Span, what: &str) {
+        if self.in_branch {
+            self.error(
+                Diagnostic::new(
+                    format!("{what} cannot leave a branch of a `fork`"),
+                    span,
+                    "this would leave one branch while the others run",
+                )
+                .with_help(
+                    "give each branch a value, such as a `Result`, and handle the values after \
+                     the `fork`, where every branch has finished",
+                ),
+            );
+        }
+    }
+
+    /// Reports a change, in a branch of a `fork for`, to `target`: a
+    /// variable from outside the branch, or a field of `self`, which every
+    /// branch can see. `method` is the method that changes it, if any.
+    fn shared_change(&mut self, target: &Expr, method: Option<&Ident>) {
+        let Some(first) = self.fork else {
+            return;
+        };
+        let mut root = target;
+        loop {
+            match &root.kind {
+                ExprKind::Field { base, .. } | ExprKind::Index { base, .. } => root = base,
+                ExprKind::Paren(inner) | ExprKind::Unary { operand: inner, .. } => root = inner,
+                _ => break,
+            }
+        }
+        let ExprKind::Path(path) = &root.kind else {
+            return;
+        };
+        let [segment] = path.segments.as_slice() else {
+            return;
+        };
+        let name = &segment.ident.name;
+        let shared = name == "self"
+            || self.scopes[..first]
+                .iter()
+                .any(|scope| scope.iter().any(|l| &l.name == name))
+                && !self.scopes[first..]
+                    .iter()
+                    .any(|scope| scope.iter().any(|l| &l.name == name));
+        if !shared {
+            return;
+        }
+        let what = self.text_of_expr(target);
+        let (span, label) = match method {
+            Some(method) => (method.span, format!("`{}` changes `{what}`", method.name)),
+            None => (target.span, "this changes it".to_string()),
+        };
+        self.error(
+            Diagnostic::new(
+                format!("a branch of a `fork` cannot change `{what}`, which every branch sees"),
+                span,
+                label,
+            )
+            .with_help(
+                "the branches run concurrently, so none may change what the others can see: give \
+                 each branch a value, and gather the values after the `fork`",
+            ),
+        );
     }
 
     fn await_expr(&mut self, span: Span, inner: &Expr) -> Ty {
@@ -1475,6 +1625,9 @@ impl<'c, 'a> Body<'c, 'a> {
                 true,
             ),
             other => {
+                if CHANGING_METHODS.contains(&method.name.as_str()) {
+                    self.shared_change(receiver, Some(method));
+                }
                 self.args(args);
                 if method.name == "clone"
                     && let Ty::Data {
@@ -1680,6 +1833,22 @@ impl<'c, 'a> Body<'c, 'a> {
                     }
                 }
             }
+        }
+        if changes && self.fork.is_some() {
+            self.error(
+                Diagnostic::new(
+                    format!(
+                        "a branch of a `fork` cannot change a table, and `{}` does",
+                        method.name
+                    ),
+                    method.span,
+                    "every branch sees this table",
+                )
+                .with_help(
+                    "the branches run concurrently, so none may change what the others can see: \
+                     give each branch a value, and write them to the table after the `fork`",
+                ),
+            );
         }
         if changes && self.receiver().is_some_and(|r| !r.mutable) {
             self.error(

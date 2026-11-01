@@ -1,0 +1,21 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:16:44-16:48
+no step uses `<name>`
+this input is generated and never used
+help: write `<name>` in a step where the value goes, or remove the input
+
+requirements/main.req.inset:16:50-16:56
+a property cannot generate a `String` yet
+not a type `for all` generates
+help: an input is an integer type other than `u128`, `bool` or `Decimal`, whose text in a step is the value as Rust writes it
+
+requirements/main.req.inset:16:58-16:66
+`quantity` is an input twice
+each input has a name of its own
+
+requirements/main.req.inset:16:72-16:78
+no step uses `<unused>`
+this input is generated and never used
+help: write `<unused>` in a step where the value goes, or remove the input

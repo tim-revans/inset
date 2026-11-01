@@ -17,24 +17,26 @@
 //! to check that it never panics.
 //!
 //! The grammar covers the part of "Grammar of the used subset" in
-//! `docs/language/syntax.md` that the Stock tracker's code needs, built so
-//! the rest slots in: apps, components with fields, `start` statements,
-//! `failure` blocks and functions, route, message, `derive` and `status`
-//! attributes, `struct`, `enum`, `mod` and `use`, and Rust's operators,
-//! calls, closures, ranges, `let`, `if`, `if let`, `match`, `for` and
-//! `while`. It also reads `move` in a message's arguments and `via` in a
-//! `when` step, which the checks in `inset-check` need. In requirements it
-//! reads `given`, `when` and `then` steps, with the facts and checks about
-//! capabilities, whose values and conditions are Rust expressions read by
-//! the code dialect's parser, and `examples` tables. A requirement with a
-//! table has its steps read once for each row, from the steps' text with
-//! the row's cells in place of the placeholders, and every span mapped back
-//! to the file: a span from a cell becomes its placeholder's. Other
-//! constructs in the spec, such as `fork`, `extern component` and
-//! `for all`, are reported as
-//! "not supported yet" where they are written, so an author learns it is
-//! the compiler's limit and not their mistake. They are added as the
-//! examples that use them are compiled.
+//! `docs/language/syntax.md` that the three examples need, built so the
+//! rest slots in: apps, components with fields, `start` statements,
+//! `failure` blocks and functions, `extern component`, route, message,
+//! `derive`, `status` and `rust` attributes, `struct`, `enum`, `mod` and
+//! `use`, and Rust's operators, calls, closures, ranges, `let`, `if`,
+//! `if let`, `match`, `for`, `while` and `fork for`. It also reads `move` in
+//! a message's arguments and `via` in a `when` step, which the checks in
+//! `inset-check` need. In requirements it reads `given`, `when` and `then`
+//! steps, with the facts and checks about capabilities, whose values and
+//! conditions are Rust expressions read by the code dialect's parser,
+//! `examples` tables and `for all`. A requirement with a table has its
+//! steps read once for each row, from the steps' text with the row's cells
+//! in place of the placeholders, and every span mapped back to the file: a
+//! span from a cell becomes its placeholder's. A property's steps are read
+//! the same way, once with a sample value for each input so they can be
+//! checked, and again by the test runner with each generated case
+//! ([`read_property_case`]). Other constructs in the spec, such as
+//! `fork { ... }`, are reported as "not supported yet" where they are
+//! written, so an author learns it is the compiler's limit and not their
+//! mistake. They are added as the examples that use them are compiled.
 //!
 //! Spans are byte offsets into one file's source, or, from
 //! [`parse_code_at`], into a whole program's, where each file starts at an
@@ -119,6 +121,27 @@ fn parse_step_value(
     row: Option<&requirements::RowMap>,
 ) -> (Option<ast::Expr>, Vec<Diagnostic>) {
     parse_step_part(source, span, row, |parser| parser.parse_step_value())
+}
+
+/// Parses a property's inputs and condition, after `for all`, as
+/// [`parse_step_fact`] parses a fact.
+fn parse_for_all(source: &str, span: Span) -> (Option<parser::ForAllParts>, Vec<Diagnostic>) {
+    parse_step_part(source, span, None, |parser| parser.parse_for_all())
+}
+
+/// A property's steps read with one case's values in place of its inputs'
+/// placeholders, as the test runner reads them for each generated case.
+/// `source` is the requirements file the property is in, `steps` is
+/// [`ast::ForAll::steps`], and `values` are the text of each input's value,
+/// in the order of `names`. The spans are the file's, with a span from a
+/// value mapped to its placeholder.
+pub fn read_property_case(
+    source: &str,
+    steps: Span,
+    names: &[String],
+    values: &[String],
+) -> (Vec<ast::Step>, Vec<Diagnostic>) {
+    requirements::read_property_case(source, steps, names, values)
 }
 
 fn parse_step_part<T>(

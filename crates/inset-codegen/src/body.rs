@@ -416,6 +416,15 @@ impl Emitter<'_> {
                 let body = self.block(body);
                 quote!(for #p in #iter #body)
             }
+            ExprKind::Fork {
+                pattern: p,
+                iter,
+                body: block,
+            } => {
+                let iter = self.expr(iter);
+                let body = self.block(block);
+                fork(pattern(p), iter, body, awaits(block))
+            }
             ExprKind::While { cond, body } => {
                 let cond = self.expr(cond);
                 let body = self.block(body);
@@ -548,4 +557,85 @@ fn compound(op: BinaryOp) -> TokenStream {
         BinaryOp::Shr => quote!(>>=),
         _ => unreachable!("no compound assignment for {op:?}"),
     }
+}
+
+/// A `fork for`: each branch a closure, which is `Fn` so that no branch can
+/// change what the others see, and async when the branches await.
+pub(crate) fn fork(
+    pattern: TokenStream,
+    iter: TokenStream,
+    body: TokenStream,
+    awaits: bool,
+) -> TokenStream {
+    if awaits {
+        quote!(::inset_runtime::fork::each_async(#iter, async |#pattern| #body).await)
+    } else {
+        quote!(::inset_runtime::fork::each(#iter, |#pattern| #body))
+    }
+}
+
+/// Whether a block awaits anything outside a closure.
+pub(crate) fn awaits(block: &Block) -> bool {
+    fn expr(e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::Await(_) => true,
+            ExprKind::Closure(_) | ExprKind::Lit(_) | ExprKind::Path(_) | ExprKind::Move(_) => {
+                false
+            }
+            ExprKind::Call { callee, args } => expr(callee) || args.iter().any(expr),
+            ExprKind::MethodCall { receiver, args, .. } => expr(receiver) || args.iter().any(expr),
+            ExprKind::Macro { args, .. } | ExprKind::Tuple(args) | ExprKind::Array(args) => {
+                args.iter().any(expr)
+            }
+            ExprKind::Field { base, .. }
+            | ExprKind::Unary { operand: base, .. }
+            | ExprKind::Ref { operand: base, .. }
+            | ExprKind::Cast { expr: base, .. }
+            | ExprKind::Paren(base)
+            | ExprKind::Try(base)
+            | ExprKind::Send(base)
+            | ExprKind::Let { expr: base, .. } => expr(base),
+            ExprKind::Index { base, index: other }
+            | ExprKind::Binary {
+                lhs: base,
+                rhs: other,
+                ..
+            }
+            | ExprKind::Assign {
+                lhs: base,
+                rhs: other,
+                ..
+            } => expr(base) || expr(other),
+            ExprKind::Struct { fields, rest, .. } => {
+                fields.iter().filter_map(|f| f.value.as_ref()).any(expr)
+                    || rest.as_deref().is_some_and(expr)
+            }
+            ExprKind::Range { start, end, .. } => {
+                start.as_deref().is_some_and(expr) || end.as_deref().is_some_and(expr)
+            }
+            ExprKind::Return(value) => value.as_deref().is_some_and(expr),
+            ExprKind::Block(b) => awaits(b),
+            ExprKind::If {
+                cond,
+                then_block,
+                else_branch,
+            } => expr(cond) || awaits(then_block) || else_branch.as_deref().is_some_and(expr),
+            ExprKind::Match { scrutinee, arms } => {
+                expr(scrutinee)
+                    || arms
+                        .iter()
+                        .any(|a| a.guard.as_ref().is_some_and(expr) || expr(&a.body))
+            }
+            ExprKind::For { iter, body, .. } | ExprKind::Fork { iter, body, .. } => {
+                expr(iter) || awaits(body)
+            }
+            ExprKind::While { cond, body } => expr(cond) || awaits(body),
+        }
+    }
+    block.stmts.iter().any(|stmt| match stmt {
+        Stmt::Let {
+            init, else_block, ..
+        } => init.as_ref().is_some_and(expr) || else_block.as_ref().is_some_and(awaits),
+        Stmt::Expr { expr: e, .. } => expr(e),
+    })
 }

@@ -42,6 +42,8 @@ cargo xtask ci                 # format check, clippy, tests, editor tests, fron
 cargo xtask editor             # package the VS Code extension
 cargo install --path crates/inset-cli   # put `inset` on PATH, for the editor
 cargo xtask e2e hello          # build Hello HTTP, serve it and request a greeting
+cargo xtask e2e stock-tracker  # build the Stock tracker, serve it, stock an item and ship it
+cargo xtask e2e csv-import     # build CSV import, serve it and post price lists to it
 ```
 
 Or open the repo in its dev container (`.devcontainer/`), which any [Dev Container](https://containers.dev) client supports. In VS Code, a new dev container installs the `inset` command and the Inset extension, so Inset files are highlighted and checked from the start. CI runs `cargo xtask ci` in the same image.

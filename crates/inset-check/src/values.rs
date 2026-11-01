@@ -105,6 +105,9 @@ pub(crate) struct Values<'c, 'a> {
     pub diagnostics: Vec<Diagnostic>,
     /// Each name resolved to the program's declaration of it.
     pub refs: Vec<(Span, Span)>,
+    /// A property's inputs, by name, when typing its `where` condition,
+    /// which reads them instead of a capability.
+    pub inputs: Vec<(Ident, Ty)>,
 }
 
 impl Values<'_, '_> {
@@ -491,7 +494,19 @@ impl Values<'_, '_> {
 
     /// Types a check, which must be a `bool`.
     pub(crate) fn check(&mut self, e: &Expr) -> Option<Check> {
-        if !reads_a_table(e) {
+        if !self.inputs.is_empty() {
+            if !self.reads(e) {
+                self.error(
+                    Diagnostic::new(
+                        "this condition reads no input",
+                        e.span,
+                        "a `where` condition limits the inputs `for all` generates",
+                    )
+                    .with_help("compare an input with something, such as `net >= dec!(0)`"),
+                );
+                return None;
+            }
+        } else if !reads_a_table(e) {
             self.error(
                 Diagnostic::new(
                     "this check reads no capability",
@@ -521,6 +536,47 @@ impl Values<'_, '_> {
     fn typed(&mut self, e: &Expr) -> Option<(Check, Ty)> {
         match &e.kind {
             ExprKind::Paren(inner) => self.typed(inner),
+            ExprKind::Path(path) if !self.inputs.is_empty() => {
+                let input = match path.segments.as_slice() {
+                    [only] => self
+                        .inputs
+                        .iter()
+                        .position(|(name, _)| name.name == only.ident.name),
+                    _ => None,
+                };
+                let Some(index) = input else {
+                    self.unsupported(e.span);
+                    return None;
+                };
+                Some((Check::Input(index), self.inputs[index].1.clone()))
+            }
+            ExprKind::Index { .. } if !self.inputs.is_empty() => {
+                self.error(
+                    Diagnostic::new(
+                        "a `where` condition cannot read a capability",
+                        e.span,
+                        "this reads a table",
+                    )
+                    .with_help("a `where` condition limits the inputs, before the steps run"),
+                );
+                None
+            }
+            ExprKind::MethodCall {
+                receiver,
+                method,
+                args,
+            } if args.is_empty() && method.ident.name == "scale" => {
+                let (base, ty) = self.typed(receiver)?;
+                if !matches!(ty, Ty::Decimal | Ty::Unknown) {
+                    self.error(Diagnostic::new(
+                        format!("{} has no `scale`", a(&ty)),
+                        method.ident.span,
+                        "only a `Decimal` has a scale",
+                    ));
+                    return None;
+                }
+                Some((Check::Scale(Box::new(base)), Ty::Int(Some("u32"))))
+            }
             ExprKind::Index { base, index } => {
                 let grant = match &base.kind {
                     ExprKind::Path(p) if p.segments.len() == 1 => p.segments[0].ident.clone(),
@@ -659,7 +715,7 @@ impl Values<'_, '_> {
             return Some((Check::Binary(op, Box::new(lhs?), Box::new(rhs?)), Ty::Bool));
         }
         // The side that reads a table gives the other side its type.
-        let (l, r, ty) = if reads_a_table(lhs) {
+        let (l, r, ty) = if self.reads(lhs) {
             let (l, ty) = self.typed(lhs)?;
             let r = self.operand(rhs, &ty)?;
             (l, r, ty)
@@ -717,7 +773,7 @@ impl Values<'_, '_> {
 
     /// One side of an operator: what it reads, or a value of the other side's type.
     fn operand(&mut self, e: &Expr, ty: &Ty) -> Option<Check> {
-        if reads_a_table(e) {
+        if self.reads(e) {
             let (check, found) = self.typed(e)?;
             if !crate::types::fits(ty, &found) {
                 self.error(Diagnostic::new(
@@ -819,7 +875,40 @@ impl Values<'_, '_> {
         }
     }
 
+    /// Whether `e` reads what a check is about: a table, or, in a `where`
+    /// condition, an input.
+    fn reads(&self, e: &Expr) -> bool {
+        if self.inputs.is_empty() {
+            return reads_a_table(e);
+        }
+        match &e.kind {
+            ExprKind::Path(path) => matches!(path.segments.as_slice(), [only]
+                if self.inputs.iter().any(|(name, _)| name.name == only.ident.name)),
+            ExprKind::Index { .. } => true,
+            ExprKind::Paren(inner) | ExprKind::Field { base: inner, .. } => self.reads(inner),
+            ExprKind::MethodCall { receiver, .. } => self.reads(receiver),
+            ExprKind::Unary { operand, .. } => self.reads(operand),
+            ExprKind::Binary { lhs, rhs, .. } => self.reads(lhs) || self.reads(rhs),
+            _ => false,
+        }
+    }
+
     fn unsupported(&mut self, span: Span) {
+        if !self.inputs.is_empty() {
+            self.error(
+                Diagnostic::new(
+                    "this is not supported in a `where` condition yet",
+                    span,
+                    "the checker does not handle this yet",
+                )
+                .with_help(
+                    "a `where` condition compares the inputs, `.len()`, `.is_empty()` and a \
+                     `Decimal`'s `.scale()` with values, using `==`, `<` and the like, `&&`, `||` \
+                     and `!`",
+                ),
+            );
+            return;
+        }
         self.error(
             Diagnostic::new(
                 "this is not supported in a check yet",

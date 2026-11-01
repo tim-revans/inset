@@ -32,6 +32,11 @@ fn copy(dir: &str, name: &str) -> PathBuf {
             copy_dir(&from, &to.join(sub));
         }
     }
+    // The exact crates an external component builds with.
+    let lock = repo().join(dir).join("inset.lock");
+    if lock.is_file() {
+        std::fs::copy(&lock, to.join("inset.lock")).unwrap();
+    }
     to
 }
 
@@ -196,6 +201,51 @@ fn the_stock_tracker_meets_its_requirements_row_by_row() {
     assert!(text.status.success(), "{}{}", stdout(&text), stderr(&text));
     insta::assert_snapshot!("stock_tracker_text", stdout(&text));
     insta::assert_snapshot!("stock_tracker_json", stdout(&json));
+}
+
+/// CSV import meets every requirement, its properties with a fixed number
+/// of generated cases, so the report is the same every run.
+#[test]
+fn csv_import_meets_its_requirements_and_properties() {
+    let dir = copy("examples/csv-import", "csv-import");
+    let text = run(&mut inset(&["test"], &dir));
+    let json = run(&mut inset(&["test", "--json"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(text.status.success(), "{}{}", stdout(&text), stderr(&text));
+    insta::assert_snapshot!("csv_import_text", stdout(&text));
+    insta::assert_snapshot!("csv_import_json", stdout(&json));
+}
+
+/// A copy of CSV import whose `add_vat` takes 20% off instead of adding
+/// it: "The gross price is never below the net price" fails, and reports
+/// the smallest net price it found that breaks it.
+#[test]
+fn a_property_that_fails_reports_a_small_counterexample() {
+    let dir = copy("examples/csv-import", "broken-csv-import");
+    let path = dir.join("src/main.inset");
+    let source = std::fs::read_to_string(&path).unwrap();
+    let broken = source.replace(
+        "(net * dec!(1.20)).round_dp(2)",
+        "(net * dec!(0.80)).round_dp(2)",
+    );
+    assert_ne!(source, broken);
+    std::fs::write(&path, broken).unwrap();
+    let text = run(&mut inset(&["test"], &dir));
+    let json = run(&mut inset(&["test", "--json"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(text.status.code(), Some(1), "{}", stderr(&text));
+    insta::assert_snapshot!("broken_csv_import_text", stdout(&text));
+    insta::assert_snapshot!("broken_csv_import_json", stdout(&json));
+}
+
+/// `fork for` in handlers and an algorithm, and a property over an integer.
+#[test]
+fn forks_meet_their_requirements() {
+    let dir = copy("crates/inset-host/tests/programs/fork", "fork");
+    let out = run(&mut inset(&["test"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(out.status.success(), "{}{}", stdout(&out), stderr(&out));
+    insta::assert_snapshot!("fork_text", stdout(&out));
 }
 
 /// A copy of the Stock tracker that reorders only below the reorder level,

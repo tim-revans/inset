@@ -42,6 +42,7 @@ RequirementsFile {
                 },
             ],
             examples: None,
+            for_all: None,
             span: 0..157,
         },
     ],

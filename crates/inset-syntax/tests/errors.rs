@@ -493,3 +493,49 @@ extern component Reader {
 "#,
     );
 }
+
+/// `fork { a, b }` is Draft, and `fork` needs `for` after it otherwise.
+#[test]
+fn fork_of_expressions() {
+    code(
+        "fork_of_expressions",
+        r#"fn both(a: u32, b: u32) -> (u32, u32) {
+    let pair = fork { a, b };
+    let other = fork while a > b { a };
+    pair
+}
+"#,
+    );
+}
+
+/// A property's placeholders name its inputs, its inputs come before its
+/// steps, and it has no examples table.
+#[test]
+fn property_mistakes() {
+    requirements(
+        "property_mistakes",
+        r#"requirement "Any name is greeted"
+    for all n: u32 where n > 0
+    when HelloHttp receives GET /hello/<n>
+    then HelloHttp replies OK with <greeting>
+
+requirement "Greetings are polite"
+    when HelloHttp receives GET /hello/Ada
+    for all n: u32
+    then HelloHttp replies OK with "Hello, Ada!"
+
+requirement "Every number is greeted"
+    for all n: u32
+    when HelloHttp receives GET /hello/<n>
+    then HelloHttp replies OK with "Hello, <n>!"
+    examples
+    | n |
+    | 1 |
+
+requirement "Inputs are typed"
+    for all n u32
+    when HelloHttp receives GET /hello/<n>
+    then HelloHttp replies OK with "Hello, <n>!"
+"#,
+    );
+}

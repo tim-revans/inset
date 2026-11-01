@@ -9,7 +9,7 @@ mod expr;
 mod fact;
 mod items;
 
-pub(crate) use fact::StepFact;
+pub(crate) use fact::{ForAllParts, StepFact};
 
 use crate::lexer::{Keyword as Kw, Punct as P, Token, TokenKind as T};
 use crate::{Diagnostic, Span};

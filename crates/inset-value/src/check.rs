@@ -52,6 +52,10 @@ pub enum Check {
     Len(Box<Check>),
     /// `.is_empty()` of text or a collection.
     IsEmpty(Box<Check>),
+    /// A property's input, by its index, in a `where` condition.
+    Input(usize),
+    /// `.scale()` of a `Decimal`: how many digits it has after the point.
+    Scale(Box<Check>),
 }
 
 /// Why a check could not be evaluated.
@@ -68,9 +72,33 @@ impl Check {
     /// Evaluates the check. `read` gives the stored value a table holds
     /// under a stored key.
     pub fn eval(&self, read: &mut Lookup<'_>, types: &Types) -> Result<Value, CheckError> {
+        self.eval_with(read, types, &[])
+    }
+
+    /// Evaluates a property's `where` condition, with `inputs` the value of
+    /// each input, which reads no table.
+    pub fn eval_inputs(&self, inputs: &[Value], types: &Types) -> Result<Value, CheckError> {
+        self.eval_with(&mut |_, _| None, types, inputs)
+    }
+
+    fn eval_with(
+        &self,
+        read: &mut Lookup<'_>,
+        types: &Types,
+        inputs: &[Value],
+    ) -> Result<Value, CheckError> {
         let failed = |message: String| CheckError::Failed(message);
+        let eval = |check: &Check, read: &mut Lookup<'_>| check.eval_with(read, types, inputs);
         Ok(match self {
             Check::Value(value) => value.clone(),
+            Check::Input(index) => inputs
+                .get(*index)
+                .cloned()
+                .ok_or_else(|| failed(format!("no input {index}")))?,
+            Check::Scale(inner) => match eval(inner, read)? {
+                Value::Decimal(d) => Value::Int(i128::from(d.scale())),
+                other => return Err(failed(format!("{other} has no scale"))),
+            },
             Check::Entry {
                 grant,
                 key,
@@ -91,27 +119,27 @@ impl Check {
                 })?
             }
             Check::Field(base, name) => {
-                let base = base.eval(read, types)?;
+                let base = eval(base, read)?;
                 base.field(name)
                     .cloned()
                     .ok_or_else(|| failed(format!("{base} has no field `{name}`")))?
             }
-            Check::TupleField(base, index) => match base.eval(read, types)? {
+            Check::TupleField(base, index) => match eval(base, read)? {
                 Value::Tuple(mut items) if *index < items.len() => items.swap_remove(*index),
                 other => return Err(failed(format!("{other} has no field `{index}`"))),
             },
-            Check::Not(inner) => match inner.eval(read, types)? {
+            Check::Not(inner) => match eval(inner, read)? {
                 Value::Bool(b) => Value::Bool(!b),
                 other => return Err(failed(format!("`!` needs a bool, not {other}"))),
             },
-            Check::Neg(inner) => match inner.eval(read, types)? {
+            Check::Neg(inner) => match eval(inner, read)? {
                 Value::Int(n) => Value::Int(-n),
                 Value::Float(x) => Value::Float(-x),
                 Value::Decimal(d) => Value::Decimal(-d),
                 other => return Err(failed(format!("`-` needs a number, not {other}"))),
             },
             Check::Len(inner) | Check::IsEmpty(inner) => {
-                let len = match inner.eval(read, types)? {
+                let len = match eval(inner, read)? {
                     Value::String(s) => s.len(),
                     Value::List(items) | Value::Set(items) => items.len(),
                     Value::Map(entries) => entries.len(),
@@ -123,19 +151,19 @@ impl Check {
                     Value::Bool(len == 0)
                 }
             }
-            Check::Binary(Op::And, lhs, rhs) => match lhs.eval(read, types)? {
+            Check::Binary(Op::And, lhs, rhs) => match eval(lhs, read)? {
                 Value::Bool(false) => Value::Bool(false),
-                Value::Bool(true) => rhs.eval(read, types)?,
+                Value::Bool(true) => eval(rhs, read)?,
                 other => return Err(failed(format!("`&&` needs a bool, not {other}"))),
             },
-            Check::Binary(Op::Or, lhs, rhs) => match lhs.eval(read, types)? {
+            Check::Binary(Op::Or, lhs, rhs) => match eval(lhs, read)? {
                 Value::Bool(true) => Value::Bool(true),
-                Value::Bool(false) => rhs.eval(read, types)?,
+                Value::Bool(false) => eval(rhs, read)?,
                 other => return Err(failed(format!("`||` needs a bool, not {other}"))),
             },
             Check::Binary(op, lhs, rhs) => {
-                let lhs = lhs.eval(read, types)?;
-                let rhs = rhs.eval(read, types)?;
+                let lhs = eval(lhs, read)?;
+                let rhs = eval(rhs, read)?;
                 binary(*op, &lhs, &rhs).map_err(failed)?
             }
         })

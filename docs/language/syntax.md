@@ -1,6 +1,6 @@
 # Inset syntax
 
-The living reference for Inset's syntax. It is a draft: the parser in [`crates/inset-syntax/`](../../crates/inset-syntax/) and the checker in [`crates/inset-check/`](../../crates/inset-check/) cover everything Hello HTTP and the Stock tracker use: components that start children and send them messages, outlets, `failure` blocks that roll back and restart, modules, structs and enums, error enums, `match` and loops, JSON bodies and query parameters, a front end, and requirements that set up and check what a table holds, with `examples` tables. They report the rest as not supported yet. The syntax changes as each example program is compiled.
+The living reference for Inset's syntax. It is a draft: the parser in [`crates/inset-syntax/`](../../crates/inset-syntax/) and the checker in [`crates/inset-check/`](../../crates/inset-check/) cover everything the three examples use: components that start children and send them messages, outlets, `failure` blocks that roll back and restart, modules, structs and enums, error enums, `match` and loops, `fork for`, JSON bodies and query parameters, a front end, external components written in Rust, and requirements that set up and check what a table holds, with `examples` tables and properties. They report the rest as not supported yet. The syntax changes as each example program is compiled.
 
 Each construct is marked with its status:
 
@@ -528,7 +528,7 @@ fn add_vat(net: Decimal) -> Decimal {
 
 ### Structured concurrency
 
-**Status:** `fork for` is Used. `fork { ... }` is Draft.
+**Status:** `fork for` is Used. `fork { ... }` is Draft: the parser reports it as not supported yet.
 
 `fork` runs work concurrently and waits for all of it to finish before going on. The fork and its join appear on the flowchart.
 
@@ -540,8 +540,15 @@ let results = fork for row in rows {
 
 - `fork for pattern in collection { body }` runs the body once for each element, concurrently, and evaluates to a `Vec` of the body's values in the order of the collection.
 - `fork { a, b, ... }` runs each expression concurrently and evaluates to a tuple of their values. *(Draft: first needed by a handler that awaits two children at once.)*
-- The branches follow Rust's rules for scoped threads: they may share borrowed data, but none may change data the others can see.
-- `fork` can be used in algorithms and in handlers. In a handler, its branches may await messages.
+- The branches follow Rust's rules for scoped threads: they may share borrowed data, but none may change data the others can see. The compiler reports a branch that assigns to, or takes `&mut` of, a variable from outside the branch or a field of `self`, one that calls a method such as `push` or `insert` on one, and one that calls a table's `insert` or `remove`. Each branch gives a value instead, and the code after the `fork` gathers them.
+- A branch cannot `return` or use `?`, which would leave one branch while the others run. A branch gives a `Result` or an `Option` as its value, as `parse_row` does, and the code after the `fork` handles them, where every branch has finished.
+- `fork` can be used in algorithms and in handlers. In a handler, its branches may await messages and capability calls, and may `send`.
+- `fork for` is an expression, so a statement that is only a `fork for` ends with `;`, unless it is the block's value.
+- A program runs on one thread (see [`runtime.md`](runtime.md#the-executor)). Branches that wait for nothing run one after another, in order. Branches that await run concurrently on that thread: each runs until it waits, then the next starts, so every message the branches send is queued in the order of the collection, and the program behaves the same every time.
+
+*Why branches may not change shared data:* every branch is meant to see the same world, so the order in which they run cannot change the result. A reviewer can then read the body once, as the flowchart draws it, and know it holds for every element. The compiler emits each branch as a closure that Rust allows to read, but not to change, what it captures, so rustc would refuse such a branch too.
+
+*Why branches cannot `return`:* a `return` from one branch would have to decide what happens to the others, which may have sent messages already. Giving each branch a value keeps the join in one place, and lets the code after the `fork` report every failure rather than the first, as CSV import reports every invalid row.
 
 *Why `fork` is a keyword:* Rust's structured concurrency, such as `std::thread::scope` and `join!`, uses closures and macros, which Inset leaves out. Concurrency is also what a reviewer most needs to see on a flowchart, so it gets syntax that looks new. `fork for` reads like the `for` loop it parallelises.
 
@@ -733,7 +740,7 @@ requirement "Stock that falls to its reorder level or below is reordered up to i
 
 ### Properties
 
-A rule that holds for every input is written with `for all` before the steps, and the compiler generates the inputs. The `where` condition limits them. Both are Rust, so they follow Rust's typing, as in `dec!(0)`. The steps use the generated value as the placeholder `<name>`, with the same replacement as in examples, using the value's `Display` text. In a check, the placeholder is the value itself.
+A rule that holds for every input is written with `for all` before the steps, and the compiler generates the inputs. The `where` condition limits them. Both are Rust, so they follow Rust's typing, as in `dec!(0)`. The steps use the generated value as the placeholder `<name>`, with the same replacement as in examples, using the value's `Display` text. That text is the value as Rust writes it, so in a check the placeholder is the value itself.
 
 ```inset-req
 requirement "The gross price is never below the net price"
@@ -748,8 +755,20 @@ requirement "The gross price is never below the net price"
     and products["bolt-m6"].gross >= <net>
 ```
 
-- `for all a: A, b: B where ...` generates several inputs. *(Draft.)*
-- A property that fails reports the smallest input it found that breaks it.
+- An input is an integer type other than `u128`, `bool` or `Decimal`. *(Not supported yet: `String`, `char`, floats and the program's own types.)*
+- `for all a: A, b: B where ...` generates several inputs, each named once. *(Draft: implemented and tested, but no example needs it yet.)*
+- Every input is used as a placeholder in a step. Only `<name>` where `name` is an input counts as a placeholder, as for an examples table.
+- The `where` condition compares inputs with values, using `==`, `<` and the like, `&&`, `||`, `!` and arithmetic, and may call `.scale()` on a `Decimal`. It reads no capability: it limits the inputs before the steps run. *(Not supported yet: any other method.)*
+- A property cannot have an examples table.
+- The steps are checked once with a sample value for each input, such as `0` or `0.00`, so a mistake in them is a compile error. The note on an error at a placeholder names the sample.
+- `inset test` runs each property for 100 generated cases that meet the `where` condition, each against a freshly started program. The cases come from a seed fixed for each property, made from its sentence, so the report is the same every time and only changes when the sentence does.
+- A property that fails reports the smallest input it found that breaks it, after shrinking the first failing case towards zero: `fails for net = 1, the smallest failing input found`, then the failing step as for any requirement. The JSON report gives the input as `inputs`, with each input's `name` and `value`, and every property's `cases`.
+- A property passes with `held in 100 cases`. One whose `where` condition leaves out too many of the generated values fails, saying how many cases held.
+- A property is credited with what any of its cases reached, as an examples table is with its rows.
+
+*Why only these input types:* a placeholder is replaced by text before the step is read. An integer, a `bool` or a `Decimal` reads back as itself anywhere in a step: in a path, in a body, or as a value in a check. A `String` would need quotes in a value and none in a path, so its text would depend on where it is used. That waits for an example that needs one.
+
+*Why a fixed seed:* a requirement test that passes once and fails the next time would teach the reviewer to ignore failures. The seed changes with the sentence, so two properties do not test the same values, and a new seed is chosen only by rewording the requirement, which the reviewer sees.
 
 ## Requirements and coverage
 
@@ -856,8 +875,8 @@ Requirements dialect (`*.req.inset`):
 
 ```
 file         = { requirement } ;
-requirement  = "requirement" STRING NEWLINE INDENT [ for_all ] step { step } [ examples ] DEDENT ;
-for_all      = "for" "all" ident ":" type [ "where" EXPR ] NEWLINE ;
+requirement  = "requirement" STRING NEWLINE INDENT ( for_all step { step } | step { step } [ examples ] ) DEDENT ;
+for_all      = "for" "all" ident ":" type { "," ident ":" type } [ "where" EXPR ] NEWLINE ;
 
 step         = ( "given" fact
                | "when" Ident "receives" HTTP_METHOD path [ "via" ident ] [ "with" body ]

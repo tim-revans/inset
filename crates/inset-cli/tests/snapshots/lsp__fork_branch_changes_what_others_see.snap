@@ -1,0 +1,22 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:39:24-39:50
+`?` cannot leave a branch of a `fork`
+this would leave one branch while the others run
+help: give each branch a value, such as a `Result`, and handle the values after the `fork`, where every branch has finished
+
+src/main.inset:40:13-40:18
+a branch of a `fork` cannot change `total`, which every branch sees
+this changes it
+help: the branches run concurrently, so none may change what the others can see: give each branch a value, and gather the values after the `fork`
+
+src/main.inset:41:18-41:22
+a branch of a `fork` cannot change `seen`, which every branch sees
+`push` changes `seen`
+help: the branches run concurrently, so none may change what the others can see: give each branch a value, and gather the values after the `fork`
+
+src/main.inset:44:24-44:30
+a branch of a `fork` cannot change a table, and `insert` does
+every branch sees this table
+help: the branches run concurrently, so none may change what the others can see: give each branch a value, and write them to the table after the `fork`

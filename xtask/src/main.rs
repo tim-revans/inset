@@ -22,7 +22,8 @@ tasks:
   editor-test       run the VS Code extension's integration tests alone
   contract          check the Stock tracker's front end against its TypeScript contract
   e2e hello         build Hello HTTP from its source, serve it and request a greeting
-  e2e stock-tracker build the Stock tracker, serve it, stock an item as JSON, and ship it";
+  e2e stock-tracker build the Stock tracker, serve it, stock an item as JSON, and ship it
+  e2e csv-import    build CSV import, serve it, and import a valid and an invalid price list";
 
 fn main() -> ExitCode {
     let task = std::env::args().nth(1);
@@ -34,6 +35,7 @@ fn main() -> ExitCode {
         Some("e2e") => match std::env::args().nth(2).as_deref() {
             Some("hello") => hello(),
             Some("stock-tracker") => stock_tracker(),
+            Some("csv-import") => csv_import(),
             _ => {
                 eprintln!("{USAGE}");
                 return ExitCode::FAILURE;
@@ -241,7 +243,6 @@ fn stock_tracker() -> Result<(), String> {
     let dir = target_dir().join("e2e-stock-tracker");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| format!("create {} ({e})", dir.display()))?;
-    let dir_text = dir.to_string_lossy();
     let page = std::fs::read_to_string(example.join("web/index.html"))
         .map_err(|e| format!("read the front end's page ({e})"))?;
     let item = r#"{"onHand": 12, "reorderLevel": 10, "targetLevel": 50}"#;
@@ -267,43 +268,100 @@ fn stock_tracker() -> Result<(), String> {
         ],
     ];
     for exchanges in exchanges {
-        let port = TcpListener::bind("127.0.0.1:0")
-            .and_then(|l| l.local_addr())
-            .map_err(|e| format!("find a free port ({e})"))?
-            .port();
-        eprintln!("xtask: inset run examples/stock-tracker --set port={port}, in {dir_text}");
-        let mut server = Command::new(&inset)
-            .arg("run")
-            .arg(&example)
-            .args(["--set", &format!("port={port}")])
-            .current_dir(&dir)
-            .spawn()
-            .map_err(|e| format!("start inset run ({e})"))?;
-        let outcome = exchanges
-            .iter()
-            .try_for_each(|(method, path, body, expected)| {
-                let reply = request(port, method, path, body)?;
-                let (status, text) = expected.split_once('|').unwrap_or((expected, ""));
-                let text = text.replace("\\n", "\n");
-                eprintln!(
-                    "xtask: {method} {path} {body:?} replied {:?}",
-                    reply.lines().next()
-                );
-                if reply.starts_with(&format!("HTTP/1.1 {status}\r\n"))
-                    && reply.ends_with(&format!("\r\n\r\n{text}"))
-                {
-                    Ok(())
-                } else {
-                    Err(format!(
-                        "e2e stock-tracker: {method} {path} expected {expected:?}, got:\n{reply}"
-                    ))
-                }
-            });
-        let _ = server.kill();
-        let _ = server.wait();
-        outcome?;
+        serve(&inset, &example, &dir, exchanges)?;
     }
     std::fs::remove_dir_all(&dir).map_err(|e| format!("remove {} ({e})", dir.display()))
+}
+
+/// Builds CSV import, serves it, and posts price lists to it: a valid one,
+/// one with invalid rows, and one with no products.
+fn csv_import() -> Result<(), String> {
+    cargo(&["build", "-p", "inset-cli"])?;
+    let inset = target_dir().join("debug/inset");
+    let example = repo_dir().join("examples/csv-import");
+    run(
+        Command::new(&inset).arg("build").arg(&example),
+        "inset build examples/csv-import".into(),
+    )?;
+    // The catalogue's file is a setting, resolved where `inset run` runs.
+    let dir = target_dir().join("e2e-csv-import");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create {} ({e})", dir.display()))?;
+    let valid = "sku,name,net\nbolt-m6,M6 bolt,0.10\nnut-m6,\"Nut, M6\",0.05\n";
+    let invalid = "sku,name,net\nbolt-m6,M6 bolt,0.10\nnut-m6,M6 nut\nwasher-m6,M6 washer,free\n";
+    let refused = "400 Bad Request|line 3: expected 3 fields, found 2\\nline 4: net price \"free\" is not a price\\n";
+    serve(
+        &inset,
+        &example,
+        &dir,
+        &[
+            ("POST", "/price-lists", valid, "200 OK|Products imported: 2"),
+            ("POST", "/price-lists", invalid, refused),
+            (
+                "POST",
+                "/price-lists",
+                "sku,name,net\n",
+                "200 OK|Products imported: 0",
+            ),
+            ("GET", "/price-lists", "", "404 Not Found|"),
+        ],
+    )?;
+    if !dir.join("catalogue.db").is_file() {
+        return Err("e2e csv-import: no catalogue.db was written".into());
+    }
+    std::fs::remove_dir_all(&dir).map_err(|e| format!("remove {} ({e})", dir.display()))
+}
+
+/// Runs the program in `example` with `inset run` in `dir` on a free port,
+/// sends it each request in turn, and checks each reply's status and body,
+/// written as `status|body` with `\n` for a line break.
+fn serve(
+    inset: &Path,
+    example: &Path,
+    dir: &Path,
+    exchanges: &[(&str, &str, &str, &str)],
+) -> Result<(), String> {
+    let name = example
+        .file_name()
+        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+    let port = TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr())
+        .map_err(|e| format!("find a free port ({e})"))?
+        .port();
+    eprintln!(
+        "xtask: inset run examples/{name} --set port={port}, in {}",
+        dir.display()
+    );
+    let mut server = Command::new(inset)
+        .arg("run")
+        .arg(example)
+        .args(["--set", &format!("port={port}")])
+        .current_dir(dir)
+        .spawn()
+        .map_err(|e| format!("start inset run ({e})"))?;
+    let outcome = exchanges
+        .iter()
+        .try_for_each(|(method, path, body, expected)| {
+            let reply = request(port, method, path, body)?;
+            let (status, text) = expected.split_once('|').unwrap_or((expected, ""));
+            let text = text.replace("\\n", "\n");
+            eprintln!(
+                "xtask: {method} {path} {body:?} replied {:?}",
+                reply.lines().next()
+            );
+            if reply.starts_with(&format!("HTTP/1.1 {status}\r\n"))
+                && reply.ends_with(&format!("\r\n\r\n{text}"))
+            {
+                Ok(())
+            } else {
+                Err(format!(
+                    "e2e {name}: {method} {path} expected {expected:?}, got:\n{reply}"
+                ))
+            }
+        });
+    let _ = server.kill();
+    let _ = server.wait();
+    outcome
 }
 
 /// Sends a GET request once the server is listening, and returns the raw reply.

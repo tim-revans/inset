@@ -1,6 +1,6 @@
 ---
-source: crates/inset-cli/tests/external.rs
-expression: stdout(&out)
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&text)
 ---
 pass  A valid price list is stored, with VAT added to each net price
 pass  A field in quotes may contain commas
@@ -11,5 +11,9 @@ pass  A net price that is negative, has more than two decimal places or is not a
       pass  | -1.00 |
       pass  | 0.125 |
       pass  | free  |
+pass  Any net price of zero or more, with at most two decimal places, is stored exactly
+      held in 100 cases
+pass  The gross price is never below the net price
+      held in 100 cases
 
-5 requirements passed
+7 requirements passed

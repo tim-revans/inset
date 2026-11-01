@@ -1,0 +1,28 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: a `u32` has no `scale`
+    ╭─[ requirements/main.req.inset:16:58 ]
+    │
+ 16 │     for all quantity: u32, price: Decimal where quantity.scale() <= 2 && 5 > 3 && items["bolt-m6"].on_hand > 0
+    │                                                          ──┬──  
+    │                                                            ╰──── only a `Decimal` has a scale
+────╯
+Error: this condition reads no input
+    ╭─[ requirements/main.req.inset:16:74 ]
+    │
+ 16 │     for all quantity: u32, price: Decimal where quantity.scale() <= 2 && 5 > 3 && items["bolt-m6"].on_hand > 0
+    │                                                                          ──┬──  
+    │                                                                            ╰──── a `where` condition limits the inputs `for all` generates
+    │ 
+    │ Help: compare an input with something, such as `net >= dec!(0)`
+────╯
+Error: a `where` condition cannot read a capability
+    ╭─[ requirements/main.req.inset:16:83 ]
+    │
+ 16 │     for all quantity: u32, price: Decimal where quantity.scale() <= 2 && 5 > 3 && items["bolt-m6"].on_hand > 0
+    │                                                                                   ────────┬───────  
+    │                                                                                           ╰───────── this reads a table
+    │ 
+    │ Help: a `where` condition limits the inputs, before the steps run
+────╯

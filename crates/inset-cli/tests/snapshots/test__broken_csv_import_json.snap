@@ -1,0 +1,106 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&json)
+---
+{
+  "app": "PriceImport",
+  "passed": 4,
+  "failed": 3,
+  "requirements": [
+    {
+      "sentence": "A valid price list is stored, with VAT added to each net price",
+      "file": "requirements/import.req.inset",
+      "line": 1,
+      "result": "fail",
+      "failure": {
+        "line": 10,
+        "step": "and products[\"bolt-m6\"] is Product { name: \"M6 bolt\", net: 0.10, gross: 0.12 }",
+        "message": "but products[\"bolt-m6\"] is another value\n  expected: Product { name: \"M6 bolt\", net: 0.10, gross: 0.12 }\n  actual:   Product { name: \"M6 bolt\", net: 0.10, gross: 0.08 }",
+        "expected": "Product { name: \"M6 bolt\", net: 0.10, gross: 0.12 }",
+        "actual": "Product { name: \"M6 bolt\", net: 0.10, gross: 0.08 }"
+      }
+    },
+    {
+      "sentence": "A field in quotes may contain commas",
+      "file": "requirements/import.req.inset",
+      "line": 13,
+      "result": "fail",
+      "failure": {
+        "line": 21,
+        "step": "and products[\"bolt-m6\"] is Product { name: \"Bolt, M6\", net: 0.10, gross: 0.12 }",
+        "message": "but products[\"bolt-m6\"] is another value\n  expected: Product { name: \"Bolt, M6\", net: 0.10, gross: 0.12 }\n  actual:   Product { name: \"Bolt, M6\", net: 0.10, gross: 0.08 }",
+        "expected": "Product { name: \"Bolt, M6\", net: 0.10, gross: 0.12 }",
+        "actual": "Product { name: \"Bolt, M6\", net: 0.10, gross: 0.08 }"
+      }
+    },
+    {
+      "sentence": "A price list with no products is accepted and stores nothing",
+      "file": "requirements/import.req.inset",
+      "line": 23,
+      "result": "pass"
+    },
+    {
+      "sentence": "A price list with any invalid row is refused whole, naming each invalid line",
+      "file": "requirements/import.req.inset",
+      "line": 29,
+      "result": "pass"
+    },
+    {
+      "sentence": "A net price that is negative, has more than two decimal places or is not a number is refused",
+      "file": "requirements/import.req.inset",
+      "line": 45,
+      "result": "pass",
+      "headings": [
+        "net"
+      ],
+      "rows": [
+        {
+          "cells": [
+            "-1.00"
+          ],
+          "line": 59,
+          "result": "pass"
+        },
+        {
+          "cells": [
+            "0.125"
+          ],
+          "line": 60,
+          "result": "pass"
+        },
+        {
+          "cells": [
+            "free"
+          ],
+          "line": 61,
+          "result": "pass"
+        }
+      ]
+    },
+    {
+      "sentence": "Any net price of zero or more, with at most two decimal places, is stored exactly",
+      "file": "requirements/import.req.inset",
+      "line": 63,
+      "result": "pass",
+      "cases": 100
+    },
+    {
+      "sentence": "The gross price is never below the net price",
+      "file": "requirements/import.req.inset",
+      "line": 74,
+      "result": "fail",
+      "failure": {
+        "line": 83,
+        "step": "and products[\"bolt-m6\"].gross >= <net>",
+        "message": "but it is false\n  left:  0.80\n  right: 1"
+      },
+      "cases": 0,
+      "inputs": [
+        {
+          "name": "net",
+          "value": "1"
+        }
+      ]
+    }
+  ]
+}

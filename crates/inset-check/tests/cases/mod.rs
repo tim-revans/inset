@@ -807,6 +807,79 @@ pub fn all() -> Vec<Case> {
             READER_REQ.to_string(),
         );
     }
+    {
+        // ---- `fork` and properties ----
+        let mut add = |name, main: String, requirements: String| {
+            cases.push(Case {
+                name,
+                main,
+                modules: Vec::new(),
+                requirements,
+            })
+        };
+        // A branch that leaves with `?`, changes a variable every branch
+        // sees, pushes to one, and writes to a table.
+        let main = edit(
+            STORE,
+            "        Some(item.on_hand.to_string())\n    }",
+            r#"        Some(item.on_hand.to_string())
+    }
+
+    #[post("/counts", via = http, body = text)]
+    async fn count(&mut self, text: String) -> Option<String> {
+        let mut total = 0;
+        let mut seen = Vec::new();
+        let skus: Vec<String> = text.lines().map(|l| l.to_string()).collect();
+        let found = fork for sku in &skus {
+            let item = self.items.get(sku).await?;
+            total += item.on_hand;
+            seen.push(sku.clone());
+            let mut mine = Vec::new();
+            mine.push(item.on_hand);
+            self.items.insert(sku.clone(), item.clone()).await;
+            mine
+        };
+        Some(found.len().to_string())
+    }"#,
+        );
+        add(
+            "fork_branch_changes_what_others_see",
+            main,
+            STORE_REQ.to_string(),
+        );
+        let property = |inputs: &str, steps: &str| {
+            format!(
+                "{STORE_REQ}\nrequirement \"Any quantity received is added\"\n    for all {inputs}\n{steps}"
+            )
+        };
+        let steps = r#"    given items["bolt-m6"] is Item { on_hand: 3, price: 0.10 }
+    when Store receives POST /items/bolt-m6/receipts with "<quantity>"
+    then Store replies OK with "<quantity>"
+    and items["bolt-m6"].price == <price>
+"#;
+        add(
+            "property_inputs",
+            STORE.to_string(),
+            property(
+                "quantity: u32, price: Decimal, name: String, quantity: u8, unused: bool",
+                steps,
+            ),
+        );
+        add(
+            "property_condition",
+            STORE.to_string(),
+            property(
+                "quantity: u32, price: Decimal where quantity.scale() <= 2 && 5 > 3 && \
+                 items[\"bolt-m6\"].on_hand > 0",
+                steps,
+            ),
+        );
+        add(
+            "property_value_of_wrong_type",
+            STORE.to_string(),
+            property("quantity: u32, price: bool where quantity > 0", steps),
+        );
+    }
     cases.extend(modules);
     cases
 }

@@ -24,6 +24,8 @@ const { programRoot } = require("./program");
 /**
  * What `inset test --json` prints for one requirement. A requirement with
  * an examples table has a result for each row, and fails if any row does.
+ * A property has how many generated cases held, and if it failed, the
+ * smallest input found that breaks it.
  * @typedef {{
  *   sentence: string,
  *   file: string,
@@ -31,6 +33,8 @@ const { programRoot } = require("./program");
  *   result: "pass" | "fail",
  *   failure?: Failure,
  *   rows?: { cells: string[], line: number, result: "pass" | "fail", failure?: Failure }[],
+ *   cases?: number,
+ *   inputs?: { name: string, value: string }[],
  * }} Outcome
  */
 
@@ -295,6 +299,10 @@ class Requirements {
         continue;
       }
       print(`${outcome.result === "fail" ? "FAIL" : "pass"}  ${outcome.sentence}\n`);
+      const property = propertyLine(outcome);
+      if (property) {
+        print(`      ${property}\n`);
+      }
       const uri = vscode.Uri.file(path.join(root, outcome.file));
       const rows = outcome.rows ?? [];
       rows.forEach((row, index) => {
@@ -316,7 +324,7 @@ class Requirements {
         }
         continue;
       }
-      this.report(run, item, uri, outcome.failure);
+      this.report(run, item, uri, outcome.failure, outcome.inputs?.length ? property : undefined);
     }
   }
 
@@ -327,15 +335,16 @@ class Requirements {
    * @param {vscode.TestItem} item
    * @param {vscode.Uri} uri The requirements file.
    * @param {Failure | undefined} failure
+   * @param {string} [inputs] For a property, the input it fails for.
    */
-  report(run, item, uri, failure) {
+  report(run, item, uri, failure, inputs) {
     if (!failure) {
       run.passed(item);
       this.results.set(item.id, { result: "pass" });
       return;
     }
     const location = new vscode.Location(uri, new vscode.Position(failure.line - 1, 0));
-    const detail = `${failure.step.trim()}\n${failure.message}`;
+    const detail = `${inputs ? `${inputs}\n` : ""}${failure.step.trim()}\n${failure.message}`;
     // A fact that compared two values shows them side by side.
     const message =
       failure.expected !== undefined && failure.actual !== undefined
@@ -345,6 +354,22 @@ class Requirements {
     run.failed(item, message);
     this.results.set(item.id, { result: "fail", detail, location });
   }
+}
+
+/**
+ * For a property, the line `inset test` prints under its sentence: how many
+ * cases held, or the smallest input found that breaks it.
+ * @param {Outcome} outcome
+ */
+function propertyLine(outcome) {
+  if (outcome.cases === undefined) {
+    return undefined;
+  }
+  if (outcome.inputs?.length) {
+    const inputs = outcome.inputs.map((input) => `${input.name} = ${input.value}`).join(", ");
+    return `fails for ${inputs}, the smallest failing input found`;
+  }
+  return outcome.result === "pass" ? `held in ${outcome.cases} ${outcome.cases === 1 ? "case" : "cases"}` : undefined;
 }
 
 /** A requirement's item ID: its program and sentence, which is unique in the program. */

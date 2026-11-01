@@ -29,6 +29,9 @@
 //! - **External components** are components whose handlers pass each
 //!   message to the host, which runs the external code as a WebAssembly
 //!   component of its own ([`External`]).
+//! - **`fork for`** runs a body for each element of a collection and
+//!   gathers the values in order ([`fork`]). Branches that await run
+//!   concurrently on the one thread.
 //! - **Coverage** is counted by the emitted code itself: it marks each
 //!   function, branch, `?` and `failure` arm it reaches, by its diagram ID,
 //!   and the runtime reports what was reached to the host ([`coverage`]).
@@ -51,6 +54,7 @@ pub mod coverage;
 mod executor;
 mod external;
 mod failure;
+pub mod fork;
 mod http;
 mod program;
 mod stored;

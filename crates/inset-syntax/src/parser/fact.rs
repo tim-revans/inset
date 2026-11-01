@@ -7,8 +7,8 @@
 //! - any other expression is a check, allowed after `then` only.
 
 use super::{PResult, Parser};
-use crate::ast::{Expr, ExprKind, Fact, FactKind};
-use crate::lexer::{Punct as P, TokenKind as T};
+use crate::ast::{Expr, ExprKind, Fact, FactKind, Input};
+use crate::lexer::{Keyword as Kw, Punct as P, TokenKind as T};
 use crate::{Diagnostic, Ident, Span};
 
 /// A step's fact or check.
@@ -178,5 +178,34 @@ impl Parser<'_> {
             span,
             label,
         )))
+    }
+}
+
+/// A property's inputs and its `where` condition.
+pub(crate) type ForAllParts = (Vec<Input>, Option<Expr>);
+
+impl Parser<'_> {
+    /// A property's `for all name: Type, ... where condition`, after the
+    /// words `for all`.
+    pub(crate) fn parse_for_all(&mut self) -> PResult<ForAllParts> {
+        let mut inputs = Vec::new();
+        loop {
+            let name = self.parse_ident("an input's name")?;
+            self.expect(P::Colon, "the input's name")?;
+            let ty = self.parse_type()?;
+            inputs.push(Input { name, ty });
+            if !self.eat(P::Comma) {
+                break;
+            }
+        }
+        let condition = if self.eat_kw(Kw::Where) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+        if *self.kind() != T::Eof {
+            return Err(self.expected("`where`, `,` or the end of the line"));
+        }
+        Ok((inputs, condition))
     }
 }

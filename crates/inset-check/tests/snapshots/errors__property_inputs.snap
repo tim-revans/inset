@@ -1,0 +1,37 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: no step uses `<name>`
+    ╭─[ requirements/main.req.inset:16:44 ]
+    │
+ 16 │     for all quantity: u32, price: Decimal, name: String, quantity: u8, unused: bool
+    │                                            ──┬─  
+    │                                              ╰─── this input is generated and never used
+    │ 
+    │ Help: write `<name>` in a step where the value goes, or remove the input
+────╯
+Error: a property cannot generate a `String` yet
+    ╭─[ requirements/main.req.inset:16:50 ]
+    │
+ 16 │     for all quantity: u32, price: Decimal, name: String, quantity: u8, unused: bool
+    │                                                  ───┬──  
+    │                                                     ╰──── not a type `for all` generates
+    │ 
+    │ Help: an input is an integer type other than `u128`, `bool` or `Decimal`, whose text in a step is the value as Rust writes it
+────╯
+Error: `quantity` is an input twice
+    ╭─[ requirements/main.req.inset:16:58 ]
+    │
+ 16 │     for all quantity: u32, price: Decimal, name: String, quantity: u8, unused: bool
+    │                                                          ────┬───  
+    │                                                              ╰───── each input has a name of its own
+────╯
+Error: no step uses `<unused>`
+    ╭─[ requirements/main.req.inset:16:72 ]
+    │
+ 16 │     for all quantity: u32, price: Decimal, name: String, quantity: u8, unused: bool
+    │                                                                        ───┬──  
+    │                                                                           ╰──── this input is generated and never used
+    │ 
+    │ Help: write `<unused>` in a step where the value goes, or remove the input
+────╯

@@ -33,9 +33,7 @@ fn run(command: &mut Command) -> Output {
     command.output().expect("run inset")
 }
 
-/// A copy of CSV import whose `parse_price_list` reads the rows with a
-/// plain loop instead of `fork for`, without the property requirements,
-/// and with no `inset.lock` unless `locked`.
+/// A copy of CSV import, with no `inset.lock` unless `locked`.
 fn csv_import(name: &str, locked: bool) -> PathBuf {
     let example = repo().join("examples/csv-import");
     let dir = std::env::temp_dir().join(format!("inset-external-{name}-{}", std::process::id()));
@@ -50,39 +48,11 @@ fn csv_import(name: &str, locked: bool) -> PathBuf {
     if locked {
         std::fs::copy(example.join("inset.lock"), dir.join("inset.lock")).unwrap();
     }
-    let main = dir.join("src/main.inset");
-    let text = std::fs::read_to_string(&main).unwrap();
-    let forked = "    let results = fork for row in rows {\n        parse_row(row)\n    };\n";
-    assert!(
-        text.contains(forked),
-        "CSV import still forks over its rows"
-    );
-    let plain = "    let mut results = Vec::new();\n    for row in rows {\n        results.push(parse_row(row));\n    }\n";
-    std::fs::write(&main, text.replace(forked, plain)).unwrap();
-    let requirements = dir.join("requirements/import.req.inset");
-    let text = std::fs::read_to_string(&requirements).unwrap();
-    let properties = text
-        .find("requirement \"Any net price of zero or more")
-        .expect("the property requirements");
-    std::fs::write(&requirements, &text[..properties]).unwrap();
     dir
-}
-
-fn stdout(out: &Output) -> String {
-    String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
 fn stderr(out: &Output) -> String {
     String::from_utf8_lossy(&out.stderr).into_owned()
-}
-
-#[test]
-fn csv_import_with_a_plain_loop_meets_its_requirements() {
-    let dir = csv_import("plain", true);
-    let out = run(&mut inset(&["test"], &dir));
-    assert!(out.status.success(), "{}{}", stdout(&out), stderr(&out));
-    insta::assert_snapshot!(stdout(&out));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -147,41 +117,5 @@ fn inset_lock_is_written_once_and_honoured() {
     assert_eq!(locked_version(&lock, "csv"), older);
     let used = std::fs::read_to_string(externals.join("Cargo.lock")).unwrap();
     assert_eq!(locked_version(&used, "csv"), older);
-    std::fs::remove_dir_all(&dir).unwrap();
-}
-
-#[test]
-fn the_external_component_is_drawn_as_its_hand_drawn_target() {
-    let dir = csv_import("diagram", true);
-    let out = Command::new(env!("CARGO_BIN_EXE_inset"))
-        .arg("diagram")
-        .arg(&dir)
-        .arg("--json")
-        .output()
-        .expect("run inset");
-    assert!(out.status.success(), "{}", stderr(&out));
-    let emitted: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    let expected: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(repo().join("examples/csv-import/expected/diagram.json")).unwrap(),
-    )
-    .unwrap();
-    // The copy reads the rows with a plain loop, so only `parse_price_list`
-    // differs from the target: the app, `Importer` with its external
-    // `CsvReader`, and every edge are as drawn by hand.
-    assert_eq!(emitted["app"], expected["app"]);
-    assert_eq!(emitted["edges"], expected["edges"]);
-    std::fs::remove_dir_all(&dir).unwrap();
-    // The view inside `Importer` matches its committed picture.
-    let dir = csv_import("diagram-view", true);
-    let out = Command::new(env!("CARGO_BIN_EXE_inset"))
-        .arg("diagram")
-        .arg(&dir)
-        .args(["--expand", "PriceImport/Importer"])
-        .output()
-        .expect("run inset");
-    assert!(out.status.success(), "{}", stderr(&out));
-    let expected =
-        std::fs::read_to_string(repo().join("examples/csv-import/expected/importer.svg")).unwrap();
-    assert_eq!(stdout(&out), expected);
     std::fs::remove_dir_all(&dir).unwrap();
 }

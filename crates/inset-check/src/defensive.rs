@@ -159,7 +159,7 @@ impl Walk<'_> {
                     self.expr(&arm.body);
                 }
             }
-            ExprKind::For { iter, body, .. } => {
+            ExprKind::For { iter, body, .. } | ExprKind::Fork { iter, body, .. } => {
                 self.expr(iter);
                 self.block(body, false);
             }
@@ -234,6 +234,7 @@ fn tries(stmt: &Stmt) -> bool {
                     visit(value, found);
                 }
             }
+            ExprKind::Fork { iter, .. } => visit(iter, found),
             // The `?` in a nested block is its own statement's.
             ExprKind::Block(_)
             | ExprKind::If { .. }
