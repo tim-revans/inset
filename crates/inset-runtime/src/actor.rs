@@ -137,6 +137,11 @@ impl Scope {
         }
     }
 
+    /// The diagram ID of the component started in this scope, or the app's.
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
     /// The handle of a child started in this scope, as `name`. Every handle
     /// is made before any child starts, so a child's outlet can be
     /// connected to a sibling started after it.

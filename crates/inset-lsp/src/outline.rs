@@ -208,7 +208,11 @@ impl Outline<'_> {
             .chain(self.starts(&component.starts))
             .chain(functions)
             .collect();
-        let detail = Some("component".into());
+        let detail = Some(if component.external.is_some() {
+            "extern component".into()
+        } else {
+            "component".into()
+        });
         self.named(&component.name, SymbolKind::CLASS, detail, span, children)
     }
 

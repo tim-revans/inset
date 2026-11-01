@@ -48,7 +48,11 @@ impl Parser<'_> {
         let vis = self.parse_vis()?;
         let kind = match self.kind() {
             T::Keyword(Kw::App) => ItemKind::App(self.parse_app()?),
-            T::Keyword(Kw::Component) => ItemKind::Component(self.parse_component()?),
+            T::Keyword(Kw::Component) => ItemKind::Component(self.parse_component(None)?),
+            T::Keyword(Kw::Extern) if matches!(self.nth(1), T::Keyword(Kw::Component)) => {
+                let external = self.bump().span;
+                ItemKind::Component(self.parse_component(Some(external))?)
+            }
             T::Keyword(Kw::Fn | Kw::Async) => {
                 ItemKind::Function(self.parse_function(docs.clone(), attrs.clone(), vis.clone())?)
             }
@@ -253,9 +257,7 @@ impl Parser<'_> {
                     self.expect_close(P::RParen, open, "the reason")?;
                     AttributeKind::Defensive(reason)
                 }
-                "rust" => {
-                    return Err(self.unsupported(&format!("`#[{name}]`"), name_span));
-                }
+                "rust" => AttributeKind::Rust(self.parse_rust_attr(name_span)?),
                 _ => {
                     return Err(self.report(
                         Diagnostic::new(
@@ -343,6 +345,89 @@ impl Parser<'_> {
             path,
             via,
             body,
+        })
+    }
+
+    /// `(path = "file.rs", crates = ["name@version", ...])` after `rust`.
+    /// `crates` may be left out, for a file that uses no crate.
+    fn parse_rust_attr(&mut self, name_span: Span) -> PResult<RustAttr> {
+        let Some(open) = self.at(P::LParen).then(|| self.bump().span) else {
+            return Err(self.report(
+                Diagnostic::new(
+                    "`#[rust]` needs the file that implements the component",
+                    name_span,
+                    "the file goes after this",
+                )
+                .with_help("write `#[rust(path = \"name.rs\", crates = [\"name@version\"])]`"),
+            ));
+        };
+        let mut path = None;
+        let mut crates = None;
+        while !self.at(P::RParen) {
+            let key = self.parse_ident("`path` or `crates`")?;
+            let given = match key.name.as_str() {
+                "path" => path.is_some(),
+                "crates" => crates.is_some(),
+                _ => {
+                    return Err(self.report(Diagnostic::new(
+                        format!("unknown `#[rust]` argument `{}`", key.name),
+                        key.span,
+                        "`#[rust]` takes `path` and `crates`",
+                    )));
+                }
+            };
+            if given {
+                return Err(self.report(Diagnostic::new(
+                    format!("`{}` is given twice", key.name),
+                    key.span,
+                    "this repeats an earlier argument",
+                )));
+            }
+            self.expect(P::Eq, &format!("`{}`", key.name))?;
+            if key.name == "path" {
+                path =
+                    Some(self.parse_str_lit("the file's path, as a string such as \"reader.rs\"")?);
+            } else {
+                let open = self.expect(P::LBracket, "`crates =`")?;
+                let mut list = Vec::new();
+                while !self.at(P::RBracket) {
+                    list.push(self.parse_str_lit("a crate, as a string such as \"csv@1.3\"")?);
+                    if !self.eat(P::Comma) {
+                        break;
+                    }
+                }
+                self.expect_close(P::RBracket, open, "the crates")?;
+                crates = Some(list);
+            }
+            if !self.eat(P::Comma) {
+                break;
+            }
+        }
+        let close = self.expect_close(P::RParen, open, "the arguments of `#[rust]`")?;
+        let Some(path) = path else {
+            return Err(self.report(
+                Diagnostic::new(
+                    "`#[rust]` needs `path`",
+                    name_span.to(close),
+                    "this does not say which file implements the component",
+                )
+                .with_help("add `path =` and the Rust file's name, relative to this file"),
+            ));
+        };
+        Ok(RustAttr {
+            path,
+            crates: crates.unwrap_or_default(),
+        })
+    }
+
+    /// A string literal, or an error naming what was expected.
+    fn parse_str_lit(&mut self, what: &str) -> PResult<StrLit> {
+        let T::Str(value) = self.kind().clone() else {
+            return Err(self.expected(what));
+        };
+        Ok(StrLit {
+            value,
+            span: self.bump().span,
         })
     }
 
@@ -905,11 +990,14 @@ impl Parser<'_> {
 
     // ---- Component -------------------------------------------------------
 
-    pub(super) fn parse_component(&mut self) -> PResult<Component> {
+    /// A component, or an external component when `external` is the span
+    /// of the `extern` before it.
+    pub(super) fn parse_component(&mut self, external: Option<Span>) -> PResult<Component> {
         self.bump();
         let name = self.parse_ident("the component's name")?;
         let open = self.expect(P::LBrace, "the component's name")?;
         let mut component = Component {
+            external,
             name,
             fields: Vec::new(),
             starts: Vec::new(),
@@ -944,6 +1032,25 @@ impl Parser<'_> {
                 }
                 component.fields.push(field);
             }
+            T::Keyword(kw @ (Kw::Start | Kw::Failure)) if component.external.is_some() => {
+                let what = if *kw == Kw::Start {
+                    "`start` statements"
+                } else {
+                    "a `failure` block"
+                };
+                let span = self.span();
+                return Err(self.report(
+                    Diagnostic::new(
+                        format!("an external component has no {what}"),
+                        span,
+                        "its code is written in another language",
+                    )
+                    .with_help(
+                        "an `extern component` declares fields and `#[message]` signatures; \
+                         its parent responds to its failures with `Child(name)`",
+                    ),
+                ));
+            }
             T::Keyword(Kw::Start) => {
                 self.no_visibility(&vis, "a `start` statement")?;
                 if let Some(attr) = attrs.first() {
@@ -966,9 +1073,12 @@ impl Parser<'_> {
                 component.starts.push(start);
             }
             T::Keyword(Kw::Fn | Kw::Async) => {
-                component
-                    .functions
-                    .push(self.parse_function(docs, attrs, vis)?);
+                let function = if component.external.is_some() {
+                    self.parse_signature(docs, attrs, vis)?
+                } else {
+                    self.parse_function(docs, attrs, vis)?
+                };
+                component.functions.push(function);
             }
             T::Keyword(Kw::Failure) => {
                 self.no_visibility(&vis, "a `failure` block")?;
@@ -1170,7 +1280,8 @@ impl Parser<'_> {
 
     // ---- Functions -------------------------------------------------------
 
-    pub(super) fn parse_function(
+    /// A function up to its body: the span covers what is read so far.
+    fn parse_function_head(
         &mut self,
         docs: Vec<Doc>,
         attrs: Vec<Attribute>,
@@ -1212,10 +1323,6 @@ impl Parser<'_> {
             let span = self.span();
             return Err(self.unsupported("a `where` clause", span));
         }
-        if !self.at(P::LBrace) {
-            return Err(self.expected("the function's body, in `{` `}`"));
-        }
-        let body = self.parse_block()?;
         Ok(Function {
             docs,
             attrs,
@@ -1225,9 +1332,52 @@ impl Parser<'_> {
             receiver,
             params,
             ret,
-            span: start.to(body.span),
-            body,
+            span: start.to(self.prev_span()),
+            body: Block {
+                stmts: Vec::new(),
+                span: start,
+            },
         })
+    }
+
+    pub(super) fn parse_function(
+        &mut self,
+        docs: Vec<Doc>,
+        attrs: Vec<Attribute>,
+        vis: Visibility,
+    ) -> PResult<Function> {
+        let mut function = self.parse_function_head(docs, attrs, vis)?;
+        if !self.at(P::LBrace) {
+            return Err(self.expected("the function's body, in `{` `}`"));
+        }
+        function.body = self.parse_block()?;
+        function.span = function.span.to(function.body.span);
+        Ok(function)
+    }
+
+    /// A function of an external component: its signature, ended by `;`.
+    pub(super) fn parse_signature(
+        &mut self,
+        docs: Vec<Doc>,
+        attrs: Vec<Attribute>,
+        vis: Visibility,
+    ) -> PResult<Function> {
+        let mut function = self.parse_function_head(docs, attrs, vis)?;
+        if self.at(P::LBrace) {
+            let span = self.span();
+            return Err(self.report(
+                Diagnostic::new(
+                    "a function of an external component has no body",
+                    span,
+                    "its body is written in the component's own language",
+                )
+                .with_help("end the signature with `;`, and write the body in the Rust file"),
+            ));
+        }
+        let semi = self.expect(P::Semi, "the function's signature")?;
+        function.span = function.span.to(semi);
+        function.body.span = semi;
+        Ok(function)
     }
 
     /// `&self` or `&mut self`. A receiver that takes `self` by value is an

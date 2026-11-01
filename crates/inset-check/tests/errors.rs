@@ -5,8 +5,8 @@
 mod cases;
 
 use cases::{
-    CATALOGUE, CATALOGUE_REQ, COUNTING, COUNTING_REQ, HELLO, HELLO_REQ, SHELF, SHELF_LIBRARY,
-    SHELF_REQ, STORE, STORE_REQ, edit,
+    CATALOGUE, CATALOGUE_REQ, COUNTING, COUNTING_REQ, HELLO, HELLO_REQ, READER, READER_REQ, SHELF,
+    SHELF_LIBRARY, SHELF_REQ, STORE, STORE_REQ, edit,
 };
 use inset_check::{Program, SourceFile, check};
 
@@ -71,6 +71,7 @@ fn bases_check_clean() {
     );
     assert_eq!(rendered(STORE, STORE_REQ), "");
     assert_eq!(rendered(CATALOGUE, CATALOGUE_REQ), "");
+    assert_eq!(rendered(READER, READER_REQ), "");
 }
 
 // ---- The cases Stage 6 of the plan names ------------------------------------
@@ -336,4 +337,31 @@ fn unknown_query_parameter() {
 #[test]
 fn defensive_marks_nothing() {
     errors("defensive_marks_nothing");
+}
+
+// ---- External components ------------------------------------------------------
+
+#[test]
+fn external_without_rust() {
+    errors("external_without_rust");
+}
+
+#[test]
+fn rust_attribute_arguments() {
+    errors("rust_attribute_arguments");
+}
+
+#[test]
+fn external_message_types_and_names() {
+    errors("external_message_types_and_names");
+}
+
+#[test]
+fn external_child_rolled_back() {
+    errors("external_child_rolled_back");
+}
+
+#[test]
+fn external_with_a_field() {
+    errors("external_with_a_field");
 }

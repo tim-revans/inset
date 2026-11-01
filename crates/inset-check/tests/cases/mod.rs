@@ -249,6 +249,45 @@ pub const CATALOGUE_REQ: &str = r#"requirement "A product is listed as it was st
     then Catalogue replies BadRequest
 "#;
 
+/// A program with an external component written in Rust.
+pub const READER: &str = r#"app Reader {
+    grant http: HttpServer { port: 8080 };
+    start Front { http: move http };
+}
+
+/// A line of text.
+#[derive(Clone, Debug, PartialEq)]
+struct Line {
+    number: u64,
+    text: String,
+}
+
+component Front {
+    http: HttpServer,
+
+    start lines: Lines {};
+
+    #[post("/lines", via = http, body = text)]
+    async fn count(&self, text: String) -> String {
+        let lines = self.lines.split(&text).await;
+        lines.len().to_string()
+    }
+}
+
+/// Splits text into lines.
+#[rust(path = "lines.rs", crates = ["memchr@2.7"])]
+extern component Lines {
+    /// Each line of the text.
+    #[message]
+    fn split(&self, text: &str) -> Vec<Line>;
+}
+"#;
+
+pub const READER_REQ: &str = r#"requirement "Lines are counted"
+    when Reader receives POST /lines with "a"
+    then Reader replies OK with "1"
+"#;
+
 /// A broken program: its code and its requirements.
 pub struct Case {
     pub name: &'static str,
@@ -709,6 +748,64 @@ pub fn all() -> Vec<Case> {
             requirements: SHELF_REQ.to_string(),
         };
         cases.push(case);
+    }
+    {
+        let reader = |from: &str, to: &str| edit(READER, from, to);
+        let mut add = |name, main: String, requirements: String| {
+            cases.push(Case {
+                name,
+                main,
+                modules: Vec::new(),
+                requirements,
+            })
+        };
+        add(
+            "external_without_rust",
+            reader(
+                "#[rust(path = \"lines.rs\", crates = [\"memchr@2.7\"])]\n",
+                "",
+            ),
+            READER_REQ.to_string(),
+        );
+        add(
+            "rust_attribute_arguments",
+            reader(
+                "#[rust(path = \"lines.rs\", crates = [\"memchr@2.7\"])]",
+                "#[rust(path = \"../lines.rs\", crates = [\"memchr\", \"csv@one\", \"interface@1\"])]",
+            ),
+            READER_REQ.to_string(),
+        );
+        let main = reader(
+            "    fn split(&self, text: &str) -> Vec<Line>;",
+            "    fn split(&self, text: &str) -> Vec<Line>;\n\n    \
+             #[message]\n    fn total(&self, prices: Vec<Decimal>, counts: HashMap<String, u32>) -> u128;\n\n    \
+             fn new(line_2: Line) -> Line;\n\n    \
+             #[message]\n    async fn wait(&mut self);",
+        );
+        let main = edit(&main, "    number: u64,", "    number_2: u64,");
+        add(
+            "external_message_types_and_names",
+            main,
+            READER_REQ.to_string(),
+        );
+        let main = reader(
+            "    start lines: Lines {};",
+            "    start lines: Lines {};\n\n    failure {\n        \
+             /// The lines are read again.\n        Child(lines) => rollback,\n    }",
+        );
+        add("external_child_rolled_back", main, READER_REQ.to_string());
+        add(
+            "external_with_a_field",
+            edit(
+                &reader(
+                    "    start lines: Lines {};",
+                    "    start lines: Lines { limit: 10 };",
+                ),
+                "extern component Lines {\n",
+                "extern component Lines {\n    limit: u32,\n",
+            ),
+            READER_REQ.to_string(),
+        );
     }
     cases.extend(modules);
     cases

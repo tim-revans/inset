@@ -119,6 +119,19 @@ pub enum AttributeKind {
     /// `#[defensive("reason")]`, which goes on a statement, a `match` arm
     /// or a `failure` arm rather than an item.
     Defensive(StrLit),
+    /// `#[rust(path = "file.rs", crates = ["name@version", ...])]` on an
+    /// `extern component`.
+    Rust(RustAttr),
+}
+
+/// Where an external component written in Rust comes from: the file that
+/// implements it, relative to the file declaring it, and the crates that
+/// file may use.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RustAttr {
+    pub path: StrLit,
+    /// Each `name@version`, as written.
+    pub crates: Vec<StrLit>,
 }
 
 /// `#[defensive("reason")]`: code no requirement can reach by design, which
@@ -293,9 +306,15 @@ pub struct FieldInit {
     pub span: Span,
 }
 
-/// `component Name { fields, starts, failure block, functions }`
+/// `component Name { fields, starts, failure block, functions }`, or
+/// `extern component Name { fields, signatures }`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Component {
+    /// The `extern` keyword of an external component, whose code is written
+    /// in another language. Its functions are signatures, each parsed with
+    /// an empty body whose span is the `;` that ends it, and it has no
+    /// `start` statements or `failure` block.
+    pub external: Option<Span>,
     pub name: Ident,
     pub fields: Vec<FieldDecl>,
     pub starts: Vec<Start>,

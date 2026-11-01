@@ -14,6 +14,7 @@ nut-m6,M6 nut,0.05
 | --- | --- |
 | `src/main.inset` | The app, the data types, the `CsvReader` declaration, the `Importer` component, and the algorithms |
 | `src/csv_reader.rs` | The Rust that implements `CsvReader` with the `csv` crate, as a crate of its own |
+| `inset.lock` | The exact version of each crate `csv_reader.rs` builds with, which `inset build` wrote and keeps to, in Cargo's lock-file format |
 | `requirements/import.req.inset` | The requirement tests, written against the app's HTTP boundary |
 
 ## What it exercises

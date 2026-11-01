@@ -13,7 +13,7 @@ How a built Inset program runs: the Rust the compiler emits, the runtime library
 | [`crates/inset-value`](../../crates/inset-value/) | The stored form of values, which the runtime and the test runner share (see [Tables](#tables)) |
 | [`crates/inset-host`](../../crates/inset-host/) | The Wasmtime host: loads a program, resolves its settings and grants, serves its HTTP servers, keeps its tables in SQLite, or puts fakes behind its grants for tests |
 
-A built program is one WebAssembly component. It exports `describe`, which returns its manifest of settings and grants, `start`, and `handle`, which takes one HTTP request through a named `HttpServer` grant. It imports Inset's capabilities and a `report` interface, through which it tells the host about rollbacks and which parts of it have run (see [Coverage](#coverage)).
+A built program is one WebAssembly component, with one more for each external component it declares (see [External components](#external-components)). It exports `describe`, which returns its manifest of settings, grants and external components, `start`, and `handle`, which takes one HTTP request through a named `HttpServer` grant. It imports Inset's capabilities, an `externals` interface through which it sends messages to its external components, and a `report` interface, through which it tells the host about rollbacks and which parts of it have run (see [Coverage](#coverage)).
 
 The host starts one instance of the program and keeps it for as long as the program runs. It calls `handle` for one request at a time, and `handle` returns once every component is idle again.
 
@@ -184,6 +184,32 @@ The program serves its front end itself, from the files compiled into it, throug
 *Why the files are compiled in:* the built component is then the whole program, so `inset run`, a requirement test and a deployed copy serve the same page. The program reads no file at run time, and the host grants no file access for the front end.
 
 *Why the content type of a request is not checked:* the host passes a request's method, path and body to the program, but not its headers. A `Json<T>` body is read as JSON whatever `Content-Type` it was sent with. Checking it comes with request headers, which wait for an example that needs them.
+
+## External components
+
+An `extern component` is code written in another language, built as a WebAssembly component of its own. The compiler and the host treat it in three parts, so that a second language needs only the middle one.
+
+| Part | Done by | What it is |
+| --- | --- | --- |
+| The WIT world | The compiler, from the declaration alone ([`crates/inset-codegen/src/external.rs`](../../crates/inset-codegen/src/external.rs)) | `target/inset/externals/<package>/wit/world.wit`: one interface named after the component, holding the program's types its messages carry, as records, variants and enums, and a resource with a constructor and one method per message |
+| The language adapter | Rust's, in [`external/rust.rs`](../../crates/inset-codegen/src/external/rust.rs) | Generates the language's bindings from the world and builds the component. For Rust: `wit-bindgen`'s bindings, wrapped in the `interface` crate's trait and `export!`, and the program's Rust file built as a `cdylib` for `wasm32-wasip2` |
+| The boundary | The program and the host | The program sends a message through the `externals` import, with its arguments in their stored form. The host copies each into the component's own types, as the world describes them, and copies the reply back out |
+
+Nothing outside the adapter knows the component's language, and no adapter may reach the program by any other way than the world. A Python adapter, through `componentize-py`, would build from the same world.
+
+**The program's side.** The compiler emits an external component as an ordinary component, holding an `inset_runtime::External`, with one handler per message that hands the arguments to the host and awaits the reply. So it has a mailbox and takes one message at a time, it is sent messages and awaited like any component, and a failure in it is a failure of that component, which passes to its parent as `Child(name)`. Its handlers mark no coverage, because the diagram draws no flowchart for them.
+
+**The host's side.** The program's manifest names its external components, and the host loads each from `externals/<Name>.wasm` beside the program's component, which `inset build` writes. It links nothing for one but WASI with nothing behind it, as for the program: no files, no network, fixed clocks and seeded random numbers. A component that imports anything else, such as the program's own capabilities, is refused as the program loads. The host runs one instance for each place the program starts the component, keyed by its diagram ID, such as `PriceImport/Importer/csv`. It makes the instance, and calls the constructor, with the first message.
+
+- A trap in the instance, such as a Rust panic, fails the message. The host takes the panic's message and location from what the instance wrote to its standard error, and the program reports them as a `Panic`, or an `Overflow`. The instance is then dropped, so the next message starts it afresh.
+- A restart of the component, or of any component above it, drops its instance too.
+- Each start of the program, such as each requirement in `inset test`, starts with no instances. A fresh instance of the program after a panic keeps them.
+
+**Values.** The host converts between the stored form and WIT's values by matching names. A record's fields are the struct's in kebab case, a variant's cases the enum's, and a `None` or a `Result` take their stored forms. The checker refuses a name that would not come back the same from WIT, so the conversion needs no table of names. Values are copied both ways, so the external component shares no memory with the program.
+
+*Why the host converts, rather than the program:* the program then imports one fixed interface whatever external components it has, and every external component exports a world of its own declaration's shape. The host can read any world's types at run time, so it needs no code generated for each program.
+
+**Building.** `inset build` writes every external component of a program into one Cargo workspace, `target/inset/externals/`, and builds each before the program. The workspace's lock file is the program's `inset.lock`, beside `src/`. The first build starts it from Inset's own `Cargo.lock`, so `wit-bindgen` and any crate Inset also uses come at the versions Inset is tested with, and writes the result back. Later builds start from `inset.lock`, so a version it holds is used even after a newer one is published. A Rust file that does not build is shown with its declaration, then rustc's own errors.
 
 ## Coverage
 

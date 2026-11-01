@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `lines` is external, so it cannot be rolled back
+    ╭─[ src/main.inset:20:9 ]
+    │
+ 20 │         Child(lines) => rollback,
+    │         ────────────┬───────────  
+    │                     ╰───────────── its state is code the compiler cannot see
+    │ 
+    │ Help: respond with `Child(lines) => restart`, which starts it afresh
+────╯

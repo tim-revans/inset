@@ -18,9 +18,26 @@ impl<'a> Checker<'a> {
         let mut components = Vec::new();
         for decl in &self.names.components {
             let mut errors = Vec::new();
-            if let Some(attr) = decl.item.attrs.first() {
+            let external = decl.ast.external.is_some();
+            let attr = decl
+                .item
+                .attrs
+                .iter()
+                .find(|a| !(external && matches!(a.kind, AttributeKind::Rust(_))));
+            if let Some(attr) = attr {
                 errors.push(match attr.kind {
                     AttributeKind::Defensive(_) => whole_defensive(attr.span, "component"),
+                    AttributeKind::Rust(_) => Diagnostic::new(
+                        "`#[rust]` goes on an `extern component`",
+                        attr.span,
+                        "this component is written in Inset",
+                    )
+                    .with_help("remove the attribute, or declare the component as `extern component` with signatures alone"),
+                    _ if external => Diagnostic::new(
+                        "an external component takes no attribute but `#[rust]`",
+                        attr.span,
+                        "remove this attribute",
+                    ),
                     _ => Diagnostic::new(
                         "a component takes no attributes",
                         attr.span,
@@ -208,6 +225,11 @@ fn signature<'a>(
             AttributeKind::Defensive(_) => {
                 diagnostics.push(whole_defensive(attr.span, "function"));
             }
+            AttributeKind::Rust(_) => diagnostics.push(Diagnostic::new(
+                "`#[rust]` goes on an `extern component`",
+                attr.span,
+                "a function is not implemented in Rust on its own",
+            )),
             AttributeKind::Derive(_) | AttributeKind::Status(_) | AttributeKind::Serde(_) => {
                 diagnostics.push(Diagnostic::new(
                     "this attribute does not go on a function",

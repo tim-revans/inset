@@ -22,6 +22,10 @@ pub trait App {
     /// The app's front end, if it has one.
     const FRONT_END: Option<FrontEnd> = None;
 
+    /// The external components the program starts, by name, which the host
+    /// loads beside it.
+    const EXTERNALS: &'static [&'static str] = &[];
+
     /// The elements coverage counts in the top-level algorithms, by their
     /// full IDs, which [`crate::coverage::algorithm`] marks by index.
     const BRANCHES: &'static [&'static str] = &[];
@@ -483,6 +487,7 @@ pub mod glue {
                         .collect(),
                 })
                 .collect(),
+            externals: A::EXTERNALS.iter().map(|&name| name.into()).collect(),
         }
     }
 

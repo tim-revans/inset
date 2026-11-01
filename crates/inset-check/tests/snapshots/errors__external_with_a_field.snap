@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: an external component with fields is not supported yet
+    ╭─[ src/main.inset:28:5 ]
+    │
+ 28 │     limit: u32,
+    │     ─────┬────  
+    │          ╰────── its fields would be the capabilities it holds
+    │ 
+    │ Help: give the capability to an Inset component, which sends the external component what it needs to compute
+────╯

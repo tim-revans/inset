@@ -1,0 +1,12 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `Lines` does not say what implements it
+    ╭─[ src/main.inset:26:1 ]
+    │
+ 26 │ extern component Lines {
+    │ ───────────┬──────────  
+    │            ╰──────────── an external component's code is written in another language
+    │ 
+    │ Help: name the Rust file that implements it, and the crates the file uses, above it: `#[rust(path = "name.rs", crates = ["name@version"])]`
+────╯

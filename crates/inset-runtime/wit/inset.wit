@@ -11,6 +11,7 @@ package inset:host@0.1.0;
 /// numbers.
 world program {
     import capabilities;
+    import externals;
     import report;
     export app;
 }
@@ -65,6 +66,10 @@ interface app {
         app: string,
         settings: list<setting>,
         grants: list<grant>,
+        /// The external components the program starts, by name. Each is a
+        /// WebAssembly component of its own, which the host loads beside
+        /// the program as `externals/<name>.wasm`.
+        externals: list<string>,
     }
 
     /// An HTTP request that arrived through one of the program's `HttpServer` grants.
@@ -125,6 +130,24 @@ interface capabilities {
 
     /// The table the app was granted as `grant`. The host refuses any other name.
     open-table: func(grant: string) -> result<table, string>;
+}
+
+/// External components: code written in another language, each built as a
+/// WebAssembly component of its own from a WIT world the compiler writes
+/// for it. The host runs one instance of it for each place the program
+/// starts it, and gives it nothing but WASI with nothing granted.
+interface externals {
+    /// Sends the message `message` to the external component `external`
+    /// running as `component`, a diagram ID such as `PriceImport/Importer/csv`,
+    /// and returns its reply. `args` is a JSON list of the arguments, and
+    /// the reply a JSON value, each in its stored form (see the
+    /// `inset-value` crate). The host copies them into and out of the
+    /// external component's own types.
+    ///
+    /// An error is a failure in the external component, such as a panic,
+    /// with what it reported. Its instance is then gone, and the host starts
+    /// it afresh before its next message.
+    call: func(component: string, external: string, message: string, args: list<u8>) -> result<list<u8>, string>;
 }
 
 /// What the program tells the host, so a person running it can see what happened.

@@ -440,3 +440,56 @@ fn another_attribute_on_a_statement() {
         "component C {\n    fn f(n: u32) -> u32 {\n        #[message]\n        n\n    }\n}\n",
     );
 }
+
+#[test]
+fn external_function_with_a_body() {
+    code(
+        "external_function_with_a_body",
+        r#"#[rust(path = "reader.rs")]
+extern component Reader {
+    #[message]
+    fn read(&self, text: &str) -> u64 {
+        0
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn external_with_a_start() {
+    code(
+        "external_with_a_start",
+        r#"#[rust(path = "reader.rs")]
+extern component Reader {
+    start helper: Helper {};
+}
+"#,
+    );
+}
+
+#[test]
+fn rust_attribute_without_a_path() {
+    code(
+        "rust_attribute_without_a_path",
+        r#"#[rust(crates = ["csv@1.3"])]
+extern component Reader {
+    #[message]
+    fn read(&self, text: &str) -> u64;
+}
+"#,
+    );
+}
+
+#[test]
+fn rust_attribute_with_an_unknown_argument() {
+    code(
+        "rust_attribute_with_an_unknown_argument",
+        r#"#[rust(path = "reader.rs", features = ["std"])]
+extern component Reader {
+    #[message]
+    fn read(&self, text: &str) -> u64;
+}
+"#,
+    );
+}

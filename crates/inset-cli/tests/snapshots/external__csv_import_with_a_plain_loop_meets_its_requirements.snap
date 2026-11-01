@@ -1,0 +1,15 @@
+---
+source: crates/inset-cli/tests/external.rs
+expression: stdout(&out)
+---
+pass  A valid price list is stored, with VAT added to each net price
+pass  A field in quotes may contain commas
+pass  A price list with no products is accepted and stores nothing
+pass  A price list with any invalid row is refused whole, naming each invalid line
+pass  A net price that is negative, has more than two decimal places or is not a number is refused
+            | net   |
+      pass  | -1.00 |
+      pass  | 0.125 |
+      pass  | free  |
+
+5 requirements passed

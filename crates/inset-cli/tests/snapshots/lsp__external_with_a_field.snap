@@ -1,0 +1,8 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+assertion_line: 259
+---
+src/main.inset:28:5-28:15
+an external component with fields is not supported yet
+its fields would be the capabilities it holds
+help: give the capability to an Inset component, which sends the external component what it needs to compute

@@ -49,6 +49,7 @@ mod api;
 mod body;
 mod data;
 mod defensive;
+mod external;
 mod front;
 mod index;
 mod items;
@@ -67,6 +68,10 @@ use inset_syntax::ast::{self, HttpMethod};
 use inset_syntax::{Diagnostic, Ident, Span, is_requirements_file, parse_requirements};
 
 pub use api::{Api, ApiBody, ApiError, ApiParam, ApiRoute, ApiSegment, TypeDocs, api};
+pub use external::{
+    External, ExternalMessage, ExternalParam, ExternalReply, ExternalType, ExternalTypeKind,
+    WitType, externals, wit_field_name, wit_type_name,
+};
 pub use index::{Index, Reference, Symbol, SymbolKind};
 pub use modules::{Module, Modules};
 use names::Names;
@@ -108,13 +113,15 @@ pub struct Resolved {
     /// For each name in the code that refers to a declaration, the name of
     /// that declaration. Both spans are program-wide (see [`Modules`]).
     pub refs: HashMap<Span, Span>,
+    /// The external components, as their WIT worlds and bindings describe them.
+    pub externals: Vec<External>,
 }
 
 /// Checks the program, and returns its modules and resolved names if it
 /// checks clean, or its reports if not.
 pub fn resolve(program: &Program) -> Result<Resolved, Vec<Report>> {
     let (modules, mut reports) = Modules::load(program);
-    let refs = {
+    let (refs, externals) = {
         let mut checker = Checker::new(&modules);
         checker.check();
         finish(
@@ -126,12 +133,16 @@ pub fn resolve(program: &Program) -> Result<Resolved, Vec<Report>> {
         );
         let mut refs: HashMap<Span, Span> = checker.refs.iter().copied().collect();
         refs.extend(checker.names.refs.borrow().iter().copied());
-        refs
+        (refs, external::describe(&checker))
     };
     if !reports.is_empty() {
         return Err(reports);
     }
-    Ok(Resolved { modules, refs })
+    Ok(Resolved {
+        modules,
+        refs,
+        externals,
+    })
 }
 
 /// Parses and checks every file of the program, and indexes its names.
@@ -217,6 +228,7 @@ fn finish(
         .as_ref()
         .map(|web| web.iter().map(|a| a.path.clone()).collect());
     checker.check_web(web.as_deref());
+    checker.check_rust_files(program.rust.as_deref());
     reports.extend(
         checker
             .diagnostics
@@ -268,6 +280,8 @@ pub(crate) struct Checker<'a> {
     pub locals: Vec<(Ident, Ty)>,
     /// Each name in a body resolved, with the name of what it refers to.
     pub refs: Vec<(Span, Span)>,
+    /// The Rust files the external components name.
+    pub rust_sources: Vec<external::RustSource>,
 }
 
 /// A component and what it declares.
@@ -396,16 +410,19 @@ impl<'a> Checker<'a> {
             diagnostics,
             locals: Vec::new(),
             refs: Vec::new(),
+            rust_sources: Vec::new(),
         }
     }
 
     fn check(&mut self) {
         self.collect_datas();
         self.collect_items();
+        self.check_externals();
         self.check_app();
         for index in 0..self.components.len() {
             self.check_component_starts(index);
             self.check_failure(index);
+            self.check_external_failures(index);
         }
         self.check_cycles();
         self.check_bodies();

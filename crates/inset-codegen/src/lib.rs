@@ -33,6 +33,12 @@
 //! would not build, such as a child lent to a sibling, which no example
 //! needs yet.
 //!
+//! **External components.** An `extern component` is emitted as a
+//! component whose handlers pass each message to the host, and is built
+//! as a WebAssembly component of its own from a WIT world written from its
+//! declaration (`external.rs`), with Rust as the first language adapter
+//! (`external/rust.rs`).
+//!
 //! **Coverage.** The emitted code marks each function, branch, `?` error
 //! path and `failure` arm it reaches, by its diagram ID, so `inset test` can
 //! tell which requirement reached what. `coverage.rs` walks each body as the
@@ -53,6 +59,7 @@
 
 mod body;
 mod coverage;
+mod external;
 mod items;
 mod project;
 
@@ -64,6 +71,8 @@ use inset_syntax::{Diagnostic, Span};
 use quote::quote;
 
 pub use coverage::Elements;
+pub use external::rust::{LOCK_FILE, interface_lib};
+pub use external::world;
 pub use project::{BuildError, Built, build, cargo_toml};
 
 /// The Rust for a program.
@@ -75,6 +84,8 @@ pub struct Generated {
     pub source: String,
     /// What coverage counts, as the emitted code marks it.
     pub elements: Elements,
+    /// The external components, each built as a component of its own.
+    pub externals: Vec<inset_check::External>,
 }
 
 /// Checks the program and emits its Rust. The reports are the checker's,
@@ -128,6 +139,7 @@ pub fn generate(program: &Program) -> Result<Generated, Vec<Report>> {
         package: package_name(&app),
         source: spaced(&prettyplease::unparse(&file)),
         elements: emitter.elements,
+        externals: resolved.externals.clone(),
     })
 }
 
@@ -186,6 +198,8 @@ struct Emitter<'a> {
     module_path: Vec<String>,
     /// Whether any module has a top-level algorithm.
     has_algorithms: bool,
+    /// The names of the external components.
+    externals: Vec<String>,
     /// Whose elements the function being emitted marks.
     owner: coverage::Owner,
     /// The elements of the component being emitted.
@@ -222,6 +236,7 @@ impl<'a> Emitter<'a> {
             app: app.to_string(),
             module_path: Vec::new(),
             has_algorithms,
+            externals: resolved.externals.iter().map(|e| e.name.clone()).collect(),
             owner: coverage::Owner::Algorithms,
             branches: Vec::new(),
             elements: Elements::default(),

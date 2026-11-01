@@ -26,6 +26,9 @@
 //!   their crate. [`Json`] is the body and reply wrapper, as in axum.
 //! - **The front end**'s files are compiled into the component, and served
 //!   for a `GET` that no route of their server takes ([`FrontEnd`]).
+//! - **External components** are components whose handlers pass each
+//!   message to the host, which runs the external code as a WebAssembly
+//!   component of its own ([`External`]).
 //! - **Coverage** is counted by the emitted code itself: it marks each
 //!   function, branch, `?` and `failure` arm it reaches, by its diagram ID,
 //!   and the runtime reports what was reached to the host ([`coverage`]).
@@ -46,6 +49,7 @@
 mod actor;
 pub mod coverage;
 mod executor;
+mod external;
 mod failure;
 mod http;
 mod program;
@@ -72,6 +76,7 @@ pub use actor::{
     AnyReply, Component, Emitted, Handle, LocalBoxFuture, Mailbox, Message, NoMessage, Outlet,
     Scope, Sendable, send,
 };
+pub use external::External;
 pub use failure::{Failure, Response, Stopped};
 pub use http::{
     HttpServer, IntoResponse, Json, Method, PathParams, Query, Reply, Request, Route, Status,

@@ -1,0 +1,48 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+assertion_line: 259
+---
+src/main.inset:9:5-9:13
+the field `number_2` has no name in WIT
+an external component's bindings are generated from WIT, which cannot keep this name
+help: an external component's messages, parameters and fields are named in `snake_case`, with each word starting with a letter, such as `line_two`
+
+src/main.inset:33:29-33:41
+`Decimal` in an external component's message is not supported yet
+the generated bindings cannot give the Rust code this type yet
+help: carry it as a type the bindings give back exactly: a `String`, a number, `bool`, `char`, a `Vec`, an `Option`, a `Result`, a tuple, or a struct or enum of the program
+
+src/main.inset:33:51-33:71
+`HashMap<String, u32>` in an external component's message is not supported yet
+the generated bindings cannot give the Rust code this type yet
+help: carry it as a type the bindings give back exactly: a `String`, a number, `bool`, `char`, a `Vec`, an `Option`, a `Result`, a tuple, or a struct or enum of the program
+
+src/main.inset:33:76-33:80
+`u128` cannot cross into an external component
+the WebAssembly component model has no such type
+help: use an integer of 8, 16, 32 or 64 bits, such as `u64`
+
+src/main.inset:35:8-35:11
+an external component's functions are messages
+other components reach it only through `#[message]` functions
+help: write `#[message]` above the signature
+
+src/main.inset:35:8-35:11
+the message `new` takes no `self`
+a message is handled by the running component
+help: take `&self`, or `&mut self` to change the component's state
+
+src/main.inset:35:8-35:11
+an external component's message cannot be named `new`
+the generated trait's `new` starts the component
+help: give the message another name
+
+src/main.inset:35:12-35:18
+the parameter `line_2` has no name in WIT
+an external component's bindings are generated from WIT, which cannot keep this name
+help: an external component's messages, parameters and fields are named in `snake_case`, with each word starting with a letter, such as `line_two`
+
+src/main.inset:38:14-38:18
+an external component's message is not `async`
+it runs to completion in its own WebAssembly component
+help: remove `async`; the sender still awaits the reply

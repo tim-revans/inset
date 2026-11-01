@@ -1,0 +1,8 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+assertion_line: 259
+---
+src/main.inset:20:9-20:33
+`lines` is external, so it cannot be rolled back
+its state is code the compiler cannot see
+help: respond with `Child(lines) => restart`, which starts it afresh

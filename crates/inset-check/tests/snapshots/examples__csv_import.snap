@@ -1,5 +1,6 @@
 ---
 source: crates/inset-check/tests/examples.rs
+assertion_line: 45
 expression: "remaining(\"csv-import\")"
 ---
 Error: `for all` is not supported yet
@@ -29,36 +30,6 @@ Error: a placeholder from `for all` is not supported yet
  83 │     and products["bolt-m6"].gross >= <net>
     │                                      ──┬──  
     │                                        ╰──── the parser does not handle this yet
-────╯
-Error: `#[rust]` is not supported yet
-    ╭─[ src/main.inset:39:3 ]
-    │
- 39 │ #[rust(path = "csv_reader.rs", crates = ["csv@1.3"])]
-    │   ──┬─  
-    │     ╰─── the parser does not handle this yet
-────╯
-Error: `extern` is not supported yet
-    ╭─[ src/main.inset:40:1 ]
-    │
- 40 │ extern component CsvReader {
-    │ ───┬──  
-    │    ╰──── the parser does not handle this yet
-────╯
-Error: expected the function's body, in `{` `}`, found `;`
-    ╭─[ src/main.inset:43:43 ]
-    │
- 43 │     fn read(&self, text: &str) -> Vec<Row>;
-    │                                           ┬  
-    │                                           ╰── expected the function's body, in `{` `}`
-────╯
-Error: `CsvReader` has no message `read`
-    ╭─[ src/main.inset:57:29 ]
-    │
- 57 │         let rows = self.csv.read(&text).await;
-    │                             ──┬─  
-    │                               ╰─── `CsvReader` has no function `read`
-    │ 
-    │ Help: `CsvReader` has no `#[message]` functions
 ────╯
 Error: `fork` is not supported yet
     ╭─[ src/main.inset:72:19 ]

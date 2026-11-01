@@ -1,0 +1,11 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "#[rust(path = \"reader.rs\", features = [\"std\"])]\nextern component Reader {\n    #[message]\n    fn read(&self, text: &str) -> u64;\n}\n"
+---
+Error: unknown `#[rust]` argument `features`
+   ╭─[ main.inset:1:28 ]
+   │
+ 1 │ #[rust(path = "reader.rs", features = ["std"])]
+   │                            ────┬───  
+   │                                ╰───── `#[rust]` takes `path` and `crates`
+───╯

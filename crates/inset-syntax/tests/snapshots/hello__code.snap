@@ -119,6 +119,7 @@ Module {
             vis: Private,
             kind: Component(
                 Component {
+                    external: None,
                     name: "Greeter" @ 258..265,
                     fields: [
                         FieldDecl {

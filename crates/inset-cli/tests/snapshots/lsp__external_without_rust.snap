@@ -1,0 +1,8 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+assertion_line: 259
+---
+src/main.inset:26:1-26:23
+`Lines` does not say what implements it
+an external component's code is written in another language
+help: name the Rust file that implements it, and the crates the file uses, above it: `#[rust(path = "name.rs", crates = ["name@version"])]`

@@ -33,9 +33,9 @@ use inset_syntax::ast::{
 use inset_syntax::{Diagnostic, Span};
 
 use crate::model::{
-    App, Component, Condition, Config, Diagram, Edge, FailureArm, Field, FieldKind, FrontEnd,
-    Function, Grant, Handoff, Method, Outside, OutsideKind, Param, Receiver, Response, Route,
-    Setting,
+    App, Component, Condition, Config, Diagram, Edge, External, FailureArm, Field, FieldKind,
+    FrontEnd, Function, Grant, Handoff, Method, Outside, OutsideKind, Param, Receiver, Response,
+    Route, Setting,
 };
 
 /// Checks the program and emits its diagram data. The reports are the
@@ -576,7 +576,7 @@ impl<'a> Emitter<'a> {
             ty: component.name.name.clone(),
             definition,
             doc: doc(&item.docs),
-            external: None,
+            external: external(item),
             start: start_handoffs,
             fields,
             failure,
@@ -661,7 +661,9 @@ impl<'a> Emitter<'a> {
         let id = format!("{owner}/fn:{}", function.name.name);
         self.locate(&id, function.name.span);
         let returns = function.ret.as_ref().map(|t| self.text(t.span));
-        let body = self.flowchart(&id, function, scope);
+        // An external component's messages are signatures, with no flowchart.
+        let external = scope.is_some_and(|s| s.definition.external.is_some());
+        let body = (!external).then(|| self.flowchart(&id, function, scope));
         Function {
             name: function.name.name.clone(),
             doc: doc(docs),
@@ -679,7 +681,7 @@ impl<'a> Emitter<'a> {
                 })
                 .collect(),
             returns,
-            body: Some(body),
+            body,
             id,
         }
     }
@@ -708,6 +710,18 @@ impl<'a> Emitter<'a> {
         }
         edges
     }
+}
+
+/// Where an external component's code comes from, from its `#[rust]`.
+fn external(item: &ast::Item) -> Option<External> {
+    item.attrs.iter().find_map(|a| match &a.kind {
+        AttributeKind::Rust(rust) => Some(External {
+            language: "rust".into(),
+            path: rust.path.value.clone(),
+            crates: rust.crates.iter().map(|c| c.value.clone()).collect(),
+        }),
+        _ => None,
+    })
 }
 
 /// The component a function belongs to, for resolving its calls.

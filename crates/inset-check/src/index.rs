@@ -411,7 +411,35 @@ impl<'a> Builder<'_, 'a> {
                 notes.push(format!("Takes the messages {}.", names(messages)));
             }
         }
-        let code = format!("component {}", component.name.name);
+        let rust = self
+            .cx
+            .names
+            .components
+            .iter()
+            .find(|d| std::ptr::eq(d.ast, component))
+            .and_then(|d| {
+                d.item.attrs.iter().find_map(|a| match &a.kind {
+                    AttributeKind::Rust(rust) => Some(rust),
+                    _ => None,
+                })
+            });
+        if let Some(rust) = rust {
+            let crates: Vec<&str> = rust.crates.iter().map(|c| c.value.as_str()).collect();
+            let with = if crates.is_empty() {
+                String::new()
+            } else {
+                format!(", with the crates {}", names(crates))
+            };
+            notes.insert(
+                0,
+                format!("Written in Rust, in `{}`{with}.", rust.path.value),
+            );
+        }
+        let code = if component.external.is_some() {
+            format!("extern component {}", component.name.name)
+        } else {
+            format!("component {}", component.name.name)
+        };
         self.symbol(
             &component.name,
             SymbolKind::Component,

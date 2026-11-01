@@ -1,0 +1,26 @@
+requirement "The count goes on across requests"
+    when Tally receives POST /count with "one two"
+    then Tally replies OK with "2"
+    when Tally receives POST /count with "three"
+    then Tally replies OK with "3"
+
+requirement "A panic in the counter fails its request, and the count starts again"
+    when Tally receives POST /count with "one two"
+    then Tally replies OK with "2"
+    when Tally receives POST /count with "panic"
+    then Tally replies InternalServerError
+    when Tally receives POST /count with "three"
+    then Tally replies OK with "1"
+
+requirement "Each word is described with its length and the word before it"
+    when Tally receives POST /words with "a long word"
+    then Tally replies OK with
+        """
+        Word { text: "a", length: Short, after: None }
+        Word { text: "long", length: Long(4), after: Some("a") }
+        Word { text: "word", length: Long(4), after: Some("long") }
+        """
+
+requirement "The counter cannot read a file"
+    when Tally receives GET /file
+    then Tally replies OK with "refused: No such file or directory (os error 44)"

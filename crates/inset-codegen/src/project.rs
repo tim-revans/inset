@@ -9,8 +9,8 @@ use inset_check::{Program, Report};
 use crate::generate;
 
 /// The workspace's lock file and toolchain, which the generated project starts from.
-const LOCK: &str = include_str!("../../../Cargo.lock");
-const TOOLCHAIN: &str = include_str!("../../../rust-toolchain.toml");
+pub(crate) const LOCK: &str = include_str!("../../../Cargo.lock");
+pub(crate) const TOOLCHAIN: &str = include_str!("../../../rust-toolchain.toml");
 
 /// A built program.
 #[derive(Clone, Debug)]
@@ -28,6 +28,9 @@ pub enum BuildError {
     Rejected(Vec<Report>),
     /// The project could not be written or built.
     Failed(String),
+    /// The Rust that implements an external component does not build:
+    /// a report at its declaration, and what rustc said.
+    External { report: Report, rustc: String },
 }
 
 impl fmt::Display for BuildError {
@@ -35,6 +38,9 @@ impl fmt::Display for BuildError {
         match self {
             BuildError::Rejected(reports) => write!(f, "the program has {} errors", reports.len()),
             BuildError::Failed(message) => f.write_str(message),
+            BuildError::External { report, rustc } => {
+                write!(f, "{}\n\n{rustc}", report.diagnostic.message)
+            }
         }
     }
 }
@@ -43,14 +49,16 @@ impl std::error::Error for BuildError {}
 
 /// Writes the program's Rust as a Cargo project in `out_dir`, builds it
 /// for `wasm32-wasip2`, and copies the component to
-/// `out_dir/<package>.wasm`. Cargo builds in `target_dir`, or else where
-/// it would by default.
+/// `out_dir/<package>.wasm`. Each external component is built first, into
+/// `out_dir/externals/<Name>.wasm` (see `external::rust`). Cargo builds in
+/// `target_dir`, or else where it would by default.
 pub fn build(
     program: &Program,
     out_dir: &Path,
     target_dir: Option<&Path>,
 ) -> Result<Built, BuildError> {
     let generated = generate(program).map_err(BuildError::Rejected)?;
+    crate::external::rust::build(program, &generated.externals, out_dir, target_dir)?;
     let runtime = Path::new(env!("CARGO_MANIFEST_DIR")).join("../inset-runtime");
     let runtime = runtime.canonicalize().unwrap_or(runtime);
     write(
@@ -149,7 +157,7 @@ overflow-checks = true
 
 /// Writes a file unless it already holds `contents`, so Cargo sees no
 /// change when there is none.
-fn write(path: &Path, contents: &str) -> Result<(), BuildError> {
+pub(crate) fn write(path: &Path, contents: &str) -> Result<(), BuildError> {
     if std::fs::read_to_string(path).is_ok_and(|old| old == contents) {
         return Ok(());
     }
@@ -210,7 +218,7 @@ fn list_files(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 /// The `.wasm` file Cargo reports building for the package.
-fn artifact(messages: &str, package: &str) -> Option<PathBuf> {
+pub(crate) fn artifact(messages: &str, package: &str) -> Option<PathBuf> {
     let target = package.replace('-', "_");
     messages
         .lines()

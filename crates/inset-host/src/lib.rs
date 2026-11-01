@@ -44,6 +44,7 @@ use wasmtime::{Engine, Store};
 use wasmtime_wasi::clocks::{HostMonotonicClock, HostWallClock};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
+mod external;
 mod server;
 mod table;
 
@@ -61,7 +62,8 @@ mod bindings {
 }
 
 use bindings::exports::inset::host::app;
-use bindings::inset::host::{capabilities, report};
+use bindings::inset::host::{capabilities, externals, report};
+use external::Externals;
 
 pub use app::{Grant, GrantValue, Manifest, Request, Response, Setting, SettingType, Stopped};
 
@@ -83,11 +85,15 @@ impl From<wasmtime::Error> for Error {
     }
 }
 
-/// A built program, compiled and ready to start.
+/// A built program, compiled and ready to start, with its external components.
 pub struct Program {
     engine: Engine,
     pre: bindings::ProgramPre<State>,
     manifest: Manifest,
+    /// The external components the manifest names, loaded from
+    /// `externals/` beside the program's component. Each start of the
+    /// program runs instances of its own.
+    externals: Externals,
 }
 
 impl Program {
@@ -122,10 +128,13 @@ impl Program {
             .instantiate(&mut store)?
             .inset_host_app()
             .call_describe(&mut store)?;
+        let dir = path.parent().unwrap_or(Path::new(".")).join("externals");
+        let externals = Externals::load(&engine, &dir, &manifest.externals)?;
         Ok(Program {
             engine,
             pre,
             manifest,
+            externals,
         })
     }
 
@@ -155,8 +164,9 @@ impl Program {
             }
             grants.insert(grant.name.clone(), granted);
         }
+        let externals = Arc::new(self.externals.fresh());
         let (store, instance) = self
-            .instantiate(&tables, Vec::new(), BTreeSet::new(), None)
+            .instantiate(&tables, &externals, Vec::new(), BTreeSet::new(), None)
             .map_err(|e| match e {
                 Started::Failed(e) => e,
                 Started::Stopped(stopped) => self.refused(&stopped, &grants),
@@ -167,6 +177,7 @@ impl Program {
             instance,
             grants,
             tables,
+            externals,
             stopped: None,
         })
     }
@@ -174,11 +185,13 @@ impl Program {
     fn instantiate(
         &self,
         tables: &BTreeMap<String, Arc<Mutex<Table>>>,
+        externals: &Arc<Externals>,
         reports: Vec<Report>,
         reached: BTreeSet<String>,
         restore: Option<&[u8]>,
     ) -> Result<(Store<State>, bindings::Program), Started> {
         let mut state = State::new(tables.clone());
+        state.externals = Some(externals.clone());
         state.reports = reports;
         state.reached = reached;
         let mut store = Store::new(&self.engine, state);
@@ -362,6 +375,9 @@ pub struct Running<'p> {
     instance: bindings::Program,
     grants: BTreeMap<String, Granted>,
     tables: BTreeMap<String, Arc<Mutex<Table>>>,
+    /// The program's running external components, which a fresh instance
+    /// after a panic keeps.
+    externals: Arc<Externals>,
     stopped: Option<Stopped>,
 }
 
@@ -448,10 +464,13 @@ impl Running<'_> {
             restarted: recovery.restarted,
         });
         let reached = std::mem::take(&mut state.reached);
-        match self
-            .program
-            .instantiate(&self.tables, reports, reached, Some(&recovery.state))
-        {
+        match self.program.instantiate(
+            &self.tables,
+            &self.externals,
+            reports,
+            reached,
+            Some(&recovery.state),
+        ) {
             Ok((store, instance)) => {
                 self.store = store;
                 self.instance = instance;
@@ -542,6 +561,8 @@ struct State {
     reports: Vec<Report>,
     reached: BTreeSet<String>,
     trapping: Option<Trapping>,
+    /// The program's external components, once it is started.
+    externals: Option<Arc<Externals>>,
 }
 
 impl State {
@@ -562,6 +583,7 @@ impl State {
             reports: Vec::new(),
             reached: BTreeSet::new(),
             trapping: None,
+            externals: None,
         }
     }
 }
@@ -577,7 +599,7 @@ impl WasiView for State {
 
 /// WASI's clocks, stopped at zero. Time is an effect, which a program will
 /// reach through a capability of its own.
-struct FixedClock;
+pub(crate) struct FixedClock;
 
 impl HostWallClock for FixedClock {
     fn resolution(&self) -> Duration {
@@ -665,6 +687,31 @@ impl capabilities::HostTable for State {
     }
 }
 
+impl externals::Host for State {
+    fn call(
+        &mut self,
+        component: String,
+        external: String,
+        message: String,
+        args: Vec<u8>,
+    ) -> wasmtime::Result<Result<Vec<u8>, String>> {
+        Ok(match &self.externals {
+            Some(externals) => externals.call(&component, &external, &message, &args),
+            None => Err("the program has not started".into()),
+        })
+    }
+}
+
+impl State {
+    /// A restart reset `component` and its children, so any external
+    /// component among them starts afresh.
+    fn reset_externals(&self, component: &str) {
+        if let Some(externals) = &self.externals {
+            externals.reset(component);
+        }
+    }
+}
+
 impl report::Host for State {
     fn rolled_back(
         &mut self,
@@ -688,6 +735,7 @@ impl report::Host for State {
         message: String,
         restarted: String,
     ) -> wasmtime::Result<()> {
+        self.reset_externals(&restarted);
         self.reports.push(Report {
             component,
             failure,
@@ -709,6 +757,9 @@ impl report::Host for State {
         message: String,
         recovery: Option<report::Recovery>,
     ) -> wasmtime::Result<()> {
+        if let Some(restarted) = recovery.as_ref().and_then(|r| r.restarted.as_deref()) {
+            self.reset_externals(restarted);
+        }
         self.trapping = Some(Trapping {
             component,
             failure,

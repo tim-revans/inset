@@ -1,0 +1,81 @@
+/// Counts words, with the counting done by an external component written in Rust.
+app Tally {
+    /// The port to serve on.
+    setting port: u16 = 8080;
+    grant http: HttpServer { port };
+    start Counter { http: move http };
+}
+
+/// How long a word is.
+#[derive(Clone, Debug, PartialEq)]
+enum Length {
+    /// Three letters or fewer.
+    Short,
+    /// More than three letters, with how many.
+    Long(u32),
+}
+
+/// A word, with its length.
+#[derive(Clone, Debug, PartialEq)]
+struct Word {
+    text: String,
+    length: Length,
+    /// The word before it, if any.
+    after: Option<String>,
+}
+
+/// Counts the words posted to it.
+component Counter {
+    http: HttpServer,
+
+    start words: WordCounter {};
+
+    failure {
+        /// A panic in the counter loses only its count, which starts again from zero.
+        Child(words) => restart,
+        /// The request that made the counter panic fails alone.
+        Message(words) => rollback,
+    }
+
+    /// Adds the words in the body to the count, and replies with the count.
+    #[post("/count", via = http, body = text)]
+    async fn count(&mut self, text: String) -> String {
+        let total = self.words.add(&text).await;
+        format!("{total}")
+    }
+
+    /// Describes each word in the body.
+    #[post("/words", via = http, body = text)]
+    async fn describe(&self, text: String) -> String {
+        let words = self.words.split(move text).await;
+        let mut out = String::new();
+        for word in words {
+            out.push_str(&format!("{word:?}\n"));
+        }
+        out
+    }
+
+    /// Asks the counter to read a file it was never given.
+    #[get("/file", via = http)]
+    async fn file(&self) -> String {
+        match self.words.read_file("secret.txt").await {
+            Ok(text) => format!("read: {text}"),
+            Err(error) => format!("refused: {error}"),
+        }
+    }
+}
+
+#[rust(path = "words.rs")]
+extern component WordCounter {
+    /// Adds the words in `text` to the count, and returns the count. Panics on the word "panic".
+    #[message]
+    fn add(&mut self, text: &str) -> u64;
+
+    /// Each word in `text`, with its length and the word before it.
+    #[message]
+    fn split(&self, text: String) -> Vec<Word>;
+
+    /// Tries to read the file `path`, and says what happened.
+    #[message]
+    fn read_file(&self, path: &str) -> Result<String, String>;
+}

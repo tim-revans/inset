@@ -1,0 +1,84 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: the field `number_2` has no name in WIT
+   ╭─[ src/main.inset:9:5 ]
+   │
+ 9 │     number_2: u64,
+   │     ────┬───  
+   │         ╰───── an external component's bindings are generated from WIT, which cannot keep this name
+   │ 
+   │ Help: an external component's messages, parameters and fields are named in `snake_case`, with each word starting with a letter, such as `line_two`
+───╯
+Error: `Decimal` in an external component's message is not supported yet
+    ╭─[ src/main.inset:33:29 ]
+    │
+ 33 │     fn total(&self, prices: Vec<Decimal>, counts: HashMap<String, u32>) -> u128;
+    │                             ──────┬─────  
+    │                                   ╰─────── the generated bindings cannot give the Rust code this type yet
+    │ 
+    │ Help: carry it as a type the bindings give back exactly: a `String`, a number, `bool`, `char`, a `Vec`, an `Option`, a `Result`, a tuple, or a struct or enum of the program
+────╯
+Error: `HashMap<String, u32>` in an external component's message is not supported yet
+    ╭─[ src/main.inset:33:51 ]
+    │
+ 33 │     fn total(&self, prices: Vec<Decimal>, counts: HashMap<String, u32>) -> u128;
+    │                                                   ──────────┬─────────  
+    │                                                             ╰─────────── the generated bindings cannot give the Rust code this type yet
+    │ 
+    │ Help: carry it as a type the bindings give back exactly: a `String`, a number, `bool`, `char`, a `Vec`, an `Option`, a `Result`, a tuple, or a struct or enum of the program
+────╯
+Error: `u128` cannot cross into an external component
+    ╭─[ src/main.inset:33:76 ]
+    │
+ 33 │     fn total(&self, prices: Vec<Decimal>, counts: HashMap<String, u32>) -> u128;
+    │                                                                            ──┬─  
+    │                                                                              ╰─── the WebAssembly component model has no such type
+    │ 
+    │ Help: use an integer of 8, 16, 32 or 64 bits, such as `u64`
+────╯
+Error: an external component's functions are messages
+    ╭─[ src/main.inset:35:8 ]
+    │
+ 35 │     fn new(line_2: Line) -> Line;
+    │        ─┬─  
+    │         ╰─── other components reach it only through `#[message]` functions
+    │ 
+    │ Help: write `#[message]` above the signature
+────╯
+Error: the message `new` takes no `self`
+    ╭─[ src/main.inset:35:8 ]
+    │
+ 35 │     fn new(line_2: Line) -> Line;
+    │        ─┬─  
+    │         ╰─── a message is handled by the running component
+    │ 
+    │ Help: take `&self`, or `&mut self` to change the component's state
+────╯
+Error: an external component's message cannot be named `new`
+    ╭─[ src/main.inset:35:8 ]
+    │
+ 35 │     fn new(line_2: Line) -> Line;
+    │        ─┬─  
+    │         ╰─── the generated trait's `new` starts the component
+    │ 
+    │ Help: give the message another name
+────╯
+Error: the parameter `line_2` has no name in WIT
+    ╭─[ src/main.inset:35:12 ]
+    │
+ 35 │     fn new(line_2: Line) -> Line;
+    │            ───┬──  
+    │               ╰──── an external component's bindings are generated from WIT, which cannot keep this name
+    │ 
+    │ Help: an external component's messages, parameters and fields are named in `snake_case`, with each word starting with a letter, such as `line_two`
+────╯
+Error: an external component's message is not `async`
+    ╭─[ src/main.inset:38:14 ]
+    │
+ 38 │     async fn wait(&mut self);
+    │              ──┬─  
+    │                ╰─── it runs to completion in its own WebAssembly component
+    │ 
+    │ Help: remove `async`; the sender still awaits the reply
+────╯

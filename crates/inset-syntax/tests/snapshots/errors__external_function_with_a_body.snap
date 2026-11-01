@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "#[rust(path = \"reader.rs\")]\nextern component Reader {\n    #[message]\n    fn read(&self, text: &str) -> u64 {\n        0\n    }\n}\n"
+---
+Error: a function of an external component has no body
+   ╭─[ main.inset:4:39 ]
+   │
+ 4 │     fn read(&self, text: &str) -> u64 {
+   │                                       ┬  
+   │                                       ╰── its body is written in the component's own language
+   │ 
+   │ Help: end the signature with `;`, and write the body in the Rust file
+───╯

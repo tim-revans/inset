@@ -150,6 +150,11 @@ fn build_program(dir: &str, program: &Program) -> Result<PathBuf, ExitCode> {
             print_reports(program, &reports);
             Err(ExitCode::FAILURE)
         }
+        Err(BuildError::External { report, rustc }) => {
+            print_reports(program, &[report]);
+            eprintln!("{rustc}");
+            Err(ExitCode::FAILURE)
+        }
         Err(e) => {
             eprintln!("inset: {e}");
             Err(ExitCode::FAILURE)

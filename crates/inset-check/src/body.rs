@@ -33,7 +33,11 @@ const MACROS: [&str; 7] = [
 impl Checker<'_> {
     pub(crate) fn check_bodies(&mut self) {
         let mut checked = Vec::new();
+        // An external component's functions are signatures, with no body to check.
         for (index, comp) in self.components.iter().enumerate() {
+            if comp.ast.external.is_some() {
+                continue;
+            }
             for sig in &comp.functions {
                 checked.push(Body::function(self, Some(index), sig));
             }

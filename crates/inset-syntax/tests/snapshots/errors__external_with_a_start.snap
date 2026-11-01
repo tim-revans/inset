@@ -1,0 +1,13 @@
+---
+source: crates/inset-syntax/tests/errors.rs
+description: "#[rust(path = \"reader.rs\")]\nextern component Reader {\n    start helper: Helper {};\n}\n"
+---
+Error: an external component has no `start` statements
+   ╭─[ main.inset:3:5 ]
+   │
+ 3 │     start helper: Helper {};
+   │     ──┬──  
+   │       ╰──── its code is written in another language
+   │ 
+   │ Help: an `extern component` declares fields and `#[message]` signatures; its parent responds to its failures with `Child(name)`
+───╯

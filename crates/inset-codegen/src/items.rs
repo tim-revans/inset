@@ -58,6 +58,10 @@ impl<'a> Emitter<'a> {
         let item_docs = docs(&item.docs);
         match &item.kind {
             ItemKind::App(app) => self.app(item_docs, app),
+            ItemKind::Component(component) if component.external.is_some() => {
+                let vis = self.vis(&item.vis);
+                self.external_component(item_docs, vis, component)
+            }
             ItemKind::Component(component) => {
                 let vis = self.vis(&item.vis);
                 self.component(item_docs, vis, component)
@@ -316,6 +320,12 @@ impl<'a> Emitter<'a> {
                 const BRANCHES: &'static [&'static str] = ALGORITHM_BRANCHES;
             )
         });
+        let externals = (!self.externals.is_empty()).then(|| {
+            let names = &self.externals;
+            quote!(
+                const EXTERNALS: &'static [&'static str] = &[#(#names),*];
+            )
+        });
         quote! {
             #docs
             struct #name;
@@ -328,6 +338,8 @@ impl<'a> Emitter<'a> {
                 const GRANTS: &'static [::inset_runtime::Grant] = &[#(#grants),*];
 
                 #front_end
+
+                #externals
 
                 #algorithms
 
@@ -540,6 +552,94 @@ impl<'a> Emitter<'a> {
         }
     }
 
+    /// An external component: a component whose handlers pass each message
+    /// to the host, which runs the external code (`inset_runtime::External`).
+    /// Its messages are sent and awaited, and fail, as any component's are.
+    fn external_component(
+        &mut self,
+        item_docs: TokenStream,
+        vis: TokenStream,
+        c: &'a Component,
+    ) -> TokenStream {
+        let name = ident(&c.name.name);
+        let component_name = &c.name.name;
+        let functions: Vec<_> = c
+            .functions
+            .iter()
+            .map(|f| {
+                let docs = docs(&f.docs);
+                let fname = ident(&f.name.name);
+                let message = &f.name.name;
+                let mut params = Vec::new();
+                let mut args = Vec::new();
+                for (i, p) in f.params.iter().enumerate() {
+                    let var = match &p.pattern.kind {
+                        PatternKind::Binding { name, .. } => ident(&name.name),
+                        _ => ident(&format!("arg{i}")),
+                    };
+                    let ty = self.ty(&p.ty);
+                    params.push(quote!(#var: #ty));
+                    args.push(match &p.ty.kind {
+                        TypeKind::Ref { .. } => quote!(::inset_runtime::Stored::to_json(
+                            &::std::borrow::ToOwned::to_owned(#var)
+                        )),
+                        _ => quote!(::inset_runtime::Stored::to_json(&#var)),
+                    });
+                }
+                let ret = match &f.ret {
+                    Some(t) => self.ty(t),
+                    None => quote!(()),
+                };
+                quote! {
+                    #docs
+                    async fn #fname(&self, #(#params),*) -> #ret {
+                        self.external.call(#message, Vec::from([#(#args),*])).await
+                    }
+                }
+            })
+            .collect();
+        self.elements.components.push((
+            std::iter::once("crate")
+                .chain(self.module_path.iter().map(String::as_str))
+                .chain([component_name.as_str()])
+                .collect::<Vec<_>>()
+                .join("::"),
+            Vec::new(),
+        ));
+        let (messages, message_types) = self.messages(c, &vis);
+        quote! {
+            #item_docs
+            #vis struct #name {
+                external: ::inset_runtime::External,
+            }
+
+            impl #name {
+                /// Starts the component, whose code the host runs.
+                #vis fn start(scope: &::inset_runtime::Scope) -> Self {
+                    #name {
+                        external: ::inset_runtime::External::new(scope, #component_name),
+                    }
+                }
+
+                #(#functions)*
+            }
+
+            #message_types
+
+            impl ::inset_runtime::Component for #name {
+                const NAME: &'static str = #component_name;
+
+                type Saved = ();
+
+                fn save(&self) {}
+
+                fn restore(&mut self, (): ()) {}
+
+                #messages
+            }
+        }
+    }
+
     /// The `start` statements of the app, or of the component `owner`:
     /// a handle for each child, made before any child starts so that an
     /// outlet can be connected to a sibling started after it, and then each
@@ -719,7 +819,7 @@ impl<'a> Emitter<'a> {
                 Some(_) => quote!(#name::#fname(self, #(#passed),*)),
                 None => quote!(#name::#fname(#(#passed),*)),
             };
-            let call = if f.is_async {
+            let call = if f.is_async || c.external.is_some() {
                 quote!(#call.await)
             } else {
                 call

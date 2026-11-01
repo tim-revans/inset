@@ -1,0 +1,29 @@
+---
+source: crates/inset-cli/tests/external.rs
+expression: shown
+---
+Error: the Rust that implements `CsvReader` does not build
+    ╭─[ src/main.inset:40:18 ]
+    │
+ 40 │ extern component CsvReader {
+    │                  ────┬────  
+    │                      ╰────── the trait `interface::CsvReader` comes from this declaration
+    │ 
+    │ Help: make `src/csv_reader.rs` match the declaration, or change the declaration; rustc's errors follow
+────╯
+error[E0053]: method `read` has an incompatible type for trait
+  --> src/csv_reader.rs:17:26
+   |
+17 |     fn read(&self, text: String) -> Vec<Row> {
+   |                          ^^^^^^ expected `&str`, found `String`
+   |
+   = note: expected signature `fn(&Reader, &str) -> Vec<_>`
+              found signature `fn(&Reader, String) -> Vec<_>`
+help: change the parameter type to match the trait
+   |
+17 -     fn read(&self, text: String) -> Vec<Row> {
+17 +     fn read(&self, text: &str) -> Vec<Row> {
+   |
+
+For more information about this error, try `rustc --explain E0053`.
+error: could not compile `csv-reader` (lib) due to 1 previous error

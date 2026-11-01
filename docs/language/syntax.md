@@ -564,12 +564,14 @@ extern component CsvReader {
 - `extern component` declares a component with no Inset body. As in a Rust `extern` block, its functions are signatures ending in `;`.
 - Its fields are the capabilities it holds, as in any component. `CsvReader` has none. *(Draft: an external component with capabilities.)*
 - `#[rust(path = ..., crates = [...])]` names the Rust file that implements it, relative to the file declaring it, and the crates that file may use, as `name@version`. The versions chosen are locked in `inset.lock` beside `src/`, in Cargo's lock-file format, so a build always uses the same code.
-- An external component's message parameters and replies must be types the WebAssembly component model can carry: the program's own `struct` and `enum` types, and the standard types, with a map carried as a list of pairs. Messages already allow no generics or lifetimes.
+- Its functions are `#[message]` signatures taking `&self` or `&mut self`, and are not `async`: the external code runs each message to completion, and the sender still awaits the reply. A message cannot be named `new`, which the trait below takes.
+- An external component's message parameters and replies must be types the WebAssembly component model can carry: `bool`, `char`, `String` (lent as `&str`), integers of 8 to 64 bits, `f32` and `f64`, `Vec<T>` (lent as `&[T]`), `Option`, `Result`, tuples, and the program's own `struct` and `enum` types, each holding at least one field or variant. A type cannot contain itself there, because WIT has no recursive types. Messages already allow no generics or lifetimes. *(Draft: `Decimal`, maps, sets, `VecDeque` and a variant holding more than one value, which WIT could carry but the generated bindings would hand the Rust code as a different type: a `String`, a `Vec` of pairs or a tuple.)*
+- The names in those types, and the messages and their parameters, must come back unchanged from WIT's kebab case, so the Rust author and the host see the names the program uses: a field such as `on_hand` is `on-hand` in WIT, and a type or variant such as `InvalidRows` is `invalid-rows`. A field `line_2` or a type `Csv_Row` has no such name, and the checker says so.
 
 **The Rust side.** The Rust file is the root of a crate of its own. The compiler generates a crate named `interface` from the declaration, holding:
 
 - a trait with the component's name, with one method per declared message, exactly as declared, and `fn new(...) -> Self`, which takes the component's fields in order;
-- the program's types that the messages use, such as `Row`;
+- the program's types that the messages use, such as `Row`, as `wit-bindgen` declares them, deriving `Clone` and implementing `Debug`;
 - an `export!` macro, which names the type that implements the trait.
 
 ```rust
@@ -589,8 +591,11 @@ interface::export!(Reader);
 ```
 
 - A file that does not match the declaration fails to build with rustc's own error about the trait, such as a missing method or a wrong signature.
-- `new` is called when the component starts, and again when it restarts.
+- `new` is called before the component's first message, and again before its first message after it restarts. A component that fails, such as by panicking, loses its instance and its state, so it is always started again; its parent responds with `Child(name) => restart` to carry on, and a component awaiting it gets `Message(name)`.
+- A rollback in another component does not undo what an external component did, because its state is Rust the compiler cannot see.
 - The trait exists only in the generated Rust. Inset code still cannot declare traits.
+
+- The diagram shows its messages but not their code, so coverage does not count them: requirements reach an external component through the Inset code that sends it messages.
 
 *Why a generated trait:* it is how WebAssembly's own Rust bindings, from `wit-bindgen`, ask for an implementation, so a model has seen it many times, and a mismatch is reported in terms a model already knows how to fix.
 
