@@ -4,6 +4,7 @@
 //! - `name[key] is value`
 //! - `name is empty`
 //! - `name fails`
+//! - `name["METHOD /path"] replies Status`, optionally `with body`
 //! - any other expression is a check, allowed after `then` only.
 
 use super::{PResult, Parser};
@@ -36,10 +37,47 @@ impl Parser<'_> {
         let start = self.span().start;
         let lhs = self.parse_expr()?;
         let word = match self.kind() {
-            T::Ident(word) if word == "is" || word == "fails" => Some(word.clone()),
+            T::Ident(word) if word == "is" || word == "fails" || word == "replies" => {
+                Some(word.clone())
+            }
             _ => None,
         };
         match word.as_deref() {
+            Some("replies") => {
+                let ExprKind::Index { base, index } = &lhs.kind else {
+                    return Err(self.report(
+                        Diagnostic::new(
+                            "expected a call after the client's name",
+                            lhs.span,
+                            "`replies` states how a call is answered",
+                        )
+                        .with_help("write `name[\"GET /path\"] replies OK with \"...\"`"),
+                    ));
+                };
+                let grant = self.grant_name(base, "a fact")?;
+                let key = index.clone();
+                self.bump();
+                let status = match self.kind() {
+                    T::Ident(name) if name.starts_with(|c: char| c.is_ascii_uppercase()) => {
+                        let ident = Ident::new(name.clone(), self.span());
+                        self.bump();
+                        ident
+                    }
+                    _ => return Err(self.expected("a status after `replies`, such as `OK`")),
+                };
+                let body = if matches!(self.kind(), T::Ident(w) if w == "with") {
+                    self.bump();
+                    Some(Box::new(self.parse_expr()?))
+                } else {
+                    None
+                };
+                self.expect_end()?;
+                Ok(StepFact::Fact(Box::new(Fact {
+                    grant,
+                    kind: FactKind::Replies { key, status, body },
+                    span: Span::new(start, self.prev_span().end),
+                })))
+            }
             Some("fails") => {
                 let grant = self.grant_name(&lhs, "`fails`")?;
                 self.bump();

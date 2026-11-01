@@ -12,7 +12,15 @@ use quote::quote;
 use crate::Emitter;
 
 /// The types Inset's standard library adds, which the runtime provides.
-const RUNTIME_TYPES: [&str; 6] = ["HttpServer", "Table", "Handle", "Outlet", "Decimal", "Json"];
+const RUNTIME_TYPES: [&str; 7] = [
+    "HttpServer",
+    "HttpClient",
+    "Table",
+    "Handle",
+    "Outlet",
+    "Decimal",
+    "Json",
+];
 
 /// Words Rust reserves that Inset does not, which are written as raw identifiers.
 const RESERVED: [&str; 14] = [

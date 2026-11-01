@@ -173,6 +173,9 @@ pub component Warehouse {
 - A handoff connects a child's outlet to a message with `send`: `low_stock: send reorders.raise` (see [Outlets](#outlets)).
 - *(Draft: no example needs it yet, so the checker accepts it and the compiler reports it as not compiled yet.)* A handoff can lend a child started earlier in the same body to a later one: `reorders: &reorders`. The later child declares the field as a borrowed handle, `reorders: &Handle<Reorders>`, and can send it messages and await their replies. Like all borrows across a boundary, it is written without a lifetime: the compiler knows the parent outlives both children. The parent still owns the lent child.
 - A child can only be lent to siblings started after it, never to itself or to its parent.
+- A component lends its server to a child with `&`: `start notes: Notebook { http: &http }`. The child declares the field as `http: &HttpServer`, and serves routes of its own on the same port, through `via = http`. The parent keeps the server and may serve routes on it too, and a child may lend it on to its own children. Only a component lends a server: the app moves each grant into one component. Two components may not serve the same method and path on one server. *(Status: implemented and tested; no example needs it yet, so Draft.)*
+
+  *Why servers are lent:* a component handles one envelope at a time, from start to finish, so every request to the routes of one component waits for the one before it to finish. A program whose requests should not wait on each other spreads its routes over components, each serving its own on a lent server. Each request then holds only the component that serves it, and the components it reaches (see [`runtime.md`](runtime.md#concurrent-requests)). Lending a server shares no state: the parent and child each see only their own requests, so the reason capabilities are otherwise never lent does not apply.
 - A component handle cannot be moved, copied, stored in data or sent in a message. The only handles a component holds are its own children and the siblings lent to it at `start`. A component that only needs to tell another something is given an outlet instead.
 - A component's children start before it handles anything, and stop after it stops.
 - A component started by a parent is nested inside the parent on the diagram. The app's children are the top-level components.
@@ -187,11 +190,12 @@ pub component Warehouse {
 
 **Status:** Used.
 
-A capability is an owned handle to something outside the program, such as a network listener or a stored table. Capabilities cannot be copied, cloned or lent. A component can use only the capabilities in its fields.
+A capability is an owned handle to something outside the program, such as a network listener or a stored table. Capabilities cannot be copied, cloned or lent, except that a component may lend its `HttpServer` to a child (see [Starting components](#starting-components)). A component can use only the capabilities in its fields.
 
 | Capability | Granted with | Gives the holder |
 | --- | --- | --- |
 | `HttpServer` | `HttpServer { port: u16 }` | Incoming HTTP requests on the port, answered by route handlers |
+| `HttpClient` | `HttpClient { base: String }` | Calls to the service at the base address, such as `http://127.0.0.1:9000`, over plain HTTP |
 | `Table<K, V>` | `Table<K, V> { file: String, name: String }` | A stored map from keys of type `K` to values of type `V`, kept in the table `name` of the database file `file` |
 
 A program cannot declare its own capability types. A capability is something the host grants and enforces, so only the host can provide one. The standard library declares those above.
@@ -208,6 +212,21 @@ A program cannot declare its own capability types. A capability is something the
 - `K` and `V` must be data types: they cannot hold capabilities or component handles.
 - A key is an integer type, `bool`, `char`, `String`, or a tuple of these. A value owns its data, so it holds no references, `&str` or slices.
 - A handler's writes take effect when it completes, all together, or not at all if it is rolled back (see [Failures](#failures)).
+
+| `HttpClient` method | Does |
+| --- | --- |
+| `get(&self, path: &str) -> Result<String, u16>` | Calls `GET` on the path, added to the base address |
+| `delete(&self, path: &str) -> Result<String, u16>` | Calls `DELETE` on the path |
+| `post(&self, path: &str, body: &str) -> Result<String, u16>` | Calls `POST` on the path, with the text body |
+| `put(&self, path: &str, body: &str) -> Result<String, u16>` | Calls `PUT` on the path, with the text body |
+
+- A reply whose status is from 200 to 299 is `Ok` with its body as text. Any other is `Err` with its status, which the program handles as it handles any value.
+- A call that gets no reply, such as one to a service that is not running, fails the handler as a failed table does, with the failure `Capability(field)` (see [Failures](#failures)). So does a reply whose body is not UTF-8.
+- While a call waits for its reply, the program goes on with other requests, as long as they do not need a component the waiting request holds (see [`runtime.md`](runtime.md#concurrent-requests)).
+- The address is checked as the program starts. An `https://` address is not supported yet.
+- *(Not supported yet: request and reply headers, JSON bodies, and timeouts.)*
+
+*Why the status is a value:* a service that answers `404 Not Found` has answered, and what the program does then is part of its design, which the flowchart shows as a `match`. A service that does not answer at all is a failure of the capability, which the `failure` block deals with in one place, as it does for a database.
 
 *Why keys are limited:* the host stores keys in a form whose bytes sort in the keys' order, so the database returns `entries` in order without knowing the key's type (see [`runtime.md`](runtime.md#tables)). The types above have such a form that is simple to define. Others, such as a `Decimal` or a struct, can be added when a program needs them as keys.
 
@@ -674,6 +693,8 @@ A fact states what a fake capability holds. The capability is named by its `gran
 | `Table<K, V>` | `name[key] is value` | The table holds `value` under `key` |
 | `Table<K, V>` | `name is empty` | The table holds nothing |
 | `Table<K, V>` | `name fails` | Every call to the table fails, after `given` only |
+| `HttpClient` | `name["METHOD /path"] replies Status`, or `... replies Status with "body"` | The fake answers that call with the status and the text body, after `given` only |
+| `HttpClient` | `name fails` | Every call through the client gets no reply, after `given` only |
 | `HttpServer` | None | Its requests and replies are the `when` and `then` steps |
 
 The same fact sets up state after `given`, and checks it after `then`. Facts after `then` are how a requirement observes what the program did, such as `and items["bolt-m6"] is Item { on_hand: 35, ... }`. Replies and capabilities are everything a program can do that anyone outside it could observe.
@@ -682,7 +703,19 @@ The same fact sets up state after `given`, and checks it after `then`. Facts aft
 - `name fails` is a fact about what the program calls, so it follows `given`, before the request it fails. A failure is not something a program can be checked to have done.
 - `and` repeats the kind of the step before it, so `and items fails` after a `given` step sets up a failure too.
 
-*Why only a table can fail:* `fails` makes the program's calls to a capability fail. A program never calls its `HttpServer`: requests arrive through it, and a requirement sends them itself.
+- A call to a fake `HttpClient` that no `replies` fact answers fails the requirement, naming the call: `but weather was called with GET /forecast/London, which no given fact answers`. The program sees the call fail, but the requirement fails anyway, because a requirement that does not say how the other service answers has a gap.
+- The method is `GET`, `POST`, `PUT` or `DELETE`, and the path is written from the base address, starting with `/`, with any query.
+
+```inset-req
+requirement "A forecast is relayed as the forecast service gives it"
+    given weather["GET /forecast/London"] replies OK with "sunny"
+    when Relay receives GET /forecast/London
+    then Relay replies OK with "sunny"
+```
+
+*Why only a table and a client can fail:* `fails` makes the program's calls to a capability fail. A program never calls its `HttpServer`: requests arrive through it, and a requirement sends them itself.
+
+*Why requirements cannot check the calls a program made:* a call to another service is how the program does its job, not something the requirement's reader can observe from outside the program, unless the call changes something there. When it does, a later version may add a `then` fact about the calls, as tables have. *(Not supported yet.)*
 
 A **check** is a Rust condition, for a `then` step whose expected value is not known exactly, as in a property. In a check, `name[key]` is the value the table holds under `key`, and the test fails if it holds none: `and products["bolt-m6"].gross >= <net>`.
 
@@ -882,7 +915,8 @@ step         = ( "given" fact
                | "when" Ident "receives" HTTP_METHOD path [ "via" ident ] [ "with" body ]
                | "then" ( Ident "replies" Ident [ "with" body ] | fact | EXPR )
                | "and" step_rest ) NEWLINE ;
-fact         = ident "[" value "]" "is" value | ident "is" "empty" | ident "fails" ;
+fact         = ident "[" value "]" "is" value | ident "is" "empty" | ident "fails"
+             | ident "[" STRING "]" "replies" Ident [ "with" STRING ] ;
 body         = text | value ;
 text         = STRING | NEWLINE INDENT '"""' NEWLINE { LINE NEWLINE } '"""' DEDENT ;
 path         = "/" segment { "/" segment } [ "?" query { "&" query } ] ;

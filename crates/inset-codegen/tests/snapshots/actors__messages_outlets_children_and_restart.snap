@@ -26,6 +26,19 @@ impl ::inset_runtime::App for Counting {
         },
     ];
 
+    const RESERVATIONS: &'static [(&'static str, &'static [&'static str])] = &[
+        (
+            "Counting/Front/fn:count",
+            &[
+                "Counting/Front",
+                "Counting/Front/log",
+                "Counting/Front/log/clock",
+                "Counting/Front/tally",
+            ],
+        ),
+        ("Counting/Front/fn:name", &["Counting/Front", "Counting/Front/log"]),
+    ];
+
     fn start(
         scope: &::inset_runtime::Scope,
         grants: &mut ::inset_runtime::Grants,
@@ -216,9 +229,12 @@ impl ::inset_runtime::Component for Front {
                 let Some(n) = path.get("n") else {
                     return ::inset_runtime::Route::NotFound;
                 };
-                return ::inset_runtime::Route::to(move |component: &mut Self| {
-                    Box::pin(async move { Self::count(component, n).await })
-                });
+                return ::inset_runtime::Route::to(
+                    "count",
+                    move |component: &mut Self| {
+                        Box::pin(async move { Self::count(component, n).await })
+                    },
+                );
             }
             if let Some(path) = request
                 .route(::inset_runtime::Method::Get, "/name/{name}")
@@ -226,9 +242,12 @@ impl ::inset_runtime::Component for Front {
                 let Some(name) = path.get("name") else {
                     return ::inset_runtime::Route::NotFound;
                 };
-                return ::inset_runtime::Route::to(move |component: &mut Self| {
-                    Box::pin(async move { Self::name(component, name).await })
-                });
+                return ::inset_runtime::Route::to(
+                    "name",
+                    move |component: &mut Self| {
+                        Box::pin(async move { Self::name(component, name).await })
+                    },
+                );
             }
         }
         ::inset_runtime::Route::NotFound

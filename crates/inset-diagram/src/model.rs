@@ -210,7 +210,8 @@ pub struct External {
 pub enum Handoff {
     /// `field: move place`. The value or capability moves into the child.
     Move { field: String, from: Id },
-    /// `field: &child`. A sibling started earlier is lent to the child.
+    /// `field: &child`, a sibling started earlier, or `field: &server`, a
+    /// server field of the parent, lent to the child.
     Lend { field: String, from: Id },
     /// `field: place`, where the place's type is `Copy`.
     Copy { field: String, from: Id },

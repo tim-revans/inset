@@ -1,0 +1,21 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `&http` lends a child, and `http` takes no handle
+    ╭─[ src/main.inset:10:19 ]
+    │
+ 10 │     start Front { http: &http, weather: move weather, notes: move notes };
+    │                   ─────┬─────  
+    │                        ╰─────── `&` in a `start` statement lends a child to a later sibling
+    │ 
+    │ Help: the app moves a grant into one component, `http: move http`, which can then lend it to its children
+────╯
+Error: `http` is a lent server, supplied with `&`
+    ╭─[ src/main.inset:22:32 ]
+    │
+ 22 │     start notebook: Notebook { http: move http, notes: move notes };
+    │                                ───────┬───────  
+    │                                       ╰───────── expected `&` and the name of a server this component holds
+    │ 
+    │ Help: write `http: &http`, naming the parent's server field
+────╯

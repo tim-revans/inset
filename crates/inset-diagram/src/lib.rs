@@ -32,12 +32,14 @@ pub mod view;
 mod components;
 mod emit;
 mod flowchart;
+mod reserve;
 mod svg;
 mod theme;
 mod validate;
 
 pub use emit::{Emitted, Source, emit, emit_with_sources};
 pub use model::Diagram;
+pub use reserve::reservations;
 pub use theme::Theme;
 pub use validate::validate;
 pub use view::{Hide, VIEW_OPTIONS, View};

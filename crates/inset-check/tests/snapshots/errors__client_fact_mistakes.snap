@@ -1,0 +1,46 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `notes` is a `Table<String, String>`, and only an `HttpClient` replies
+   ╭─[ requirements/main.req.inset:3:9 ]
+   │
+ 3 │     and notes["GET /x"] replies OK
+   │         ──┬──  
+   │           ╰──── not a client
+   │ 
+   │ Help: `replies` sets up how a fake `HttpClient` answers a call
+───╯
+Error: expected a call, such as `"GET /forecast/London"`
+   ╭─[ requirements/main.req.inset:4:17 ]
+   │
+ 4 │     and weather["FETCH forecast"] replies OK
+   │                 ────────┬───────  
+   │                         ╰───────── a call is its method and path, in one string
+   │ 
+   │ Help: write the method, `GET`, `POST`, `PUT` or `DELETE`, a space, and the path from the client's base address, starting with `/`
+───╯
+Error: unknown status `Fine`
+   ╭─[ requirements/main.req.inset:5:35 ]
+   │
+ 5 │     and weather["GET /y"] replies Fine
+   │                                   ──┬─  
+   │                                     ╰─── not an HTTP status
+   │ 
+   │ Help: write a status by its standard name, such as `OK`, `NotFound` or `Conflict`
+───╯
+Error: a reply's body is text, written as a string
+   ╭─[ requirements/main.req.inset:6:43 ]
+   │
+ 6 │     and weather["GET /z"] replies OK with 3
+   │                                           ┬  
+   │                                           ╰── expected a string
+───╯
+Error: `replies` follows `given`
+    ╭─[ requirements/main.req.inset:35:9 ]
+    │
+ 35 │     and weather["GET /health"] replies OK
+    │         ────────────────┬────────────────  
+    │                         ╰────────────────── this sets up how a call is answered, which a `then` step cannot check
+    │ 
+    │ Help: move it to a `given` step before the request that makes the call
+────╯

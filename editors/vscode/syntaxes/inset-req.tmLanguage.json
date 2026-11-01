@@ -73,6 +73,9 @@
           "include": "#request"
         },
         {
+          "include": "#fake-reply"
+        },
+        {
           "include": "#reply"
         },
         {
@@ -146,6 +149,18 @@
               "include": "#placeholder"
             }
           ]
+        }
+      }
+    },
+    "fake-reply": {
+      "comment": "How a fake HttpClient answers a call: `name[\"GET /path\"] replies Status`.",
+      "match": "(?<=\\])\\s+(replies)\\s+([A-Z]\\w*)",
+      "captures": {
+        "1": {
+          "name": "keyword.other.inset-req"
+        },
+        "2": {
+          "name": "constant.other.status.inset-req variable.other.enummember.status.inset-req"
         }
       }
     },

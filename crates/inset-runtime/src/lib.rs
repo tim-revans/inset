@@ -13,7 +13,12 @@
 //!   Tokio cannot do, and it polls tasks in a fixed order, so a requirement
 //!   test runs the same way every time.
 //! - **Capabilities** are owned, non-`Clone` handles to what the host grants
-//!   ([`HttpServer`], [`Table`]).
+//!   ([`HttpServer`], [`HttpClient`], [`Table`]).
+//! - **Requests** are admitted as they arrive, each once no request in
+//!   flight has reserved a component it can reach, as the compiler lists
+//!   them in [`App::RESERVATIONS`]. A call through an [`HttpClient`] waits
+//!   for the host, which makes it while the program goes on with other
+//!   requests.
 //! - **Stored values** take the form the `inset-value` crate defines, which
 //!   the test runner shares: [`Stored`] for a table's values and a
 //!   component's saved state, and [`Key`] for a table's keys, whose bytes
@@ -56,6 +61,7 @@ mod external;
 mod failure;
 pub mod fork;
 mod http;
+mod http_client;
 mod program;
 mod stored;
 mod table;
@@ -85,6 +91,7 @@ pub use failure::{Failure, Response, Stopped};
 pub use http::{
     HttpServer, IntoResponse, Json, Method, PathParams, Query, Reply, Request, Route, Status,
 };
+pub use http_client::HttpClient;
 pub use program::{App, FrontEnd, Grant, GrantValue, Grants, Setting, SettingType};
 pub use rust_decimal::Decimal;
 pub use serde;
@@ -98,9 +105,10 @@ pub use program::glue;
 /// Everything emitted code uses, in one import.
 pub mod prelude {
     pub use crate::{
-        App, Component, Failure, FrontEnd, Grant, GrantValue, Grants, Handle, HttpServer,
-        IntoResponse, Json, Mailbox, Message, Method, NoMessage, Outlet, Reply, Request, Response,
-        Route, Scope, Setting, SettingType, Status, Stopped, Stored, Table, send,
+        App, Component, Failure, FrontEnd, Grant, GrantValue, Grants, Handle, HttpClient,
+        HttpServer, IntoResponse, Json, Mailbox, Message, Method, NoMessage, Outlet, Reply,
+        Request, Response, Route, Scope, Setting, SettingType, Status, Stopped, Stored, Table,
+        send,
     };
 }
 
@@ -122,14 +130,24 @@ macro_rules! export {
                     $crate::glue::start::<$app>(restore)
                 }
 
-                fn handle(
+                fn deliver(
+                    id: u64,
                     server: String,
                     request: $crate::bindings::exports::inset::host::app::Request,
                 ) -> Result<
-                    $crate::bindings::exports::inset::host::app::Response,
+                    $crate::bindings::exports::inset::host::app::Progress,
                     $crate::bindings::exports::inset::host::app::Stopped,
                 > {
-                    $crate::glue::handle(server, request)
+                    $crate::glue::deliver(id, server, request)
+                }
+
+                fn resume(
+                    completions: Vec<$crate::bindings::exports::inset::host::app::Completion>,
+                ) -> Result<
+                    $crate::bindings::exports::inset::host::app::Progress,
+                    $crate::bindings::exports::inset::host::app::Stopped,
+                > {
+                    $crate::glue::resume(completions)
                 }
             }
 

@@ -8,5 +8,5 @@ Error: `&http` lends a child, and `http` takes no handle
    │                     ─────┬─────  
    │                          ╰─────── `&` in a `start` statement lends a child to a later sibling
    │ 
-   │ Help: a capability is never lent, so it has one holder; write `http: move http`
+   │ Help: the app moves a grant into one component, `http: move http`, which can then lend it to its children
 ───╯

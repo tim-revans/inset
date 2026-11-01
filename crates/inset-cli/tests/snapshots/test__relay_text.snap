@@ -1,0 +1,11 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&out)
+---
+pass  A forecast is relayed as the forecast service gives it
+pass  A city the forecast service does not know is not found
+pass  A forecast service that does not answer fails only that request
+pass  Notes are kept by name
+pass  The relay says it is up
+
+5 requirements passed

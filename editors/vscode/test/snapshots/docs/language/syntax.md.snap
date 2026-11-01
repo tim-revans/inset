@@ -835,6 +835,42 @@
 #                                    ^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
 #                                               ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
 
+## Capability facts (inset-req)
+>requirement "A forecast is relayed as the forecast service gives it"
+#^^^^^^^^^^^ meta.requirement.inset-req keyword.other.requirement.inset-req
+#            ^ meta.requirement.inset-req markup.heading.requirement.inset-req punctuation.definition.string.begin.inset-req
+#             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req markup.heading.requirement.inset-req
+#                                                                   ^ meta.requirement.inset-req markup.heading.requirement.inset-req punctuation.definition.string.end.inset-req
+>    given weather["GET /forecast/London"] replies OK with "sunny"
+#    ^^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#          ^^^^^^^ meta.requirement.inset-req variable.other.capability.inset-req
+#                 ^ meta.requirement.inset-req punctuation.brackets.square.inset
+#                  ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
+#                   ^^^^^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
+#                                       ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
+#                                        ^ meta.requirement.inset-req punctuation.brackets.square.inset
+#                                          ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                                                  ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
+#                                                     ^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                                                          ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
+#                                                           ^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
+#                                                                ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
+>    when Relay receives GET /forecast/London
+#    ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#         ^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
+#               ^^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                        ^^^ meta.requirement.inset-req constant.language.http-method.inset-req
+#                            ^^^^^^^^^^^^^^^^ meta.requirement.inset-req string.unquoted.path.inset-req
+>    then Relay replies OK with "sunny"
+#    ^^^^ meta.requirement.inset-req keyword.control.step.inset-req
+#         ^^^^^ meta.requirement.inset-req entity.name.type.app.inset-req
+#               ^^^^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                       ^^ meta.requirement.inset-req constant.other.status.inset-req variable.other.enummember.status.inset-req
+#                          ^^^^ meta.requirement.inset-req keyword.other.inset-req
+#                               ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.begin.inset-req
+#                                ^^^^^ meta.requirement.inset-req string.quoted.double.inset-req
+#                                     ^ meta.requirement.inset-req string.quoted.double.inset-req punctuation.definition.string.end.inset-req
+
 ## Values (inset-req)
 >    when PriceImport receives POST /price-lists with
 #    ^^^^ keyword.control.step.inset-req

@@ -27,6 +27,10 @@ impl ::inset_runtime::App for HelloHttp {
         },
     ];
 
+    const RESERVATIONS: &'static [(&'static str, &'static [&'static str])] = &[
+        ("HelloHttp/Greeter/fn:hello", &["HelloHttp/Greeter"]),
+    ];
+
     fn start(
         scope: &::inset_runtime::Scope,
         grants: &mut ::inset_runtime::Grants,
@@ -88,9 +92,10 @@ impl ::inset_runtime::Component for Greeter {
                 let Some(name) = path.get("name") else {
                     return ::inset_runtime::Route::NotFound;
                 };
-                return ::inset_runtime::Route::to(move |_: &mut Self| {
-                    Box::pin(async move { Self::hello(name) })
-                });
+                return ::inset_runtime::Route::to(
+                    "hello",
+                    move |_: &mut Self| { Box::pin(async move { Self::hello(name) }) },
+                );
             }
         }
         ::inset_runtime::Route::NotFound

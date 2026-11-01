@@ -4,4 +4,4 @@ source: crates/inset-cli/tests/lsp.rs
 src/main.inset:4:21-4:32
 `&http` lends a child, and `http` takes no handle
 `&` in a `start` statement lends a child to a later sibling
-help: a capability is never lent, so it has one holder; write `http: move http`
+help: the app moves a grant into one component, `http: move http`, which can then lend it to its children

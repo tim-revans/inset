@@ -11,7 +11,9 @@
 
 use std::collections::HashMap;
 
-use inset_syntax::ast::{Body, FactKind, ForAll, RequirementsFile, Step, StepKind, TypeKind};
+use inset_syntax::ast::{
+    Body, ExprKind, FactKind, ForAll, Lit, LitKind, RequirementsFile, Step, StepKind, TypeKind,
+};
 use inset_syntax::{Diagnostic, Ident, Span};
 use inset_value::{Check, Shape, Types, Value};
 
@@ -135,8 +137,17 @@ pub enum PlannedFact {
         key_shape: Shape,
         shape: Shape,
     },
-    /// `grant fails`
+    /// `grant fails`: every call to the table or client fails.
     Fails { grant: String },
+    /// `grant["METHOD /path"] replies Status with body`: how the fake
+    /// `HttpClient` answers the call.
+    Reply {
+        grant: String,
+        method: String,
+        path: String,
+        status: u16,
+        body: Vec<u8>,
+    },
 }
 
 pub(crate) fn check(
@@ -533,13 +544,84 @@ fn plan_fact(
                 );
                 return None;
             }
-            if values.table(&grant.name).is_none() {
+            if values.table(&grant.name).is_none() && !values.is_client(&grant.name) {
                 let diagnostic = values.not_a_table(grant, "can be made to fail")?;
                 values.diagnostics.push(diagnostic);
                 return None;
             }
             Some(PlannedFact::Fails {
                 grant: grant.name.clone(),
+            })
+        }
+        FactKind::Replies { key, status, body } => {
+            if !values.is_client(&grant.name) {
+                let diagnostic = values.not_a_client(grant)?;
+                values.diagnostics.push(diagnostic);
+                return None;
+            }
+            if !given {
+                values.diagnostics.push(
+                    Diagnostic::new(
+                        "`replies` follows `given`",
+                        fact.span,
+                        "this sets up how a call is answered, which a `then` step cannot check",
+                    )
+                    .with_help("move it to a `given` step before the request that makes the call"),
+                );
+                return None;
+            }
+            let call = match &key.kind {
+                ExprKind::Lit(Lit {
+                    kind: LitKind::Str(text),
+                    ..
+                }) => text
+                    .split_once(' ')
+                    .filter(|(m, p)| {
+                        matches!(*m, "GET" | "POST" | "PUT" | "DELETE") && p.starts_with('/')
+                    })
+                    .map(|(m, p)| (m.to_string(), p.to_string())),
+                _ => None,
+            };
+            let Some((method, path)) = call else {
+                values.diagnostics.push(
+                    Diagnostic::new(
+                        "expected a call, such as `\"GET /forecast/London\"`",
+                        key.span,
+                        "a call is its method and path, in one string",
+                    )
+                    .with_help(
+                        "write the method, `GET`, `POST`, `PUT` or `DELETE`, a space, and the \
+                         path from the client's base address, starting with `/`",
+                    ),
+                );
+                return None;
+            };
+            let mut ok = true;
+            check_status(status, None, &mut |d| {
+                ok = false;
+                values.diagnostics.push(d);
+            });
+            let body = match body.as_deref().map(|b| &b.kind) {
+                None => Vec::new(),
+                Some(ExprKind::Lit(Lit {
+                    kind: LitKind::Str(text),
+                    ..
+                })) => text.clone().into_bytes(),
+                Some(_) => {
+                    values.diagnostics.push(Diagnostic::new(
+                        "a reply's body is text, written as a string",
+                        body.as_ref().map_or(fact.span, |b| b.span),
+                        "expected a string",
+                    ));
+                    return None;
+                }
+            };
+            Some(PlannedFact::Reply {
+                grant: grant.name.clone(),
+                method,
+                path,
+                status: status::code(&status.name).filter(|_| ok)?,
+                body,
             })
         }
         FactKind::Empty => {

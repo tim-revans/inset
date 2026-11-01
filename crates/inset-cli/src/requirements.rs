@@ -622,8 +622,29 @@ fn run_steps(plan: &Plan, steps: &[PlannedStep], running: &mut Running<'_>) -> O
                 }
             }
         }
+        // A call no `given` fact answers is a gap in the requirement, which
+        // the program's own handling of the failed call would hide.
+        if let Some((grant, call)) = unanswered(running) {
+            return fail(format!(
+                "but `{grant}` was called with {call}, which no `given` fact answers"
+            ));
+        }
     }
     None
+}
+
+/// The first call to a fake client that no `given` fact answered.
+fn unanswered(running: &mut Running<'_>) -> Option<(String, String)> {
+    let grants: Vec<String> = running
+        .grants()
+        .iter()
+        .filter(|(_, g)| matches!(g, inset_host::Granted::HttpClient { .. }))
+        .map(|(name, _)| name.clone())
+        .collect();
+    grants.into_iter().find_map(|grant| {
+        let call = running.client(&grant)?.unanswered.first()?.clone();
+        Some((grant, call))
+    })
 }
 
 /// Compares a JSON reply with the value a step expects, as the type's
@@ -665,9 +686,31 @@ fn json_reply(
     })
 }
 
-/// Sets up a fake table, as a `given` fact says.
-fn given(running: &Running<'_>, fact: &PlannedFact) -> Result<(), String> {
+/// Sets up a fake table or client, as a `given` fact says.
+fn given(running: &mut Running<'_>, fact: &PlannedFact) -> Result<(), String> {
     match fact {
+        PlannedFact::Reply {
+            grant,
+            method,
+            path,
+            status,
+            body,
+        } => {
+            let client = running
+                .client(grant)
+                .expect("the checker names a client grant");
+            client
+                .replies
+                .insert((method.clone(), path.clone()), (*status, body.clone()));
+            Ok(())
+        }
+        PlannedFact::Fails { grant } if running.table(grant).is_none() => {
+            running
+                .client(grant)
+                .expect("the checker names a table or client grant")
+                .fails = true;
+            Ok(())
+        }
         PlannedFact::Entry {
             grant, key, value, ..
         } => {
@@ -751,7 +794,9 @@ fn then(running: &Running<'_>, fact: &PlannedFact, types: &Types) -> Option<Fail
             }
             failed(message)
         }
-        PlannedFact::Fails { .. } => unreachable!("the checker allows `fails` after `given` only"),
+        PlannedFact::Fails { .. } | PlannedFact::Reply { .. } => {
+            unreachable!("the checker allows `fails` and `replies` after `given` only")
+        }
     }
 }
 

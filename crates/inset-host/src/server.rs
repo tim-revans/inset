@@ -1,8 +1,13 @@
-//! Real `HttpServer` grants: listening on their ports.
+//! Real `HttpServer` and `HttpClient` grants: listening on their ports, and
+//! calling other services.
 //!
-//! Connections are accepted on a Tokio thread, and every request is passed to
-//! the thread running the program, which handles them one at a time.
+//! Connections are accepted on a Tokio thread, and every request is passed
+//! to the thread running the program. The program takes each request as it
+//! arrives, and hands back the calls it waits for, which are made on the
+//! Tokio thread while the program goes on with other requests. A call's
+//! reply is passed back to the program thread in turn.
 
+use std::collections::BTreeMap;
 use std::net::TcpListener;
 use std::sync::mpsc;
 
@@ -13,9 +18,15 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use tokio::sync::oneshot;
 
-use crate::{Error, Granted, Request, Response, Running, Stopped, describe};
+use crate::{Completion, Error, Granted, Progress, Request, Response, Running, client, describe};
 
-type Delivery = (String, Request, oneshot::Sender<Result<Response, Stopped>>);
+/// What reaches the program thread.
+enum Event {
+    /// A request through a grant, with where its reply goes.
+    Request(String, Request, oneshot::Sender<Response>),
+    /// An outgoing call has completed.
+    Completed(Completion),
+}
 
 /// Serves every `HttpServer` grant on its port, on the loopback interface,
 /// until the program stops. Rollbacks are reported on stderr as they happen.
@@ -34,30 +45,76 @@ pub fn serve(mut running: Running<'_>) -> Result<(), Error> {
             listeners.push((grant.clone(), listener));
         }
     }
-    let (deliver, requests) = mpsc::channel();
-    std::thread::spawn(move || accept(listeners, deliver));
+    let (events, received) = mpsc::channel();
+    let (handle_sent, handle) = mpsc::channel();
+    let accepting = events.clone();
+    std::thread::spawn(move || accept(listeners, accepting, handle_sent));
+    let tokio = handle
+        .recv()
+        .map_err(|_| Error("the server thread did not start".into()))?;
 
+    let mut replies: BTreeMap<u64, oneshot::Sender<Response>> = BTreeMap::new();
     let mut reported = running.reports().len();
-    for (grant, request, reply) in requests {
-        let outcome = running.request(&grant, &request);
+    for event in received {
+        let outcome = match event {
+            Event::Request(grant, request, reply) => {
+                running.deliver(&grant, &request).map(|(id, progress)| {
+                    replies.insert(id, reply);
+                    progress
+                })
+            }
+            Event::Completed(completion) => running.resume(vec![completion]),
+        };
         for report in &running.reports()[reported..] {
             eprintln!("{report}");
         }
         reported = running.reports().len();
-        let stopped = outcome.as_ref().err().map(describe);
-        let _ = reply.send(outcome);
-        if let Some(stopped) = stopped {
-            return Err(Error(format!("the program stopped: {stopped}")));
+        let Progress {
+            replies: finished,
+            calls,
+        } = match outcome {
+            Ok(progress) => progress,
+            Err(stopped) => {
+                return Err(Error(format!(
+                    "the program stopped: {}",
+                    describe(&stopped)
+                )));
+            }
+        };
+        for (id, response) in finished {
+            if let Some(reply) = replies.remove(&id) {
+                let _ = reply.send(response);
+            }
+        }
+        for call in calls {
+            let events = events.clone();
+            let base = running.base(&call.grant);
+            tokio.spawn(async move {
+                let outcome = match base {
+                    Ok(base) => client::call(&base, &call.method, &call.path, call.body).await,
+                    Err(e) => Err(e),
+                };
+                let completion = Completion {
+                    id: call.id,
+                    outcome: outcome.map(|(status, body)| crate::Incoming { status, body }),
+                };
+                let _ = events.send(Event::Completed(completion));
+            });
         }
     }
     Ok(())
 }
 
-fn accept(listeners: Vec<(String, TcpListener)>, deliver: mpsc::Sender<Delivery>) {
+fn accept(
+    listeners: Vec<(String, TcpListener)>,
+    deliver: mpsc::Sender<Event>,
+    runtime_sent: mpsc::Sender<tokio::runtime::Handle>,
+) {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_io()
         .build()
         .expect("a Tokio runtime starts");
+    let _ = runtime_sent.send(runtime.handle().clone());
     runtime.block_on(async move {
         for (grant, listener) in listeners {
             let listener =
@@ -82,7 +139,7 @@ fn accept(listeners: Vec<(String, TcpListener)>, deliver: mpsc::Sender<Delivery>
 async fn handle(
     grant: String,
     request: hyper::Request<Incoming>,
-    deliver: mpsc::Sender<Delivery>,
+    deliver: mpsc::Sender<Event>,
 ) -> Result<hyper::Response<Full<Bytes>>, hyper::Error> {
     let method = request.method().as_str().to_string();
     let path = request
@@ -93,8 +150,8 @@ async fn handle(
     let body = request.into_body().collect().await?.to_bytes().to_vec();
     let (reply, outcome) = oneshot::channel();
     let request = Request { method, path, body };
-    let response = match deliver.send((grant, request, reply)) {
-        Ok(()) => outcome.await.ok().and_then(Result::ok),
+    let response = match deliver.send(Event::Request(grant, request, reply)) {
+        Ok(()) => outcome.await.ok(),
         Err(_) => None,
     };
     let response = response.unwrap_or(Response {

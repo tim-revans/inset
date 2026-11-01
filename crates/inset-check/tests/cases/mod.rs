@@ -288,6 +288,124 @@ pub const READER_REQ: &str = r#"requirement "Lines are counted"
     then Reader replies OK with "1"
 "#;
 
+pub const RELAY: &str = r#"/// Relays forecasts from a forecast service, and keeps notes.
+app Relay {
+    /// The port to serve on.
+    setting port: u16 = 8080;
+    /// Where the forecast service is.
+    setting forecasts: String = "http://127.0.0.1:9000";
+    grant http: HttpServer { port };
+    grant weather: HttpClient { base: forecasts };
+    grant notes: Table<String, String> { file: "relay.db", name: "notes" };
+    start Front { http: move http, weather: move weather, notes: move notes };
+}
+
+/// Lends its server to the desks, which serve most requests themselves.
+component Front {
+    http: HttpServer,
+    #[handed_down]
+    weather: HttpClient,
+    #[handed_down]
+    notes: Table<String, String>,
+
+    start forecasts: Forecasts { http: &http, weather: move weather, asked: 0 };
+    start notebook: Notebook { http: &http, notes: move notes };
+
+    /// Whether the relay is up.
+    #[get("/health", via = http)]
+    fn health(&self) -> String {
+        "up".to_string()
+    }
+
+    /// How many forecasts have been asked for, from the forecasts desk.
+    #[get("/asked", via = http)]
+    async fn asked(&self) -> String {
+        let asked = self.forecasts.asked().await;
+        asked.to_string()
+    }
+}
+
+/// Asks the forecast service.
+component Forecasts {
+    http: &HttpServer,
+    weather: HttpClient,
+    /// How many forecasts it has asked for.
+    asked: u32,
+
+    failure {
+        /// A forecast service that does not answer fails only the request.
+        Capability(weather) => rollback,
+    }
+
+    /// The forecast for a city, as the forecast service gives it.
+    #[get("/forecast/{city}", via = http)]
+    async fn forecast(&mut self, city: String) -> Option<String> {
+        self.asked += 1;
+        match self.weather.get(&format!("/forecast/{city}")).await {
+            Ok(forecast) => Some(forecast),
+            Err(_) => None,
+        }
+    }
+
+    /// How many forecasts it has asked for.
+    #[message]
+    fn asked(&self) -> u32 {
+        self.asked
+    }
+}
+
+/// Keeps notes by name.
+component Notebook {
+    http: &HttpServer,
+    notes: Table<String, String>,
+
+    /// Keeps a note.
+    #[put("/notes/{name}", via = http, body = text)]
+    async fn write(&mut self, name: String, text: String) -> String {
+        self.notes.insert(name, text).await;
+        "kept".to_string()
+    }
+
+    /// A note, if one is kept under the name.
+    #[get("/notes/{name}", via = http)]
+    async fn read(&self, name: String) -> Option<String> {
+        self.notes.get(&name).await
+    }
+}
+"#;
+
+pub const RELAY_REQ: &str = r#"requirement "A forecast is relayed as the forecast service gives it"
+    given weather["GET /forecast/London"] replies OK with "sunny"
+    when Relay receives GET /forecast/London
+    then Relay replies OK with "sunny"
+    when Relay receives GET /asked
+    then Relay replies OK with "1"
+
+requirement "A city the forecast service does not know is not found"
+    given weather["GET /forecast/Atlantis"] replies NotFound
+    when Relay receives GET /forecast/Atlantis
+    then Relay replies NotFound
+
+requirement "A forecast service that does not answer fails only that request"
+    given weather fails
+    when Relay receives GET /forecast/London
+    then Relay replies InternalServerError
+    when Relay receives GET /asked
+    then Relay replies OK with "0"
+
+requirement "Notes are kept by name"
+    given notes is empty
+    when Relay receives PUT /notes/plan with "rain"
+    then Relay replies OK with "kept"
+    when Relay receives GET /notes/plan
+    then Relay replies OK with "rain"
+    and notes["plan"] is "rain"
+
+requirement "The relay says it is up"
+    when Relay receives GET /health
+    then Relay replies OK with "up"
+"#;
+
 /// A broken program: its code and its requirements.
 pub struct Case {
     pub name: &'static str,
@@ -879,6 +997,63 @@ pub fn all() -> Vec<Case> {
             STORE.to_string(),
             property("quantity: u32, price: bool where quantity > 0", steps),
         );
+    }
+    {
+        // ---- Lent servers and `HttpClient` ----
+        let mut add = |name, main: String, requirements: String| {
+            cases.push(Case {
+                name,
+                main,
+                modules: Vec::new(),
+                requirements,
+            })
+        };
+        let relay = |from: &str, to: &str| edit(RELAY, from, to);
+        // The app lends a grant, a lent field is given by move, and a
+        // lent server is lent on, which is allowed.
+        let main = relay(
+            "    start Front { http: move http, weather: move weather, notes: move notes };",
+            "    start Front { http: &http, weather: move weather, notes: move notes };",
+        );
+        let main = edit(
+            &main,
+            "    start notebook: Notebook { http: &http, notes: move notes };",
+            "    start notebook: Notebook { http: move http, notes: move notes };",
+        );
+        add("server_lent_wrongly", main, RELAY_REQ.to_string());
+        // An unknown method, a call not awaited, and a body that is not text.
+        let main = relay(
+            "        match self.weather.get(&format!(\"/forecast/{city}\")).await {",
+            "        self.weather.fetch(&city).await;\n        \
+             self.weather.get(&city);\n        \
+             self.weather.post(&city, 3).await;\n        \
+             match self.weather.get(&format!(\"/forecast/{city}\")).await {",
+        );
+        add("http_client_misused", main, RELAY_REQ.to_string());
+        // Two components serving the same route on one server.
+        let main = relay(
+            "    #[get(\"/notes/{name}\", via = http)]",
+            "    #[get(\"/forecast/{name}\", via = http)]",
+        );
+        add("lent_server_route_twice", main, RELAY_REQ.to_string());
+        // `replies` on a table, a call that is not a method and path, an
+        // unknown status, `replies` after `then`, and a body that is not text.
+        let requirements = edit(
+            RELAY_REQ,
+            "    given weather[\"GET /forecast/London\"] replies OK with \"sunny\"\n",
+            "    given weather[\"GET /forecast/London\"] replies OK with \"sunny\"\n    \
+             and notes[\"GET /x\"] replies OK\n    \
+             and weather[\"FETCH forecast\"] replies OK\n    \
+             and weather[\"GET /y\"] replies Fine\n    \
+             and weather[\"GET /z\"] replies OK with 3\n",
+        );
+        let requirements = edit(
+            &requirements,
+            "    then Relay replies OK with \"up\"\n",
+            "    then Relay replies OK with \"up\"\n    \
+             and weather[\"GET /health\"] replies OK\n",
+        );
+        add("client_fact_mistakes", RELAY.to_string(), requirements);
     }
     cases.extend(modules);
     cases

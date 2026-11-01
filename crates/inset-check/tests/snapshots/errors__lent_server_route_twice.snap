@@ -1,0 +1,21 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: no route of `Relay` takes `GET /notes/plan`
+    ╭─[ requirements/main.req.inset:24:29 ]
+    │
+ 24 │     when Relay receives GET /notes/plan
+    │                             ─────┬─────  
+    │                                  ╰─────── no route matches this request
+    │ 
+    │ Help: the routes of `Relay` are `GET /health`, `GET /asked`, `GET /forecast/{city}`, `PUT /notes/{name}` and `GET /forecast/{name}`
+────╯
+Error: two routes match `GET /forecast/{name}`
+    ╭─[ src/main.inset:80:5 ]
+    │
+ 80 │     #[get("/forecast/{name}", via = http)]
+    │     ───────────────────┬──────────────────  
+    │                        ╰──────────────────── this matches the same requests as `GET /forecast/{city}` in `Forecasts`
+    │ 
+    │ Help: give each route a path of its own
+────╯

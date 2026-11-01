@@ -36,6 +36,7 @@ pub(crate) enum Ty {
     /// A generic standard type, such as `Option<T>` or `Vec<T>`.
     Std(&'static str, Vec<Ty>),
     HttpServer,
+    HttpClient,
     Table(Box<Ty>, Box<Ty>),
     /// `Handle<C>`: the component's index and its name.
     Handle(usize, String),
@@ -94,7 +95,7 @@ impl Ty {
     }
 
     pub(crate) fn is_capability(&self) -> bool {
-        matches!(self, Ty::HttpServer | Ty::Table(..))
+        matches!(self, Ty::HttpServer | Ty::HttpClient | Ty::Table(..))
     }
 
     /// A capability, handle or outlet: something only a component may hold.
@@ -120,9 +121,12 @@ impl Ty {
     pub(crate) fn is_clone(&self) -> Option<bool> {
         match self {
             Ty::Unknown => None,
-            Ty::HttpServer | Ty::Table(..) | Ty::Handle(..) | Ty::Outlet(_) | Ty::Str => {
-                Some(false)
-            }
+            Ty::HttpServer
+            | Ty::HttpClient
+            | Ty::Table(..)
+            | Ty::Handle(..)
+            | Ty::Outlet(_)
+            | Ty::Str => Some(false),
             Ty::Data { clone, .. } => Some(*clone),
             Ty::Slice(_) => Some(false),
             Ty::Ref { mutable, .. } => Some(!mutable),
@@ -262,6 +266,7 @@ impl fmt::Display for Ty {
                 f.write_str(">")
             }
             Ty::HttpServer => f.write_str("HttpServer"),
+            Ty::HttpClient => f.write_str("HttpClient"),
             Ty::Table(k, v) => write!(f, "Table<{k}, {v}>"),
             Ty::Handle(_, component) => write!(f, "Handle<{component}>"),
             Ty::Outlet(inner) => write!(f, "Outlet<{inner}>"),
@@ -376,6 +381,7 @@ impl Resolver<'_, '_> {
             "String" => Some(Ty::String),
             "Decimal" => Some(Ty::Decimal),
             "HttpServer" => Some(Ty::HttpServer),
+            "HttpClient" => Some(Ty::HttpClient),
             "Self" => Some(Ty::Unknown),
             _ => None,
         };

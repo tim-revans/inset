@@ -1,0 +1,28 @@
+---
+source: crates/inset-check/tests/errors.rs
+---
+Error: `HttpClient` has no method `fetch`
+    ╭─[ src/main.inset:54:22 ]
+    │
+ 54 │         self.weather.fetch(&city).await;
+    │                      ──┬──  
+    │                        ╰──── not a method of an HTTP client
+    │ 
+    │ Help: an `HttpClient`'s methods are `get(path)`, `delete(path)`, `post(path, body)` and `put(path, body)`
+────╯
+Error: a capability call is awaited
+    ╭─[ src/main.inset:55:9 ]
+    │
+ 55 │         self.weather.get(&city);
+    │         ───────────┬───────────  
+    │                    ╰───────────── this call is not awaited
+    │ 
+    │ Help: add `.await`
+────╯
+Error: expected a `&str`, found a `integer`
+    ╭─[ src/main.inset:56:34 ]
+    │
+ 56 │         self.weather.post(&city, 3).await;
+    │                                  ┬  
+    │                                  ╰── this argument of `post` is a `&str`
+────╯

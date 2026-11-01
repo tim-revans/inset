@@ -1,0 +1,12 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:10:19-10:30
+`&http` lends a child, and `http` takes no handle
+`&` in a `start` statement lends a child to a later sibling
+help: the app moves a grant into one component, `http: move http`, which can then lend it to its children
+
+src/main.inset:22:32-22:47
+`http` is a lent server, supplied with `&`
+expected `&` and the name of a server this component holds
+help: write `http: &http`, naming the parent's server field

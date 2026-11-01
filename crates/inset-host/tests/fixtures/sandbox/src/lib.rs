@@ -66,7 +66,9 @@ impl Component for Prober {
         } else {
             return Route::NotFound;
         };
-        Route::to(move |_: &mut Self| Box::pin(async move { probe() }))
+        Route::to("probe", move |_: &mut Self| {
+            Box::pin(async move { probe() })
+        })
     }
 }
 

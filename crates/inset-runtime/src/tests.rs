@@ -181,28 +181,28 @@ impl Component for Front {
             return Route::NotFound;
         }
         if request.route(Method::Get, "/total").is_some() {
-            return Route::to(|c: &mut Self| Box::pin(async move { c.total() }));
+            return Route::to("total", |c: &mut Self| Box::pin(async move { c.total() }));
         }
         if let Some(path) = request.route(Method::Post, "/add/{n}") {
             let Some(n) = path.get("n") else {
                 return Route::NotFound;
             };
-            return Route::to(move |c: &mut Self| Box::pin(c.add(n)));
+            return Route::to("add", move |c: &mut Self| Box::pin(c.add(n)));
         }
         if let Some(path) = request.route(Method::Post, "/note/{text}") {
             let Some(text) = path.get("text") else {
                 return Route::NotFound;
             };
-            return Route::to(move |c: &mut Self| Box::pin(c.note(text)));
+            return Route::to("note", move |c: &mut Self| Box::pin(c.note(text)));
         }
         if request.route(Method::Get, "/log").is_some() {
-            return Route::to(|c: &mut Self| Box::pin(c.log()));
+            return Route::to("log", |c: &mut Self| Box::pin(c.log()));
         }
         if request.route(Method::Post, "/crash").is_some() {
-            return Route::to(|c: &mut Self| Box::pin(c.crash()));
+            return Route::to("crash", |c: &mut Self| Box::pin(c.crash()));
         }
         if request.route(Method::Post, "/panic").is_some() {
-            return Route::to(|c: &mut Self| Box::pin(c.panic()));
+            return Route::to("panic", |c: &mut Self| Box::pin(c.panic()));
         }
         Route::NotFound
     }

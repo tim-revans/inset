@@ -803,6 +803,37 @@ impl Values<'_, '_> {
         self.table(&grant.name)
     }
 
+    /// Whether a grant is an `HttpClient`.
+    pub(crate) fn is_client(&self, grant: &str) -> bool {
+        let Some(app) = self.cx.app else {
+            return false;
+        };
+        let index = app.grants.iter().position(|g| g.name.name == grant);
+        index.and_then(|i| self.cx.grant_tys.get(i)) == Some(&Ty::HttpClient)
+    }
+
+    /// Reports a name that is not an `HttpClient` grant.
+    pub(crate) fn not_a_client(&self, grant: &Ident) -> Option<Diagnostic> {
+        let app = self.cx.app?;
+        let index = app.grants.iter().position(|g| g.name.name == grant.name);
+        Some(match index {
+            None => self.not_a_table(grant, "holds entries")?,
+            Some(index) => {
+                let ty = self.cx.grant_tys.get(index).cloned().unwrap_or(Ty::Unknown);
+                Diagnostic::new(
+                    format!(
+                        "`{}` is {}, and only an `HttpClient` replies",
+                        grant.name,
+                        a(&ty)
+                    ),
+                    grant.span,
+                    "not a client",
+                )
+                .with_help("`replies` sets up how a fake `HttpClient` answers a call")
+            }
+        })
+    }
+
     /// Reports a name that is not a table grant: an unknown grant, or one
     /// of another capability. `None` when there is no app to name.
     pub(crate) fn not_a_table(&self, grant: &Ident, what: &str) -> Option<Diagnostic> {

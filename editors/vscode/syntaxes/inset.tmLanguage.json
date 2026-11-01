@@ -862,7 +862,7 @@
       "patterns": [
         {
           "comment": "The capability types the host grants.",
-          "match": "\\b(HttpServer|Table)\\b",
+          "match": "\\b(HttpServer|HttpClient|Table)\\b",
           "name": "support.type.capability.inset"
         },
         {

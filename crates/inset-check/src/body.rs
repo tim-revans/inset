@@ -1151,7 +1151,7 @@ impl<'c, 'a> Body<'c, 'a> {
     fn struct_lit(&mut self, path: &Path, fields: &[FieldInit], rest: Option<&Expr>) -> Ty {
         let name = path.segments.last().map_or("", |s| s.ident.name.as_str());
         let special = match name {
-            "HttpServer" | "Table" if path.segments.len() == 1 => Some(
+            "HttpServer" | "HttpClient" | "Table" if path.segments.len() == 1 => Some(
                 Diagnostic::new(
                     "only an app's `grant` creates a capability",
                     path.span,
@@ -1624,6 +1624,7 @@ impl<'c, 'a> Body<'c, 'a> {
                 self.table_call(span, method, args, &key, &value, usage),
                 true,
             ),
+            Ty::HttpClient => (self.client_call(span, method, args, usage), true),
             other => {
                 if CHANGING_METHODS.contains(&method.name.as_str()) {
                     self.shared_change(receiver, Some(method));
@@ -1864,6 +1865,68 @@ impl<'c, 'a> Body<'c, 'a> {
                 .with_help("take `&mut self`"),
             );
         }
+        match usage {
+            Use::Awaited => ret,
+            Use::Value => {
+                self.error(
+                    Diagnostic::new(
+                        "a capability call is awaited",
+                        span,
+                        "this call is not awaited",
+                    )
+                    .with_help("add `.await`"),
+                );
+                Ty::Unknown
+            }
+            Use::Sent => {
+                self.error(
+                    Diagnostic::new(
+                        "`send` sends a message, and this is a capability call",
+                        span,
+                        "a capability call is awaited",
+                    )
+                    .with_help("remove `send` and add `.await`"),
+                );
+                Ty::Unknown
+            }
+        }
+    }
+
+    /// A call through an `HttpClient`: `get` and `delete` take a path, and
+    /// `post` and `put` a path and a text body. Each is awaited, and gives
+    /// `Ok` with the reply's body for a status from 200 to 299, and `Err`
+    /// with the status for any other.
+    fn client_call(&mut self, span: Span, method: &Ident, args: &[Expr], usage: Use) -> Ty {
+        let count = match method.name.as_str() {
+            "get" | "delete" => 1,
+            "post" | "put" => 2,
+            _ => {
+                self.error(
+                    Diagnostic::new(
+                        format!("`HttpClient` has no method `{}`", method.name),
+                        method.span,
+                        "not a method of an HTTP client",
+                    )
+                    .with_help(
+                        "an `HttpClient`'s methods are `get(path)`, `delete(path)`, \
+                         `post(path, body)` and `put(path, body)`",
+                    ),
+                );
+                self.args(args);
+                return Ty::Unknown;
+            }
+        };
+        if args.len() != count {
+            self.error(arity(span, &method.name, count, args.len()));
+        }
+        let text = Ty::Ref {
+            mutable: false,
+            inner: Box::new(Ty::Str),
+        };
+        for arg in args {
+            self.expect(arg, &text, &format!("this argument of `{}`", method.name));
+        }
+        let ret = Ty::Std("Result", vec![Ty::String, Ty::Int(Some("u16"))]);
         match usage {
             Use::Awaited => ret,
             Use::Value => {

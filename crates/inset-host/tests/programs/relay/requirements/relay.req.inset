@@ -1,0 +1,30 @@
+requirement "A forecast is relayed as the forecast service gives it"
+    given weather["GET /forecast/London"] replies OK with "sunny"
+    when Relay receives GET /forecast/London
+    then Relay replies OK with "sunny"
+    when Relay receives GET /asked
+    then Relay replies OK with "1"
+
+requirement "A city the forecast service does not know is not found"
+    given weather["GET /forecast/Atlantis"] replies NotFound
+    when Relay receives GET /forecast/Atlantis
+    then Relay replies NotFound
+
+requirement "A forecast service that does not answer fails only that request"
+    given weather fails
+    when Relay receives GET /forecast/London
+    then Relay replies InternalServerError
+    when Relay receives GET /asked
+    then Relay replies OK with "0"
+
+requirement "Notes are kept by name"
+    given notes is empty
+    when Relay receives PUT /notes/plan with "rain"
+    then Relay replies OK with "kept"
+    when Relay receives GET /notes/plan
+    then Relay replies OK with "rain"
+    and notes["plan"] is "rain"
+
+requirement "The relay says it is up"
+    when Relay receives GET /health
+    then Relay replies OK with "up"

@@ -416,26 +416,28 @@ impl<C: Component> Actor<C> {
         }
     }
 
-    /// Routes a request, and puts its handler in the mailbox. A request that
-    /// matches no handler is answered straight away.
-    pub(crate) fn serve(
-        &self,
-        field: &str,
-        request: &Request,
-    ) -> Result<ReplyReceiver<Reply>, Reply> {
-        let handler = match C::route(field, request) {
+    /// Routes a request to its handler, which is put in the mailbox when
+    /// the request is admitted. A request that matches no handler is
+    /// answered straight away.
+    pub(crate) fn serve(self: Rc<Self>, field: &str, request: &Request) -> Result<Routed, Reply> {
+        let (name, handler) = match C::route(field, request) {
             Route::NotFound => return Err(Reply::empty(404)),
             Route::BadRequest => return Err(Reply::empty(400)),
-            Route::To(handler) => handler,
+            Route::To(name, handler) => (name, handler),
         };
-        let (sender, reply) = reply_channel();
-        self.post(Envelope::Request(Box::new(move |component| {
-            Box::pin(async move {
-                let value = handler(component).await;
-                Box::new(move || sender.send(value)) as Deliver
-            })
-        })));
-        Ok(reply)
+        Ok(Routed {
+            handler: format!("{}/fn:{name}", self.id),
+            post: Box::new(move || {
+                let (sender, reply) = reply_channel();
+                self.post(Envelope::Request(Box::new(move |component| {
+                    Box::pin(async move {
+                        let value = handler(component).await;
+                        Box::new(move || sender.send(value)) as Deliver
+                    })
+                })));
+                reply
+            }),
+        })
     }
 
     /// Whether each handler must save the fields first, because a failure
@@ -484,6 +486,15 @@ impl<C: Component> Actor<C> {
             }
         }
     }
+}
+
+/// A request routed to its handler, waiting to be admitted.
+pub(crate) struct Routed {
+    /// The handler's diagram ID, such as `Shop/Front/fn:add`.
+    pub handler: String,
+    /// Puts the handler in its component's mailbox, and returns where its
+    /// reply will arrive.
+    pub post: Box<dyn FnOnce() -> ReplyReceiver<Reply>>,
 }
 
 /// The response to a failure in `actor`, and the component it applies to.
@@ -614,6 +625,8 @@ pub(crate) struct HandlerScope {
     written: RefCell<Vec<Rc<dyn Transaction>>>,
     /// The field of the component whose reply the handler is waiting for.
     awaiting: RefCell<Option<&'static str>>,
+    /// The field of the `HttpClient` whose call the handler is waiting for.
+    calling: RefCell<Option<&'static str>>,
     /// The coverage flags of the component the handler belongs to.
     reached: Option<Rc<Reached>>,
 }
@@ -640,6 +653,14 @@ impl HandlerScope {
 
     pub(crate) fn awaiting(&self) -> Option<&'static str> {
         *self.awaiting.borrow()
+    }
+
+    pub(crate) fn set_calling(&self, field: Option<&'static str>) {
+        *self.calling.borrow_mut() = field;
+    }
+
+    pub(crate) fn calling(&self) -> Option<&'static str> {
+        *self.calling.borrow()
     }
 
     /// Commits the writes, then delivers the held messages, before the reply.
@@ -717,6 +738,12 @@ impl<T> Drop for ReplySender<T> {
 pub(crate) struct ReplyReceiver<T>(Rc<RefCell<Slot<T>>>);
 
 impl<T> ReplyReceiver<T> {
+    /// Whether the reply has come, or the handler has failed.
+    pub(crate) fn ready(&self) -> bool {
+        let slot = self.0.borrow();
+        slot.value.is_some() || slot.closed
+    }
+
     /// The reply, or `None` if the handler failed. `Err` while it is still running.
     pub(crate) fn try_take(&self) -> Result<Option<T>, ()> {
         let mut slot = self.0.borrow_mut();
@@ -747,7 +774,9 @@ pub(crate) trait Running {
     fn id(&self) -> &str;
     fn name(&self) -> &'static str;
     fn parent(&self) -> Option<Rc<dyn Running>>;
-    fn serve(&self, field: &str, request: &Request) -> Result<ReplyReceiver<Reply>, Reply>;
+    fn serve(self: Rc<Self>, field: &str, request: &Request) -> Result<Routed, Reply>;
+    /// Whether a handler is running, or an envelope waits in the mailbox.
+    fn busy(&self) -> bool;
     /// The running handler's scope, if a handler is running.
     fn running(&self) -> Option<Rc<HandlerScope>>;
     /// The response to a failure, and the index of the arm that gives it.
@@ -786,8 +815,12 @@ impl<C: Component> Running for Actor<C> {
         self.parent.get().cloned()
     }
 
-    fn serve(&self, field: &str, request: &Request) -> Result<ReplyReceiver<Reply>, Reply> {
+    fn serve(self: Rc<Self>, field: &str, request: &Request) -> Result<Routed, Reply> {
         Actor::serve(self, field, request)
+    }
+
+    fn busy(&self) -> bool {
+        self.running.borrow().is_some() || !self.mailbox.borrow().is_empty()
     }
 
     fn running(&self) -> Option<Rc<HandlerScope>> {

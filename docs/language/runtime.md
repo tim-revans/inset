@@ -13,13 +13,13 @@ How a built Inset program runs: the Rust the compiler emits, the runtime library
 | [`crates/inset-value`](../../crates/inset-value/) | The stored form of values, which the runtime and the test runner share (see [Tables](#tables)) |
 | [`crates/inset-host`](../../crates/inset-host/) | The Wasmtime host: loads a program, resolves its settings and grants, serves its HTTP servers, keeps its tables in SQLite, or puts fakes behind its grants for tests |
 
-A built program is one WebAssembly component, with one more for each external component it declares (see [External components](#external-components)). It exports `describe`, which returns its manifest of settings, grants and external components, `start`, and `handle`, which takes one HTTP request through a named `HttpServer` grant. It imports Inset's capabilities, an `externals` interface through which it sends messages to its external components, and a `report` interface, through which it tells the host about rollbacks and which parts of it have run (see [Coverage](#coverage)).
+A built program is one WebAssembly component, with one more for each external component it declares (see [External components](#external-components)). It exports `describe`, which returns its manifest of settings, grants and external components, `start`, `deliver`, which takes one HTTP request through a named `HttpServer` grant, and `resume`, which hands back the calls the program made through its `HttpClient` grants once the host has made them (see [Concurrent requests](#concurrent-requests)). It imports Inset's capabilities, an `externals` interface through which it sends messages to its external components, and a `report` interface, through which it tells the host about rollbacks and which parts of it have run (see [Coverage](#coverage)).
 
-The host starts one instance of the program and keeps it for as long as the program runs. It calls `handle` for one request at a time, and `handle` returns once every component is idle again.
+The host starts one instance of the program and keeps it for as long as the program runs. It calls `deliver` with each request as it arrives, and `resume` with each outgoing call as it completes. Each returns once the program is idle again: every request it holds has finished, or waits on an outgoing call. Each returns the replies of the requests that have finished, and the outgoing calls the program now waits for.
 
 *Why one instance:* components keep state between requests, as the Stock tracker's `Reorders` does. `wasmtime serve` starts a fresh instance for every request, which would lose it.
 
-*Why not `wasi:http`'s incoming handler:* it is built for an instance per request, it streams bodies that Inset reads whole anyway, and a component exports it once, while an Inset app may hold several `HttpServer` grants. Inset's own `handle` names the grant the request came through, and requirement tests call the same function with no socket in between.
+*Why not `wasi:http`'s incoming handler:* it is built for an instance per request, it streams bodies that Inset reads whole anyway, and a component exports it once, while an Inset app may hold several `HttpServer` grants. Inset's own `deliver` names the grant the request came through, and requirement tests call the same function with no socket in between.
 
 ## The emitted Rust
 
@@ -68,13 +68,13 @@ Each component is a task. It owns its fields, and takes one envelope at a time f
 
 The runtime's executor runs until idle, which Tokio cannot do, and that gives Inset three things:
 
-- **Causal order.** A message that one request leads to is handled before the next request arrives.
+- **Causal order.** Every message a request leads to is handled before the request finishes, and before any request that needs the same components starts.
 - **Repeatable tests.** Tasks run in the order they were woken, never by timing, so a requirement test runs the same way every time.
 - **One place for rollback.** When a request returns, every handler it led to has completed or been rolled back.
 
 Inset needs nothing else from an async runtime. All I/O is a call to the host, so there is no reactor to drive, and no timers until a clock capability exists. The emitted Rust never names the executor, so replacing it changes only `inset-runtime`.
 
-*What it costs:* the host hands the program one request at a time, so one slow handler delays every other request. That suits locally hosted tools. WASI 0.3's async exports would let the host deliver concurrent requests to one instance, and Wasmtime supports them, so this can be revisited when a program needs it. A capability call is a synchronous call into the host, and holds up the whole program while it runs.
+*What it costs:* the program has one thread, so a handler that computes holds up every other request while it runs. A table or external component call is a synchronous call into the host, and holds up the program too. Only a call through an `HttpClient` lets the program go on with other requests while it waits (see [Concurrent requests](#concurrent-requests)).
 
 ### Message order
 
@@ -97,6 +97,22 @@ Both closures are `Fn`, not `FnMut`, so Rust allows a branch to read what it cap
 A failed message or capability call in a branch ends the handler as it would outside a fork, because the fork's future is part of the handler's. A panic in a branch traps the instance as any panic does.
 
 *Why the branches share a task:* a branch borrows the handler's `self` and its local variables, as a scoped thread does, so it cannot outlive the handler. A task of its own would have to own what it uses. Polling the branches inside the handler's future keeps the borrows, and keeps the fork's join in the handler, where rollback already looks.
+
+## Concurrent requests
+
+A program serves several requests at once while one of them waits for another service to answer. Every run still equals a run of the same requests one at a time, in the order they finished, so the requirement tests, which send requests one at a time, cover it.
+
+**Reservations.** A request reserves every component it can reach: the component whose route takes it, and every component that route's handler can reach through a message it sends or awaits, or a value it emits to the message an outlet is connected to, and so on from each handler it reaches. The compiler reads the set off the diagram's edges, and emits it for each route (`App::RESERVATIONS`). A request is admitted when no admitted request has reserved any of its components, and no request that arrived before it is still waiting for one of them, so no request waits behind later ones for ever. It holds its components until it finishes: its reply is ready, and every component it reserved is idle. Requests that share a component therefore run in the order they arrived, and requests that share none run side by side.
+
+*Why the whole set at once:* a request that took each component as it reached it could hold one component and wait for another, while a second request held that one and waited for the first. Taking the whole set when the request is admitted, which the diagram makes possible, rules this out. The cost is that a request reserves what a branch it does not take would have reached.
+
+*Why requests that share a component take turns:* a request's handlers then never see another request's work half done, in any component. That is the guarantee the requirement tests rely on, and the one a reviewer reads a requirement with. A component's routes all share it, so a program whose requests should overlap spreads its routes over components that each serve their own on a lent server (see `syntax.md`, "Starting components").
+
+**Outgoing calls.** A call through an `HttpClient` is not an import, because an import would hold up the whole program until it returned. The runtime records the call and the handler waits. When the program is idle, `deliver` or `resume` returns the calls recorded since, and the host makes them, on Tokio when serving for real and from the fakes in a requirement test. The host hands each reply back through `resume`, which wakes the handler. A call the host cannot make, or that gets no reply, comes back as an error, and the handler fails with `Capability(field)`.
+
+*Why not WASI 0.3's async ABI:* it would carry the same thing in a standard form, but as of Wasmtime 50.0.1 Wasmtime calls its support for it "very incomplete". `deliver`, `resume` and the call records work on WASI 0.2 today, and changing to the standard ABI later changes only `inset-runtime`, the WIT and the host, not the emitted Rust.
+
+**Failures.** A handler that fails rolls back only its own request's work, because no other request holds its component. A panic traps the instance with every request in flight. The host answers each one with `500 Internal Server Error`, including any still waiting to be admitted, and starts a fresh instance as for any panic. A handler of another request that was waiting on an outgoing call loses the call, so its `failure` block answers it as `Capability(field)`: if that rolls back or restarts, the program carries on, and otherwise it stops. A reply that arrives for a call made by the trapped instance is dropped.
 
 ## Capabilities
 

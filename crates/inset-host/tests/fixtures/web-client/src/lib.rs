@@ -42,7 +42,7 @@ impl Component for Fetcher {
     }
 
     fn route(_: &str, _: &Request) -> Route<Self> {
-        Route::to(|_: &mut Self| {
+        Route::to("fetch", |_: &mut Self| {
             Box::pin(async move {
                 let request = types::OutgoingRequest::new(types::Fields::new());
                 match outgoing_handler::handle(request, None) {

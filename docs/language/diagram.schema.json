@@ -838,7 +838,7 @@
           ]
         },
         {
-          "description": "`field: &child`. A sibling started earlier is lent to the child.",
+          "description": "`field: &child`, a sibling started earlier, or `field: &server`, a\nserver field of the parent, lent to the child.",
           "type": "object",
           "properties": {
             "field": {

@@ -20,6 +20,11 @@ impl HttpServer {
     pub(crate) fn grant(&self) -> &str {
         &self.grant
     }
+
+    /// The same server, lent to a child, which serves routes of its own on it.
+    pub fn lend(&self) -> HttpServer {
+        HttpServer::new(&self.grant)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -245,18 +250,24 @@ pub trait Status {
 pub enum Route<C> {
     NotFound,
     BadRequest,
-    To(Call<C, Reply>),
+    /// The handler's name, which finds the components the request
+    /// reserves, and the call to it.
+    To(&'static str, Call<C, Reply>),
 }
 
 impl<C: 'static> Route<C> {
-    /// A route to a handler, whose return value is the reply.
+    /// A route to the handler `name`, whose return value is the reply.
     pub fn to<R: IntoResponse + 'static>(
+        name: &'static str,
         handler: impl for<'a> FnOnce(&'a mut C) -> LocalBoxFuture<'a, R> + 'static,
     ) -> Route<C> {
-        Route::To(Box::new(move |component| {
-            let reply = handler(component);
-            Box::pin(async move { reply.await.into_reply() })
-        }))
+        Route::To(
+            name,
+            Box::new(move |component| {
+                let reply = handler(component);
+                Box::pin(async move { reply.await.into_reply() })
+            }),
+        )
     }
 }
 

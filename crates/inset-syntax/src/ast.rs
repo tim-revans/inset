@@ -875,6 +875,13 @@ pub enum FactKind {
     Empty,
     /// `name fails`
     Fails,
+    /// `name["METHOD /path"] replies Status`, with `with body` when the
+    /// reply has a body: how a fake `HttpClient` answers a call.
+    Replies {
+        key: Box<Expr>,
+        status: Ident,
+        body: Option<Box<Expr>>,
+    },
 }
 
 /// What follows `with` in a step.

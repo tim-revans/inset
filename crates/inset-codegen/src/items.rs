@@ -284,6 +284,8 @@ impl<'a> Emitter<'a> {
                 let name = &g.name.name;
                 if is_http_server(&g.ty.kind) {
                     quote!(let #var = grants.http_server(#name);)
+                } else if is_named(&g.ty.kind, "HttpClient") {
+                    quote!(let #var = grants.http_client(#name);)
                 } else {
                     quote!(let #var = grants.table(#name)?;)
                 }
@@ -326,6 +328,14 @@ impl<'a> Emitter<'a> {
                 const EXTERNALS: &'static [&'static str] = &[#(#names),*];
             )
         });
+        let reservations = (!self.reservations.is_empty()).then(|| {
+            let entries = self.reservations.iter().map(|(handler, components)| {
+                quote!((#handler, &[#(#components),*]))
+            });
+            quote!(
+                const RESERVATIONS: &'static [(&'static str, &'static [&'static str])] = &[#(#entries),*];
+            )
+        });
         quote! {
             #docs
             struct #name;
@@ -340,6 +350,8 @@ impl<'a> Emitter<'a> {
                 #front_end
 
                 #externals
+
+                #reservations
 
                 #algorithms
 
@@ -378,14 +390,20 @@ impl<'a> Emitter<'a> {
                 .iter()
                 .any(|a| a.kind == AttributeKind::HandedDown);
             let var = ident(&field.name.name);
-            let ty = self.ty(&field.ty);
+            // A lent server is the parent's server, lent with `lend`.
+            let ty = if is_lent_server(&field.ty.kind) {
+                quote!(::inset_runtime::HttpServer)
+            } else {
+                self.ty(&field.ty)
+            };
             params.push(quote!(#var: #ty));
             if handed_down {
                 continue;
             }
-            if is_http_server(&field.ty.kind) {
+            if is_http_server(&field.ty.kind) || is_lent_server(&field.ty.kind) {
                 servers.push(&field.name.name);
-            } else if is_named(&field.ty.kind, "Table") {
+            } else if is_named(&field.ty.kind, "Table") || is_named(&field.ty.kind, "HttpClient") {
+                // Each names itself in a failure.
                 tables.push(&field.name.name);
             } else if is_named(&field.ty.kind, "Outlet") {
             } else if is_handle(&field.ty.kind) {
@@ -400,7 +418,13 @@ impl<'a> Emitter<'a> {
             if let Some(binding) = &start.binding {
                 let var = ident(&binding.name);
                 let ty = start_type(start);
-                kept.push((quote!(#var: ::inset_runtime::Handle<#ty>), var));
+                // A child that serves routes of its own on a lent server may
+                // never be sent a message.
+                let serves = self
+                    .started(start)
+                    .is_some_and(|child| child.fields.iter().any(|f| is_lent_server(&f.ty.kind)));
+                let allow = serves.then(|| quote!(#[allow(dead_code)]));
+                kept.push((quote!(#allow #var: ::inset_runtime::Handle<#ty>), var));
             }
         }
         let fields = kept.iter().map(|(decl, _)| decl);
@@ -719,6 +743,17 @@ impl<'a> Emitter<'a> {
                     quote!(&#var)
                 };
                 quote!(::inset_runtime::Outlet::to(#target, |messages, value| messages.#message(value)))
+            }
+            HandoffValue::Lend(name)
+                if owner.is_some_and(|o| {
+                    o.fields.iter().any(|f| {
+                        f.name.name == name.name
+                            && (is_http_server(&f.ty.kind) || is_lent_server(&f.ty.kind))
+                    })
+                }) =>
+            {
+                let var = ident(&name.name);
+                quote!(#var.lend())
             }
             HandoffValue::Lend(_) => {
                 self.unsupported("lending a child to a sibling", handoff.span, "lent here");
@@ -1144,8 +1179,9 @@ fn route_arm(route: &Route, f: &Function) -> TokenStream {
         call
     };
     let is_move = (!locals.is_empty()).then(|| quote!(move));
+    let handler = f.name.name.as_str();
     let to = quote! {
-        return ::inset_runtime::Route::to(#is_move |#component: &mut Self| {
+        return ::inset_runtime::Route::to(#handler, #is_move |#component: &mut Self| {
             Box::pin(async move { #call })
         });
     };
@@ -1187,6 +1223,11 @@ fn locals(names: &[String]) -> Vec<proc_macro2::Ident> {
             ident(&local)
         })
         .collect()
+}
+
+/// `&HttpServer`: a server a parent lends.
+fn is_lent_server(ty: &TypeKind) -> bool {
+    matches!(ty, TypeKind::Ref { mutable: false, inner } if is_http_server(&inner.kind))
 }
 
 fn is_http_server(ty: &TypeKind) -> bool {

@@ -40,9 +40,11 @@ impl Named {
 /// The capabilities the standard library declares, with their grant fields.
 fn grant_fields(ty: &Ty) -> &'static [(&'static str, Ty)] {
     const SERVER: [(&str, Ty); 1] = [("port", Ty::Int(Some("u16")))];
+    const CLIENT: [(&str, Ty); 1] = [("base", Ty::String)];
     const TABLE: [(&str, Ty); 2] = [("file", Ty::String), ("name", Ty::String)];
     match ty {
         Ty::HttpServer => &SERVER,
+        Ty::HttpClient => &CLIENT,
         Ty::Table(..) => &TABLE,
         _ => &[],
     }
@@ -124,7 +126,7 @@ impl<'a> Checker<'a> {
                         grant.ty.span,
                         "only a capability is granted",
                     )
-                    .with_help("the capabilities are `HttpServer` and `Table<K, V>`"),
+                    .with_help("the capabilities are `HttpServer`, `HttpClient` and `Table<K, V>`"),
                 );
             }
             return;
@@ -491,7 +493,44 @@ impl<'a> Checker<'a> {
             },
             _ => None,
         };
+        let lent_server = field_ty.deref() == &Ty::HttpServer && field_ty != &Ty::HttpServer;
         match (&handoff.value, field_ty, lent_handle) {
+            (HandoffValue::Lend(name), _, None) if lent_server => {
+                let lends = match scope {
+                    Scope::Component(_) => self.named(scope, &name.name),
+                    Scope::App => None,
+                };
+                match lends {
+                    Some(Named::Field(ty)) if ty.deref() == &Ty::HttpServer => {}
+                    _ => errors.push(
+                        Diagnostic::new(
+                            format!("`&{}` lends no server of this component", name.name),
+                            name.span,
+                            "a component lends a server it holds or was lent",
+                        )
+                        .with_help(match scope {
+                            Scope::App => format!(
+                                "the app moves its grant into one component, `{field}: move {}`, \
+                                 which can then lend it to its children",
+                                name.name
+                            ),
+                            Scope::Component(_) => {
+                                "name a field of this component that is an `HttpServer` or \
+                                 an `&HttpServer`"
+                                    .to_string()
+                            }
+                        }),
+                    ),
+                }
+            }
+            (_, _, None) if lent_server => errors.push(
+                Diagnostic::new(
+                    format!("`{field}` is a lent server, supplied with `&`"),
+                    handoff.span,
+                    "expected `&` and the name of a server this component holds",
+                )
+                .with_help(format!("write `{field}: &http`, naming the parent's server field")),
+            ),
             (HandoffValue::Connect { target, message }, Ty::Outlet(ty), _) => {
                 self.check_connect(scope, starts, field, ty, target, message, errors);
             }
@@ -548,6 +587,20 @@ impl<'a> Checker<'a> {
             ),
             (HandoffValue::Lend(name), _, None) => {
                 let help = match self.named(scope, &name.name) {
+                    Some(named)
+                        if named.ty().deref() == &Ty::HttpServer && matches!(scope, Scope::App) =>
+                    {
+                        format!(
+                            "the app moves a grant into one component, `{field}: move {}`, \
+                             which can then lend it to its children",
+                            name.name
+                        )
+                    }
+                    Some(named) if named.ty().deref() == &Ty::HttpServer => format!(
+                        "a server is lent to a field declared `&HttpServer`; `{field}` of \
+                         `{child}` is {}",
+                        crate::values::a(field_ty)
+                    ),
                     Some(named) if named.ty().is_capability() => format!(
                         "a capability is never lent, so it has one holder; write `{field}: move {}`",
                         name.name
@@ -1014,6 +1067,10 @@ impl<'a> Checker<'a> {
                         HandoffValue::Move(place) if place.parts.len() == 1 => {
                             origins.get(place.parts[0].name.as_str()).cloned().flatten()
                         }
+                        // A lent server serves the child's routes too.
+                        HandoffValue::Lend(name) => {
+                            origins.get(name.name.as_str()).cloned().flatten()
+                        }
                         _ => None,
                     };
                     (h.field.name.as_str(), grant)
@@ -1039,6 +1096,7 @@ fn same_shape(a: &[Segment], b: &[Segment]) -> bool {
 fn grant_type_name(ty: &Ty) -> &'static str {
     match ty {
         Ty::Table(..) => "Table",
+        Ty::HttpClient => "HttpClient",
         _ => "HttpServer",
     }
 }

@@ -178,9 +178,12 @@ mod library {
                     let Some(title) = path.get("title") else {
                         return ::inset_runtime::Route::NotFound;
                     };
-                    return ::inset_runtime::Route::to(move |_: &mut Self| {
-                        Box::pin(async move { Self::lend(title) })
-                    });
+                    return ::inset_runtime::Route::to(
+                        "lend",
+                        move |_: &mut Self| {
+                            Box::pin(async move { Self::lend(title) })
+                        },
+                    );
                 }
                 if let Some(path) = request
                     .route(::inset_runtime::Method::Get, "/genres/{name}")
@@ -188,9 +191,12 @@ mod library {
                     let Some(name) = path.get("name") else {
                         return ::inset_runtime::Route::NotFound;
                     };
-                    return ::inset_runtime::Route::to(move |_: &mut Self| {
-                        Box::pin(async move { Self::genre(name) })
-                    });
+                    return ::inset_runtime::Route::to(
+                        "genre",
+                        move |_: &mut Self| {
+                            Box::pin(async move { Self::genre(name) })
+                        },
+                    );
                 }
             }
             ::inset_runtime::Route::NotFound
@@ -259,6 +265,11 @@ impl ::inset_runtime::App for Shelf {
             capability: "HttpServer",
             fields: &[("port", ::inset_runtime::GrantValue::Setting("port"))],
         },
+    ];
+
+    const RESERVATIONS: &'static [(&'static str, &'static [&'static str])] = &[
+        ("Shelf/Desk/fn:lend", &["Shelf/Desk"]),
+        ("Shelf/Desk/fn:genre", &["Shelf/Desk"]),
     ];
 
     const BRANCHES: &'static [&'static str] = ALGORITHM_BRANCHES;

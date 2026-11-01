@@ -248,6 +248,28 @@ fn forks_meet_their_requirements() {
     insta::assert_snapshot!("fork_text", stdout(&out));
 }
 
+/// A server lent to children, an `HttpClient` faked by `given` facts, and a
+/// call no fact answers, which fails the requirement.
+#[test]
+fn client_facts_set_up_how_calls_are_answered() {
+    let dir = copy("crates/inset-host/tests/programs/relay", "relay");
+    let out = run(&mut inset(&["test"], &dir));
+    assert!(out.status.success(), "{}{}", stdout(&out), stderr(&out));
+    insta::assert_snapshot!("relay_text", stdout(&out));
+    let path = dir.join("requirements/relay.req.inset");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let unanswered = text.replace(
+        "    given weather[\"GET /forecast/London\"] replies OK with \"sunny\"\n",
+        "",
+    );
+    assert_ne!(text, unanswered);
+    std::fs::write(&path, unanswered).unwrap();
+    let out = run(&mut inset(&["test"], &dir));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(out.status.code(), Some(1), "{}", stderr(&out));
+    insta::assert_snapshot!("unanswered_call_text", stdout(&out));
+}
+
 /// A copy of the Stock tracker that reorders only below the reorder level,
 /// not at it, which one row of the examples table finds out.
 #[test]

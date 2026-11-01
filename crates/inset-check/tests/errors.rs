@@ -5,8 +5,8 @@
 mod cases;
 
 use cases::{
-    CATALOGUE, CATALOGUE_REQ, COUNTING, COUNTING_REQ, HELLO, HELLO_REQ, READER, READER_REQ, SHELF,
-    SHELF_LIBRARY, SHELF_REQ, STORE, STORE_REQ, edit,
+    CATALOGUE, CATALOGUE_REQ, COUNTING, COUNTING_REQ, HELLO, HELLO_REQ, READER, READER_REQ, RELAY,
+    RELAY_REQ, SHELF, SHELF_LIBRARY, SHELF_REQ, STORE, STORE_REQ, edit,
 };
 use inset_check::{Program, SourceFile, check};
 
@@ -72,6 +72,7 @@ fn bases_check_clean() {
     assert_eq!(rendered(STORE, STORE_REQ), "");
     assert_eq!(rendered(CATALOGUE, CATALOGUE_REQ), "");
     assert_eq!(rendered(READER, READER_REQ), "");
+    assert_eq!(rendered(RELAY, RELAY_REQ), "");
 }
 
 // ---- The cases Stage 6 of the plan names ------------------------------------
@@ -386,4 +387,26 @@ fn property_condition() {
 #[test]
 fn property_value_of_wrong_type() {
     errors("property_value_of_wrong_type");
+}
+
+// ---- Lent servers and `HttpClient` -------------------------------------------
+
+#[test]
+fn server_lent_wrongly() {
+    errors("server_lent_wrongly");
+}
+
+#[test]
+fn http_client_misused() {
+    errors("http_client_misused");
+}
+
+#[test]
+fn lent_server_route_twice() {
+    errors("lent_server_route_twice");
+}
+
+#[test]
+fn client_fact_mistakes() {
+    errors("client_fact_mistakes");
 }

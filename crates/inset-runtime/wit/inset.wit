@@ -95,16 +95,56 @@ interface app {
         message: string,
     }
 
+    /// A call the program makes through one of its `HttpClient` grants,
+    /// which the host makes for it while the program goes on with other
+    /// requests.
+    record outgoing {
+        /// Names the call in the completion the host hands back.
+        id: u64,
+        grant: string,
+        method: string,
+        /// The path and query, which the host adds to the grant's base address.
+        path: string,
+        body: list<u8>,
+    }
+
+    /// The reply to an outgoing call.
+    record incoming {
+        status: u16,
+        body: list<u8>,
+    }
+
+    /// An outgoing call the host has made: its reply, or why there is none.
+    record completion {
+        id: u64,
+        outcome: result<incoming, string>,
+    }
+
+    /// What the program has done by the time it is idle again.
+    record progress {
+        /// The requests that have finished, by the ID the host gave each
+        /// one, with their replies.
+        replies: list<tuple<u64, response>>,
+        /// The outgoing calls the program now waits for.
+        calls: list<outgoing>,
+    }
+
     describe: func() -> manifest;
 
     /// Starts the app's components. After a panic that the program survives,
     /// the host starts a fresh instance with the state handed to `report.trapping`.
     start: func(restore: option<list<u8>>) -> result<_, stopped>;
 
-    /// Handles one request that arrived through the grant `server`. The host
-    /// calls it for one request at a time, and it returns once the whole
-    /// program is idle again.
-    handle: func(server: string, request: request) -> result<response, stopped>;
+    /// Delivers a request that arrived through the grant `server`, which
+    /// the host names `id`. The program admits it when no request in flight
+    /// has reserved a component it can reach, and returns once it is idle
+    /// again: every request in flight has finished or waits on an outgoing
+    /// call.
+    deliver: func(id: u64, server: string, request: request) -> result<progress, stopped>;
+
+    /// Hands the program the outgoing calls that have completed, and returns
+    /// once it is idle again.
+    resume: func(completions: list<completion>) -> result<progress, stopped>;
 }
 
 /// Capabilities the host grants. Each is opened by the name of its grant.

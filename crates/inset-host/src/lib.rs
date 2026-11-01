@@ -3,8 +3,13 @@
 //! A built program is one WebAssembly component of the `program` world in
 //! `crates/inset-runtime/wit/inset.wit`. The host learns what the program
 //! needs from its manifest, applies `--set` overrides to its settings,
-//! resolves its grants, and then runs one long-lived instance of it, handing
-//! it one request at a time. `docs/language/runtime.md` records why.
+//! resolves its grants, and then runs one long-lived instance of it,
+//! delivering each request as it arrives. The program admits a request when
+//! no request it holds has reserved a component the new one can reach, and
+//! hands the host the calls it makes through its `HttpClient` grants, which
+//! the host makes and hands back while the program goes on with other
+//! requests ([`Running::deliver`], [`Running::resume`]).
+//! `docs/language/runtime.md` records why.
 //!
 //! **Capabilities.** A program gets only what its grants name. Rust's
 //! standard library imports WASI's command interfaces whatever the program
@@ -23,13 +28,15 @@
 //!
 //! **Fakes.** [`Mode::Fake`] puts a fake behind every grant, which is how
 //! requirement tests run: requests go straight to the program through
-//! [`Running::request`] instead of a socket, and each table is held in memory,
-//! where a test can set and read it.
+//! [`Running::request`] instead of a socket, each table is held in memory,
+//! where a test can set and read it, and each `HttpClient` answers from the
+//! replies the test set up ([`FakeClient`]).
 //!
 //! **Failures.** A panic traps the instance. If the program's panic hook
 //! handed over the state to recover from, the host rolls back the tables'
 //! uncommitted writes, starts a fresh instance from that state and answers
-//! the request with `500 Internal Server Error`. Otherwise the program stops.
+//! every request in flight with `500 Internal Server Error`. Otherwise the
+//! program stops.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -44,10 +51,12 @@ use wasmtime::{Engine, Store};
 use wasmtime_wasi::clocks::{HostMonotonicClock, HostWallClock};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
+mod client;
 mod external;
 mod server;
 mod table;
 
+pub use client::FakeClient;
 pub use server::serve;
 pub use table::{Entries, Table};
 
@@ -65,7 +74,10 @@ use bindings::exports::inset::host::app;
 use bindings::inset::host::{capabilities, externals, report};
 use external::Externals;
 
-pub use app::{Grant, GrantValue, Manifest, Request, Response, Setting, SettingType, Stopped};
+pub use app::{
+    Completion, Grant, GrantValue, Incoming, Manifest, Outgoing, Request, Response, Setting,
+    SettingType, Stopped,
+};
 
 /// An error loading or starting a program.
 #[derive(Debug)]
@@ -164,6 +176,11 @@ impl Program {
             }
             grants.insert(grant.name.clone(), granted);
         }
+        let clients = grants
+            .iter()
+            .filter(|(_, g)| matches!(g, Granted::HttpClient { .. }))
+            .map(|(name, _)| (name.clone(), FakeClient::default()))
+            .collect();
         let externals = Arc::new(self.externals.fresh());
         let (store, instance) = self
             .instantiate(&tables, &externals, Vec::new(), BTreeSet::new(), None)
@@ -178,7 +195,13 @@ impl Program {
             grants,
             tables,
             externals,
+            mode: options.mode,
+            clients,
             stopped: None,
+            next_request: 0,
+            in_flight: BTreeSet::new(),
+            next_call: 0,
+            calls: BTreeMap::new(),
         })
     }
 
@@ -264,8 +287,17 @@ pub enum Mode {
 /// A grant with its values resolved.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Granted {
-    HttpServer { port: u16 },
-    Table { file: PathBuf, name: String },
+    HttpServer {
+        port: u16,
+    },
+    /// Calls to the service at `base`, such as `http://127.0.0.1:9000`.
+    HttpClient {
+        base: String,
+    },
+    Table {
+        file: PathBuf,
+        name: String,
+    },
 }
 
 /// Applies `--set` overrides to the settings' defaults, checking each value
@@ -355,6 +387,10 @@ pub fn resolve_grant(
             .parse()
             .map_err(|_| Error(format!("grant `{}`: `{port}` is not a port", grant.name)))?;
         Ok(Granted::HttpServer { port })
+    } else if grant.capability == "HttpClient" {
+        let base = client::check_base(field("base")?)
+            .map_err(|e| Error(format!("grant `{}`: {e}", grant.name)))?;
+        Ok(Granted::HttpClient { base })
     } else if grant.capability.starts_with("Table<") {
         Ok(Granted::Table {
             file: working_dir.join(field("file")?),
@@ -378,7 +414,28 @@ pub struct Running<'p> {
     /// The program's running external components, which a fresh instance
     /// after a panic keeps.
     externals: Arc<Externals>,
+    mode: Mode,
+    /// The fake behind each `HttpClient` grant, in [`Mode::Fake`].
+    clients: BTreeMap<String, FakeClient>,
     stopped: Option<Stopped>,
+    next_request: u64,
+    /// The requests delivered and not yet answered, by ID.
+    in_flight: BTreeSet<u64>,
+    next_call: u64,
+    /// The outgoing calls the program waits for, by the ID the host gave
+    /// each one, with the ID the instance gave it. A fresh instance after a
+    /// panic waits for none, so a late completion is dropped.
+    calls: BTreeMap<u64, u64>,
+}
+
+/// What the program has done by the time it is idle again.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Progress {
+    /// The requests that finished, by the ID [`Running::deliver`] gave each one.
+    pub replies: Vec<(u64, Response)>,
+    /// The outgoing calls the program now waits for, each with an ID of the
+    /// host's, which [`Running::resume`] takes back with its result.
+    pub calls: Vec<Outgoing>,
 }
 
 impl Running<'_> {
@@ -403,18 +460,120 @@ impl Running<'_> {
         &self.store.data().reached
     }
 
+    /// The fake behind an `HttpClient` grant, in [`Mode::Fake`].
+    pub fn client(&mut self, grant: &str) -> Option<&mut FakeClient> {
+        self.clients.get_mut(grant)
+    }
+
     /// Delivers a request through the `HttpServer` grant `server`, and
-    /// returns once the program is idle again.
+    /// waits for its reply, making the calls it leads to: through the fakes
+    /// in [`Mode::Fake`], and for real otherwise. Requests delivered with
+    /// [`Running::deliver`] and not yet answered may finish meanwhile.
     pub fn request(&mut self, server: &str, request: &Request) -> Result<Response, Stopped> {
-        if let Some(stopped) = &self.stopped {
-            return Err(stopped.clone());
+        let (id, mut progress) = self.deliver(server, request)?;
+        loop {
+            if let Some((_, response)) = progress.replies.iter().find(|(i, _)| *i == id) {
+                return Ok(response.clone());
+            }
+            if progress.calls.is_empty() {
+                // Another request holds what this one needs, and waits on a
+                // call the caller has not completed.
+                return Err(Stopped {
+                    component: self.program.manifest.app.clone(),
+                    failure: "Waiting".into(),
+                    message: "the request waits behind another that waits on a call".into(),
+                });
+            }
+            let completions = progress
+                .calls
+                .iter()
+                .map(|call| Completion {
+                    id: call.id,
+                    outcome: self
+                        .make(call)
+                        .map(|(status, body)| Incoming { status, body }),
+                })
+                .collect();
+            progress = self.resume(completions)?;
         }
+    }
+
+    /// Makes an outgoing call: through its fake in [`Mode::Fake`], and for
+    /// real otherwise, waiting for the reply.
+    pub fn make(&mut self, call: &Outgoing) -> Result<(u16, Vec<u8>), String> {
+        match self.mode {
+            Mode::Fake => match self.clients.get_mut(&call.grant) {
+                Some(fake) => fake.answer(&call.method, &call.path, &call.grant),
+                None => Err(format!("the program has no client `{}`", call.grant)),
+            },
+            Mode::Real => {
+                let base = self.base(&call.grant)?;
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_io()
+                    .build()
+                    .map_err(|e| e.to_string())?
+                    .block_on(client::call(
+                        &base,
+                        &call.method,
+                        &call.path,
+                        call.body.clone(),
+                    ))
+            }
+        }
+    }
+
+    /// The base address of an `HttpClient` grant.
+    pub(crate) fn base(&self, grant: &str) -> Result<String, String> {
+        match self.grants.get(grant) {
+            Some(Granted::HttpClient { base }) => Ok(base.clone()),
+            _ => Err(format!("the program has no client `{grant}`")),
+        }
+    }
+
+    /// Delivers a request through the `HttpServer` grant `server`, and
+    /// returns its ID with what the program has done once it is idle again.
+    /// The reply may come in this progress or a later one.
+    pub fn deliver(&mut self, server: &str, request: &Request) -> Result<(u64, Progress), Stopped> {
+        let id = self.next_request;
+        self.next_request += 1;
+        self.in_flight.insert(id);
+        let result =
+            self.instance
+                .inset_host_app()
+                .call_deliver(&mut self.store, id, server, request);
+        self.progress(result).map(|progress| (id, progress))
+    }
+
+    /// Hands the program the outgoing calls that have completed, and returns
+    /// what it has done once it is idle again. A completion for a call the
+    /// program no longer waits for is dropped.
+    pub fn resume(&mut self, completions: Vec<Completion>) -> Result<Progress, Stopped> {
+        let completions: Vec<Completion> = completions
+            .into_iter()
+            .filter_map(|c| {
+                let id = self.calls.remove(&c.id)?;
+                Some(Completion { id, ..c })
+            })
+            .collect();
         let result = self
             .instance
             .inset_host_app()
-            .call_handle(&mut self.store, server, request);
+            .call_resume(&mut self.store, &completions);
+        self.progress(result)
+    }
+
+    /// The progress an export returned, with the host's IDs for its calls,
+    /// after a trap the recovery, and after a failed commit the stop.
+    fn progress(
+        &mut self,
+        result: wasmtime::Result<Result<app::Progress, Stopped>>,
+    ) -> Result<Progress, Stopped> {
+        if let Some(stopped) = &self.stopped {
+            return Err(stopped.clone());
+        }
         let mut outcome = match result {
-            Ok(outcome) => outcome,
+            Ok(Ok(progress)) => Ok(self.host_ids(progress)),
+            Ok(Err(stopped)) => Err(stopped),
             Err(trap) => self.recover(trap),
         };
         for (grant, table) in &self.tables {
@@ -430,14 +589,41 @@ impl Running<'_> {
                 });
             }
         }
-        if let Err(stopped) = &outcome {
-            self.stopped = Some(stopped.clone());
+        match &outcome {
+            Ok(progress) => {
+                for (id, _) in &progress.replies {
+                    self.in_flight.remove(id);
+                }
+            }
+            Err(stopped) => {
+                self.stopped = Some(stopped.clone());
+                self.in_flight.clear();
+            }
         }
         outcome
     }
 
-    /// Starts a fresh instance after a trap, if the program said how.
-    fn recover(&mut self, trap: wasmtime::Error) -> Result<Response, Stopped> {
+    fn host_ids(&mut self, progress: app::Progress) -> Progress {
+        let calls = progress
+            .calls
+            .into_iter()
+            .map(|call| {
+                let id = self.next_call;
+                self.next_call += 1;
+                self.calls.insert(id, call.id);
+                Outgoing { id, ..call }
+            })
+            .collect();
+        Progress {
+            replies: progress.replies,
+            calls,
+        }
+    }
+
+    /// Starts a fresh instance after a trap, if the program said how, and
+    /// answers every request in flight with `500 Internal Server Error`.
+    fn recover(&mut self, trap: wasmtime::Error) -> Result<Progress, Stopped> {
+        self.calls.clear();
         for table in self.tables.values() {
             lock(table).roll_back();
         }
@@ -474,10 +660,18 @@ impl Running<'_> {
             Ok((store, instance)) => {
                 self.store = store;
                 self.instance = instance;
-                Ok(Response {
+                let failed = Response {
                     status: 500,
                     content_type: None,
                     body: Vec::new(),
+                };
+                Ok(Progress {
+                    replies: self
+                        .in_flight
+                        .iter()
+                        .map(|id| (*id, failed.clone()))
+                        .collect(),
+                    calls: Vec::new(),
                 })
             }
             Err(e) => {

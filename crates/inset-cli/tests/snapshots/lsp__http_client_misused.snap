@@ -1,0 +1,16 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:54:22-54:27
+`HttpClient` has no method `fetch`
+not a method of an HTTP client
+help: an `HttpClient`'s methods are `get(path)`, `delete(path)`, `post(path, body)` and `put(path, body)`
+
+src/main.inset:55:9-55:32
+a capability call is awaited
+this call is not awaited
+help: add `.await`
+
+src/main.inset:56:34-56:35
+expected a `&str`, found a `integer`
+this argument of `post` is a `&str`

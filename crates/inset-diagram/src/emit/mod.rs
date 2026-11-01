@@ -320,10 +320,11 @@ impl<'a> Emitter<'a> {
                 label: "HTTP clients".into(),
                 setting: None,
             },
-            Some("Table") => {
-                // The file the table is stored in, or the default of the
-                // setting that chooses it.
-                let file = grant.fields.iter().find(|f| f.name.name == "file");
+            Some(kind @ ("Table" | "HttpClient")) => {
+                // The file the table is stored in, or the service the client
+                // calls, or the default of the setting that chooses it.
+                let key = if kind == "Table" { "file" } else { "base" };
+                let file = grant.fields.iter().find(|f| f.name.name == key);
                 let literal = |expr: &ast::Expr| match &expr.kind {
                     ExprKind::Lit(ast::Lit {
                         kind: LitKind::Str(s),
@@ -332,7 +333,7 @@ impl<'a> Emitter<'a> {
                     _ => None,
                 };
                 let chosen = config.iter().find_map(|c| match c {
-                    Config::Setting { name, setting } if name == "file" => Some(setting.clone()),
+                    Config::Setting { name, setting } if name == key => Some(setting.clone()),
                     _ => None,
                 });
                 let label = match &chosen {
@@ -430,6 +431,14 @@ impl<'a> Emitter<'a> {
                 };
                 self.moved_from.insert(target, from.clone());
                 Some(Handoff::Move { field, from })
+            }
+            // A server the parent lends, from one of its fields.
+            HandoffValue::Lend(name)
+                if owner.is_some_and(|c| c.fields.iter().any(|f| f.name.name == name.name)) =>
+            {
+                let from = format!("{parent}/field:{}", name.name);
+                self.moved_from.insert(target, from.clone());
+                Some(Handoff::Lend { field, from })
             }
             HandoffValue::Lend(sibling) => Some(Handoff::Lend {
                 field,
@@ -758,8 +767,12 @@ fn field_kind(ty: &ast::Type) -> FieldKind {
         TypeKind::Ref { inner, .. } if last(inner).as_deref() == Some("Handle") => {
             FieldKind::Handle
         }
+        // A server the parent lends.
+        TypeKind::Ref { inner, .. } if last(inner).as_deref() == Some("HttpServer") => {
+            FieldKind::Capability
+        }
         _ => match last(ty).as_deref() {
-            Some("HttpServer" | "Table") => FieldKind::Capability,
+            Some("HttpServer" | "HttpClient" | "Table") => FieldKind::Capability,
             Some("Outlet") => FieldKind::Outlet,
             _ => FieldKind::State,
         },

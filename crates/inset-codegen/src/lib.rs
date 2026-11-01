@@ -110,6 +110,11 @@ pub fn generate(program: &Program) -> Result<Generated, Vec<Report>> {
         .flatten()
         .map(|asset| asset.path.clone())
         .collect();
+    // A program whose diagram cannot be drawn yet reserves every component
+    // for each request, which is always safe.
+    emitter.reservations = inset_diagram::emit(program)
+        .map(|diagram| inset_diagram::reservations(&diagram))
+        .unwrap_or_default();
     let items = emitter.module(modules, 0);
     if !emitter.diagnostics.is_empty() {
         return Err(emitter
@@ -200,6 +205,9 @@ struct Emitter<'a> {
     has_algorithms: bool,
     /// The names of the external components.
     externals: Vec<String>,
+    /// The components a request to each route handler reserves, read off
+    /// the diagram.
+    reservations: Vec<(String, Vec<String>)>,
     /// Whose elements the function being emitted marks.
     owner: coverage::Owner,
     /// The elements of the component being emitted.
@@ -237,6 +245,7 @@ impl<'a> Emitter<'a> {
             module_path: Vec::new(),
             has_algorithms,
             externals: resolved.externals.iter().map(|e| e.name.clone()).collect(),
+            reservations: Vec::new(),
             owner: coverage::Owner::Algorithms,
             branches: Vec::new(),
             elements: Elements::default(),

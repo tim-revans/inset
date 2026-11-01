@@ -1,0 +1,14 @@
+---
+source: crates/inset-cli/tests/test.rs
+expression: stdout(&out)
+---
+FAIL  A forecast is relayed as the forecast service gives it
+      requirements/relay.req.inset:2
+      when Relay receives GET /forecast/London
+      but `weather` was called with GET /forecast/London, which no `given` fact answers
+pass  A city the forecast service does not know is not found
+pass  A forecast service that does not answer fails only that request
+pass  Notes are kept by name
+pass  The relay says it is up
+
+5 requirements: 4 passed, 1 failed

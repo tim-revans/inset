@@ -1,0 +1,26 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+requirements/main.req.inset:3:9-3:14
+`notes` is a `Table<String, String>`, and only an `HttpClient` replies
+not a client
+help: `replies` sets up how a fake `HttpClient` answers a call
+
+requirements/main.req.inset:4:17-4:33
+expected a call, such as `"GET /forecast/London"`
+a call is its method and path, in one string
+help: write the method, `GET`, `POST`, `PUT` or `DELETE`, a space, and the path from the client's base address, starting with `/`
+
+requirements/main.req.inset:5:35-5:39
+unknown status `Fine`
+not an HTTP status
+help: write a status by its standard name, such as `OK`, `NotFound` or `Conflict`
+
+requirements/main.req.inset:6:43-6:44
+a reply's body is text, written as a string
+expected a string
+
+requirements/main.req.inset:35:9-35:42
+`replies` follows `given`
+this sets up how a call is answered, which a `then` step cannot check
+help: move it to a `given` step before the request that makes the call

@@ -393,10 +393,16 @@ impl Checker<'_> {
                     self.implements(inner, trait_name, this)
                 }
                 Ty::Ref { .. } | Ty::Str | Ty::Slice(_) => None,
-                Ty::HttpServer | Ty::Table(..) | Ty::Handle(..) | Ty::Outlet(_) => Some(false),
+                Ty::HttpServer
+                | Ty::HttpClient
+                | Ty::Table(..)
+                | Ty::Handle(..)
+                | Ty::Outlet(_) => Some(false),
                 _ => Some(true),
             },
-            Ty::HttpServer | Ty::Table(..) | Ty::Handle(..) | Ty::Outlet(_) => Some(false),
+            Ty::HttpServer | Ty::HttpClient | Ty::Table(..) | Ty::Handle(..) | Ty::Outlet(_) => {
+                Some(false)
+            }
             Ty::Ref { mutable, inner } => match trait_name {
                 "Copy" | "Clone" => Some(!mutable),
                 "Default" => None,

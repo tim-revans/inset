@@ -1,15 +1,16 @@
 //! The program as the host sees it: its manifest, its start, and requests in.
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
 use std::sync::Once;
 
-use crate::actor::{self, Running, Scope};
+use crate::actor::{self, ReplyReceiver, Running, Scope};
 use crate::coverage;
 use crate::executor;
 use crate::failure::{Failure, Response, Stopped};
 use crate::http::{HttpServer, Reply, Request};
+use crate::http_client::HttpClient;
 use crate::stored::{KeyType, Stored};
 use crate::table::Table;
 
@@ -29,6 +30,11 @@ pub trait App {
     /// The elements coverage counts in the top-level algorithms, by their
     /// full IDs, which [`crate::coverage::algorithm`] marks by index.
     const BRANCHES: &'static [&'static str] = &[];
+
+    /// For each route handler, by its diagram ID, the components a request
+    /// to it can reach, which it reserves until it finishes. A handler not
+    /// listed reserves every component.
+    const RESERVATIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 
     /// The app's `start` statements.
     fn start(scope: &Scope, grants: &mut Grants) -> Result<(), Stopped>;
@@ -108,6 +114,10 @@ impl Grants {
         HttpServer::new(grant)
     }
 
+    pub fn http_client(&mut self, grant: &str) -> HttpClient {
+        HttpClient::new(grant)
+    }
+
     /// Opens a table grant, and refuses it if anything it holds is not a
     /// `K` and a `V`. The host names the file and the table.
     pub fn table<K: KeyType, V: Stored>(&mut self, grant: &str) -> Result<Table<K, V>, Stopped> {
@@ -121,12 +131,36 @@ impl Grants {
 
 #[derive(Default)]
 struct Program {
-    /// The component serving each `HttpServer` grant, and the field holding it.
-    servers: BTreeMap<String, (&'static str, Rc<dyn Running>)>,
+    /// The components serving each `HttpServer` grant, in start order, with
+    /// the field holding it. A server lent to children serves their routes.
+    servers: BTreeMap<String, Vec<Serving>>,
     /// Every component, in start order.
     actors: Vec<Rc<dyn Running>>,
     front_end: Option<FrontEnd>,
+    reservations: &'static [(&'static str, &'static [&'static str])],
+    /// Requests routed and waiting to be admitted, in the order they arrived.
+    waiting: VecDeque<Waiting>,
+    /// Admitted requests that have not finished, by the host's ID.
+    admitted: BTreeMap<u64, Admitted>,
+    /// Finished requests whose replies the host has not been given.
+    replies: Vec<(u64, Reply)>,
     stopped: Option<Stopped>,
+}
+
+/// A component serving an `HttpServer` grant, and the field holding it.
+type Serving = (&'static str, Rc<dyn Running>);
+
+/// A routed request, waiting until no admitted request has reserved a
+/// component it reserves.
+struct Waiting {
+    id: u64,
+    reserved: Vec<Rc<dyn Running>>,
+    post: Box<dyn FnOnce() -> ReplyReceiver<Reply>>,
+}
+
+struct Admitted {
+    reserved: Vec<Rc<dyn Running>>,
+    reply: ReplyReceiver<Reply>,
 }
 
 thread_local! {
@@ -134,7 +168,12 @@ thread_local! {
 }
 
 pub(crate) fn serve(grant: &str, field: &'static str, actor: Rc<dyn Running>) {
-    PROGRAM.with_borrow_mut(|p| p.servers.insert(grant.into(), (field, actor)));
+    PROGRAM.with_borrow_mut(|p| {
+        p.servers
+            .entry(grant.into())
+            .or_default()
+            .push((field, actor))
+    });
 }
 
 pub(crate) fn register(actor: Rc<dyn Running>) {
@@ -166,7 +205,10 @@ pub(crate) fn start<A: App>(restore: Option<Vec<u8>>) -> Result<(), Stopped> {
             previous(info);
         }));
     });
-    PROGRAM.with_borrow_mut(|p| p.front_end = A::FRONT_END);
+    PROGRAM.with_borrow_mut(|p| {
+        p.front_end = A::FRONT_END;
+        p.reservations = A::RESERVATIONS;
+    });
     coverage::start(A::BRANCHES);
     let started = start_app::<A>(restore);
     report_reached();
@@ -246,11 +288,166 @@ fn restore_failed(message: String) -> Stopped {
     }
 }
 
-/// Delivers a request, and runs until the program is idle again.
-pub(crate) fn handle(server: &str, request: Request) -> Result<Reply, Stopped> {
-    let handled = handle_request(server, request);
+/// What the program has done by the time it is idle: the replies of the
+/// requests that finished.
+#[derive(Debug, Default)]
+pub(crate) struct Progress {
+    pub replies: Vec<(u64, Reply)>,
+}
+
+/// Delivers a request the host names `id`, and runs until the program is
+/// idle again.
+pub(crate) fn deliver(id: u64, server: &str, request: Request) -> Result<Progress, Stopped> {
+    let progress = route(id, server, &request).and_then(|()| drive());
     report_reached();
-    handled
+    progress
+}
+
+/// Runs until the program is idle again, after the host has done what the
+/// program waited for.
+pub(crate) fn resume() -> Result<Progress, Stopped> {
+    let progress = drive();
+    report_reached();
+    progress
+}
+
+/// Routes a request to its handler, and has it wait to be admitted. A
+/// request no route takes is answered straight away.
+fn route(id: u64, server: &str, request: &Request) -> Result<(), Stopped> {
+    if let Some(stopped) = stopped() {
+        return Err(stopped);
+    }
+    // A `GET` that no route takes may be for a file of the front end.
+    let file = || {
+        let front_end = PROGRAM.with_borrow(|p| p.front_end)?;
+        (request.method == "GET" && front_end.server == server)
+            .then(|| front_end.file(&request.path))
+            .flatten()
+    };
+    let answer = |reply: Reply| PROGRAM.with_borrow_mut(|p| p.replies.push((id, reply)));
+    let serving = PROGRAM.with_borrow(|p| p.servers.get(server).cloned().unwrap_or_default());
+    // The checker allows one route to match a request, among all the
+    // components serving the grant.
+    let mut routed = Err(Reply::empty(404));
+    for (field, actor) in serving {
+        routed = actor.serve(field, request);
+        if !matches!(&routed, Err(reply) if reply.status == 404) {
+            break;
+        }
+    }
+    match routed {
+        Ok(routed) => {
+            PROGRAM.with_borrow_mut(|p| {
+                let reserved = p.reserved(&routed.handler);
+                p.waiting.push_back(Waiting {
+                    id,
+                    reserved,
+                    post: routed.post,
+                });
+            });
+        }
+        Err(answered) if answered.status == 404 => answer(file().unwrap_or(answered)),
+        Err(answered) => answer(answered),
+    }
+    Ok(())
+}
+
+impl Program {
+    /// The components a request to `handler` reserves.
+    fn reserved(&self, handler: &str) -> Vec<Rc<dyn Running>> {
+        match self.reservations.iter().find(|(h, _)| *h == handler) {
+            Some((_, ids)) => self
+                .actors
+                .iter()
+                .filter(|a| ids.contains(&a.id()))
+                .cloned()
+                .collect(),
+            None => self.actors.clone(),
+        }
+    }
+
+    /// Admits each waiting request that reserves nothing an admitted
+    /// request reserves, or an earlier waiting one, so no request waits
+    /// behind later ones for ever. Returns the requests to post.
+    fn admit(&mut self) -> Vec<Waiting> {
+        let mut taken: Vec<Rc<dyn Running>> = self
+            .admitted
+            .values()
+            .flat_map(|a| a.reserved.iter().cloned())
+            .collect();
+        let mut admitted = Vec::new();
+        let mut still = VecDeque::new();
+        for waiting in self.waiting.drain(..) {
+            let clashes = waiting
+                .reserved
+                .iter()
+                .any(|r| taken.iter().any(|t| Rc::ptr_eq(r, t)));
+            taken.extend(waiting.reserved.iter().cloned());
+            if clashes {
+                still.push_back(waiting);
+            } else {
+                admitted.push(waiting);
+            }
+        }
+        self.waiting = still;
+        admitted
+    }
+
+    /// Takes the admitted requests that have finished: each has its reply,
+    /// and every component it reserved is idle.
+    fn finished(&mut self) -> bool {
+        let done: Vec<u64> = self
+            .admitted
+            .iter()
+            .filter(|(_, a)| a.reply.ready() && !a.reserved.iter().any(|r| r.busy()))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in &done {
+            let admitted = self.admitted.remove(id).expect("listed above");
+            let reply = match admitted.reply.try_take() {
+                Ok(Some(reply)) => reply,
+                // The handler failed and was rolled back.
+                Ok(None) => Reply::empty(500),
+                Err(()) => unreachable!("a finished request has its reply"),
+            };
+            self.replies.push((*id, reply));
+        }
+        !done.is_empty()
+    }
+}
+
+/// Admits what can be admitted and runs it, until nothing more finishes.
+fn drive() -> Result<Progress, Stopped> {
+    loop {
+        let admitted = PROGRAM.with_borrow_mut(Program::admit);
+        for Waiting { id, reserved, post } in admitted {
+            let reply = post();
+            PROGRAM.with_borrow_mut(|p| p.admitted.insert(id, Admitted { reserved, reply }));
+        }
+        run_until_idle()?;
+        if !PROGRAM.with_borrow_mut(Program::finished) {
+            break;
+        }
+    }
+    Ok(Progress {
+        replies: PROGRAM.with_borrow_mut(|p| std::mem::take(&mut p.replies)),
+    })
+}
+
+/// Delivers a request and returns its reply, for the runtime's own tests,
+/// where nothing waits on the host.
+#[cfg(test)]
+pub(crate) fn handle(server: &str, request: Request) -> Result<Reply, Stopped> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let id = NEXT.fetch_add(1, Ordering::Relaxed);
+    let progress = deliver(id, server, request)?;
+    let (_, reply) = progress
+        .replies
+        .into_iter()
+        .find(|(i, _)| *i == id)
+        .expect("a request that waits on nothing finishes");
+    Ok(reply)
 }
 
 /// Tells the host which elements have been reached since it was last told.
@@ -265,34 +462,6 @@ fn report_reached() {
     coverage::take_algorithms(&mut reached);
     if !reached.is_empty() {
         report::reached(&reached);
-    }
-}
-
-fn handle_request(server: &str, request: Request) -> Result<Reply, Stopped> {
-    if let Some(stopped) = stopped() {
-        return Err(stopped);
-    }
-    // A `GET` that no route takes may be for a file of the front end.
-    let file = || {
-        let front_end = PROGRAM.with_borrow(|p| p.front_end)?;
-        (request.method == "GET" && front_end.server == server)
-            .then(|| front_end.file(&request.path))
-            .flatten()
-    };
-    let Some((field, actor)) = PROGRAM.with_borrow(|p| p.servers.get(server).cloned()) else {
-        return Ok(file().unwrap_or_else(|| Reply::empty(404)));
-    };
-    let reply = match actor.serve(field, &request) {
-        Ok(reply) => reply,
-        Err(answered) if answered.status == 404 => return Ok(file().unwrap_or(answered)),
-        Err(answered) => return Ok(answered),
-    };
-    run_until_idle()?;
-    match reply.try_take() {
-        Ok(Some(reply)) => Ok(reply),
-        // The handler failed and was rolled back.
-        Ok(None) => Ok(Reply::empty(500)),
-        Err(()) => unreachable!("an idle program has finished every handler"),
     }
 }
 
@@ -347,10 +516,14 @@ fn recovery(
     for actor in actors {
         if let Some(scope) = actor.running() {
             let is_panicked = actor.id() == panicked.id();
+            // A handler of another request, waiting on an outgoing call,
+            // loses the call with the instance.
             let condition = if is_panicked {
                 failure.clone()
+            } else if let Some(field) = scope.awaiting() {
+                Failure::Message(field)
             } else {
-                Failure::Message(scope.awaiting()?)
+                Failure::Capability(scope.calling()?)
             };
             if let (Response::Restart, target) = actor::resolve(actor.clone(), &condition)? {
                 if is_panicked {
@@ -518,17 +691,55 @@ pub mod glue {
         super::start::<A>(restore).map_err(stopped)
     }
 
-    pub fn handle(server: String, request: wit::Request) -> Result<wit::Response, wit::Stopped> {
+    pub fn deliver(
+        id: u64,
+        server: String,
+        request: wit::Request,
+    ) -> Result<wit::Progress, wit::Stopped> {
         let request = Request {
             method: request.method,
             path: request.path,
             body: request.body,
         };
-        let reply = super::handle(&server, request).map_err(stopped)?;
-        Ok(wit::Response {
-            status: reply.status,
-            content_type: reply.content_type.map(Into::into),
-            body: reply.body,
-        })
+        super::deliver(id, &server, request)
+            .map(progress)
+            .map_err(stopped)
+    }
+
+    pub fn resume(completions: Vec<wit::Completion>) -> Result<wit::Progress, wit::Stopped> {
+        crate::http_client::complete(completions.into_iter().map(|c| {
+            (
+                c.id,
+                c.outcome.map(|incoming| (incoming.status, incoming.body)),
+            )
+        }));
+        super::resume().map(progress).map_err(stopped)
+    }
+
+    fn progress(progress: super::Progress) -> wit::Progress {
+        wit::Progress {
+            replies: progress
+                .replies
+                .into_iter()
+                .map(|(id, reply)| {
+                    let response = wit::Response {
+                        status: reply.status,
+                        content_type: reply.content_type.map(Into::into),
+                        body: reply.body,
+                    };
+                    (id, response)
+                })
+                .collect(),
+            calls: crate::http_client::take_calls()
+                .into_iter()
+                .map(|call| wit::Outgoing {
+                    id: call.id,
+                    grant: call.grant,
+                    method: call.method,
+                    path: call.path,
+                    body: call.body,
+                })
+                .collect(),
+        }
     }
 }

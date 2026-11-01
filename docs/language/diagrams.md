@@ -10,7 +10,7 @@ A reviewer starts at the outside and drills in:
 
 | Level | Shows | Drawn with |
 | --- | --- | --- |
-| Component view | The app, what it is granted, the components it starts, and what is outside: HTTP clients on the left, stored data on the right | `inset diagram <dir>` |
+| Component view | The app, what it is granted, the components it starts, and what is outside: HTTP clients on the left, stored data and the services the program calls on the right | `inset diagram <dir>` |
 | Inside a component | The same picture with one component expanded, its children drawn inside it, and the messages between them | `--expand <component id>` |
 | Flowchart | One function's body: its steps, decisions, loops and forks | `--flowchart <function id>` |
 | Coverage | The same pictures, with what no requirement reached marked | `--coverage`, after `inset test --coverage` (see [Coverage](#coverage)) |
@@ -118,7 +118,7 @@ The compiler emits diagram data that holds everything the source says about the 
 | Grant, in the app box | The whole declaration, with where each value comes from: `grant items: Table<String, Item> { file: "stock.db", name: "items" }`, or `{ port: setting port }` | `grant-types`, `grant-values` |
 | Capability edge | The field's name and its type: `items: Table<String, Item>` | `capability-names`, `capability-types` |
 | Capability operations | The methods called, under the edge: `get, insert` | `capability-operations` |
-| External end of a capability edge | What is outside: `stock.db`, `HTTP clients`, or `catalogue.db or setting catalogue` when a setting chooses it | No |
+| External end of a capability edge | What is outside: `stock.db`, `HTTP clients`, the address an `HttpClient` calls, such as `http://127.0.0.1:9000`, or `catalogue.db or setting catalogue` when a setting chooses it | No |
 | Handoffs | `start { items: move items, low_stock: send reorders.raise }` | `handoffs` |
 | Field | `orders: Vec<Reorder>` | `field-types` |
 | Outlet | A port on the component's box, with its name and type: `low_stock: Outlet<Reorder>` | `outlet-types` |

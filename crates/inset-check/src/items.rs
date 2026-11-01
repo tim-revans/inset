@@ -168,12 +168,12 @@ fn check_field_type(decl: &FieldDecl, ty: &Ty, diagnostics: &mut Vec<Diagnostic>
         Ty::Ref {
             mutable: false,
             inner,
-        } if matches!(**inner, Ty::Handle(..)) => {}
+        } if matches!(**inner, Ty::Handle(..) | Ty::HttpServer) => {}
         Ty::Ref { .. } => diagnostics.push(
             Diagnostic::new(
                 "a field cannot hold a borrow",
                 span,
-                "only a lent sibling, `&Handle<C>`, is borrowed",
+                "only a lent sibling, `&Handle<C>`, or a lent server, `&HttpServer`, is borrowed",
             )
             .with_help("make the field own its value; the parent moves or copies it in"),
         ),
@@ -492,7 +492,7 @@ fn route_decl(
         Some(field) if field.handed_down => {
             errors.push(handed_down_use(comp.name(), &via.name, via.span));
         }
-        Some(field) if field.ty == Ty::HttpServer => {}
+        Some(field) if field.ty.deref() == &Ty::HttpServer => {}
         Some(field) => errors.push(
             Diagnostic::new(
                 format!(
@@ -897,7 +897,7 @@ fn server_fields_help(comp: &Comp) -> String {
     let servers: Vec<&str> = comp
         .fields
         .iter()
-        .filter(|f| f.ty == Ty::HttpServer && !f.handed_down)
+        .filter(|f| f.ty.deref() == &Ty::HttpServer && !f.handed_down)
         .map(|f| f.decl.name.name.as_str())
         .collect();
     if servers.is_empty() {

@@ -1,0 +1,88 @@
+// Concurrent requests: a server lent to children, which each serve routes
+// of their own, and a call to another service that one request waits on
+// while others carry on. `tests/concurrency.rs` runs it.
+
+/// Relays forecasts from a forecast service, and keeps notes.
+app Relay {
+    /// The port to serve on.
+    setting port: u16 = 8080;
+    /// Where the forecast service is.
+    setting forecasts: String = "http://127.0.0.1:9000";
+    grant http: HttpServer { port };
+    grant weather: HttpClient { base: forecasts };
+    grant notes: Table<String, String> { file: "relay.db", name: "notes" };
+    start Front { http: move http, weather: move weather, notes: move notes };
+}
+
+/// Lends its server to the desks, which serve most requests themselves.
+component Front {
+    http: HttpServer,
+    #[handed_down]
+    weather: HttpClient,
+    #[handed_down]
+    notes: Table<String, String>,
+
+    start forecasts: Forecasts { http: &http, weather: move weather, asked: 0 };
+    start notebook: Notebook { http: &http, notes: move notes };
+
+    /// Whether the relay is up.
+    #[get("/health", via = http)]
+    fn health(&self) -> String {
+        "up".to_string()
+    }
+
+    /// How many forecasts have been asked for, from the forecasts desk.
+    #[get("/asked", via = http)]
+    async fn asked(&self) -> String {
+        let asked = self.forecasts.asked().await;
+        asked.to_string()
+    }
+}
+
+/// Asks the forecast service.
+component Forecasts {
+    http: &HttpServer,
+    weather: HttpClient,
+    /// How many forecasts it has asked for.
+    asked: u32,
+
+    failure {
+        /// A forecast service that does not answer fails only the request.
+        Capability(weather) => rollback,
+    }
+
+    /// The forecast for a city, as the forecast service gives it.
+    #[get("/forecast/{city}", via = http)]
+    async fn forecast(&mut self, city: String) -> Option<String> {
+        self.asked += 1;
+        match self.weather.get(&format!("/forecast/{city}")).await {
+            Ok(forecast) => Some(forecast),
+            Err(_) => None,
+        }
+    }
+
+    /// How many forecasts it has asked for.
+    #[message]
+    fn asked(&self) -> u32 {
+        self.asked
+    }
+}
+
+/// Keeps notes by name.
+component Notebook {
+    http: &HttpServer,
+    notes: Table<String, String>,
+
+    /// Keeps a note.
+    #[put("/notes/{name}", via = http, body = text)]
+    async fn write(&mut self, name: String, text: String) -> String {
+        self.notes.insert(name, text).await;
+        "kept".to_string()
+    }
+
+    /// A note, if one is kept under the name.
+    #[get("/notes/{name}", via = http)]
+    async fn read(&self, name: String) -> Option<String> {
+        self.notes.get(&name).await
+    }
+}

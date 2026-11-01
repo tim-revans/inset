@@ -1,0 +1,12 @@
+---
+source: crates/inset-cli/tests/lsp.rs
+---
+src/main.inset:80:5-80:43
+two routes match `GET /forecast/{name}`
+this matches the same requests as `GET /forecast/{city}` in `Forecasts`
+help: give each route a path of its own
+
+requirements/main.req.inset:24:29-24:40
+no route of `Relay` takes `GET /notes/plan`
+no route matches this request
+help: the routes of `Relay` are `GET /health`, `GET /asked`, `GET /forecast/{city}`, `PUT /notes/{name}` and `GET /forecast/{name}`
